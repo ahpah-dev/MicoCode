@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {applyManagedConnection,credentialSlot,freeCatalogue,fullCatalogue,normalizeEndpoint,readCredential,routeSlug,writeCredential,rememberProfile,recallProfile} from '../lib/mico/providers.mjs';
+import {applyManagedConnection,credentialSlot,freeCatalogue,fullCatalogue,groupRouterModels,matchModel,normalizeEndpoint,providerOf,readCredential,routeSlug,writeCredential,rememberProfile,recallProfile} from '../lib/mico/providers.mjs';
 import {abortableSleep,createRequester,ProviderError,retryDelay} from '../lib/mico/resilience.mjs';
 import {POST as ai} from '../api/ai.ts';
 import {POST as horde} from '../api/horde.ts';
@@ -18,9 +18,25 @@ test('free discovery hides paid and unknown routes until exact free IDs are decl
 });
 test('full catalogue lists every router model with verified-free flags',()=>{
  const data={data:[{id:'zero',name:'Zero',pricing:{prompt:'0',completion:'0'}},{id:'paid',pricing:{prompt:'1',completion:'0'}},{id:'unknown'},{id:'',},{id:42},{id:'x'.repeat(200)}]};
- assert.deepEqual(fullCatalogue(data),[{id:'zero',name:'Zero',verified:true},{id:'paid',name:'paid',verified:false},{id:'unknown',name:'unknown',verified:false}]);
- assert.deepEqual(fullCatalogue({models:[{id:'a'}]}),[{id:'a',name:'a',verified:false}]);
+ assert.deepEqual(fullCatalogue(data),[{id:'zero',name:'Zero',verified:true,paid:false,provider:''},{id:'paid',name:'paid',verified:false,paid:true,provider:''},{id:'unknown',name:'unknown',verified:false,paid:false,provider:''}]);
+ assert.deepEqual(fullCatalogue({models:[{id:'a'}]}),[{id:'a',name:'a',verified:false,paid:false,provider:''}]);
  assert.deepEqual(fullCatalogue({}),[]);
+});
+test('router catalogues group provider models with pricing flags',()=>{
+ const data={object:'list',data:[
+  {id:'kr/claude-sonnet-4.5',object:'model',owned_by:'kr'},
+  {id:'my-combo',object:'model',owned_by:'combo'},
+  {id:'glm/glm-5',object:'model',owned_by:'glm',pricing:{prompt:'0',completion:'0'}},
+  {id:'bare-model',object:'model'},
+ ]};
+ const catalogue=fullCatalogue(data);
+ assert.deepEqual(catalogue.map(m=>m.provider),['kr','combo','glm','']);
+ assert.equal(catalogue.find(m=>m.id==='glm/glm-5')?.verified,true);
+ assert.equal(catalogue.find(m=>m.id==='kr/claude-sonnet-4.5')?.paid,false);
+ assert.equal(providerOf({id:'openai/gpt-5'}),'openai');
+ const groups=groupRouterModels(catalogue);
+ assert.deepEqual(groups.map(g=>g.provider),['combo','glm','kr','Other']);
+ assert.ok(matchModel(catalogue[0],'sonnet')&&matchModel(catalogue[0],'KR')&&!matchModel(catalogue[0],'gpt'));
 });
 test('credentials never follow a switch to another endpoint or anonymous provider',()=>{
  const map=new Map();const storage={getItem:key=>map.get(key),setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)};
