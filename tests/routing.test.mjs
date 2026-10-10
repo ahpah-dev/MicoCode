@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {applyManagedConnection,credentialSlot,freeCatalogue,normalizeEndpoint,readCredential,writeCredential,rememberProfile,recallProfile} from '../lib/mico/providers.mjs';
+import {applyManagedConnection,credentialSlot,freeCatalogue,fullCatalogue,normalizeEndpoint,readCredential,writeCredential,rememberProfile,recallProfile} from '../lib/mico/providers.mjs';
 import {abortableSleep,createRequester,ProviderError,retryDelay} from '../lib/mico/resilience.mjs';
 import {POST as ai} from '../api/ai.ts';
 import {POST as horde} from '../api/horde.ts';
@@ -15,6 +15,12 @@ test('free discovery hides paid and unknown routes until exact free IDs are decl
  assert.deepEqual(freeCatalogue(data,['unknown'],true).map(m=>m.id),['zero','unknown']);
  assert.deepEqual(freeCatalogue(data,['unknown'],false).map(m=>m.id),['zero']);
  assert.deepEqual(freeCatalogue(data,['paid-free'],true).map(m=>m.id),['zero']);
+});
+test('full catalogue lists every router model with verified-free flags',()=>{
+ const data={data:[{id:'zero',name:'Zero',pricing:{prompt:'0',completion:'0'}},{id:'paid',pricing:{prompt:'1',completion:'0'}},{id:'unknown'},{id:'',},{id:42},{id:'x'.repeat(200)}]};
+ assert.deepEqual(fullCatalogue(data),[{id:'zero',name:'Zero',verified:true},{id:'paid',name:'paid',verified:false},{id:'unknown',name:'unknown',verified:false}]);
+ assert.deepEqual(fullCatalogue({models:[{id:'a'}]}),[{id:'a',name:'a',verified:false}]);
+ assert.deepEqual(fullCatalogue({}),[]);
 });
 test('credentials never follow a switch to another endpoint or anonymous provider',()=>{
  const map=new Map();const storage={getItem:key=>map.get(key),setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)};

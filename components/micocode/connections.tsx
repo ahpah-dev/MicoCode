@@ -3,7 +3,7 @@ import {useEffect,useRef,useState} from 'react';
 import {Cpu,Cloud,Monitor,ArrowUpRight,Check,Download,LoaderCircle,ShieldCheck,Network,Zap,SlidersHorizontal,PackageCheck,Square,ExternalLink} from 'lucide-react';
 import {Modal} from './primitives';
 import {browserReady,loadBrowserModel} from '@/lib/mico/agent';
-import {applyManagedConnection,bestCodingModel,credentialSlot,discoverProxy,proxyPresets,readCredential,recallProfile} from '@/lib/mico/providers.mjs';
+import {applyManagedConnection,bestCodingModel,credentialSlot,discoverProxy,listProxyModels,proxyPresets,readCredential,recallProfile} from '@/lib/mico/providers.mjs';
 import type {Config,ProxyPreset} from '@/lib/mico/types';
 import {isManagedProvider,type ManagedProvider,type SetupProgress} from '@/lib/mico/desktop';
 
@@ -23,6 +23,9 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
  const preset=proxyPresets.find(p=>p.id===config.proxyPreset)!;
  const cloud=config.provider==='openrouter'||(config.provider==='proxy'&&!(desktop&&config.managed&&config.routerEngine==='local'));
  const update=(patch:Partial<Config>)=>{setConfig({...config,...patch});setStatus('');setOk(false)};
+ const declaredFree=new Set(config.freeModels.map(s=>s.trim()).filter(Boolean));
+ const visibleModels=config.routerFreeOnly?models.filter(m=>m.verified||declaredFree.has(m.id)):models;
+ const selectedVerified=config.proxyPreset==='horde'||models.find(m=>m.id===config.model.trim())?.verified||(config.routerFreeOnly&&declaredFree.has(config.model.trim()));
  useEffect(()=>()=>controller.current?.abort(),[]);
  useEffect(()=>desktop?.onProgress(event=>setProgress(event)),[desktop]);
  useEffect(()=>{
@@ -68,14 +71,17 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
     const d=await r.json();if(!r.ok)throw new Error(d.error);
     setStatus(d.quota?'Connected. '+d.quota.remaining+' of '+d.quota.limit+' free requests remain today.':'Connected. Only zero-price routes are enabled; provider quotas apply.');
    }else{
-    const key=connectionKey??(credentialSlot(candidate)===credentialSlot(config)?apiKey:readCredential(candidate));
-    const available:Model[]=await discoverProxy(candidate,key,abort.signal);
-    if(!available.length)throw new Error('No active free models found. Retry later or choose another connection.');
-    setModels(available);
-    const recommended=candidate.proxyPreset==='horde'?available.find(m=>m.id.includes('Llama-3.2-3B-Instruct'))?.id:undefined;
-    const model=available.some(m=>m.id===candidate.model)?candidate.model:recommended||bestCodingModel(available);
-    setConfig({...candidate,model});
-    setStatus(candidate.proxyPreset==='horde'?'Connected. Only active models with supported chat templates are shown. Volunteer queues can be slow; generation remains experimental.': 'Connected. '+available.length+' free route'+(available.length===1?'':'s')+' found. '+(available.every(m=>m.verified)?'Zero pricing reported by the router.':'Using your declared free-only routes; downstream billing is controlled by your router.'));
+     const key=connectionKey??(credentialSlot(candidate)===credentialSlot(config)?apiKey:readCredential(candidate));
+     const available:Model[]=await listProxyModels(candidate,key,abort.signal);
+     if(!available.length)throw new Error('No models found on this router. Retry later or type a model ID below.');
+     setModels(available);
+     const recommended=candidate.proxyPreset==='horde'?available.find(m=>m.id.includes('Llama-3.2-3B-Instruct'))?.id:undefined;
+     const verified=available.filter(m=>m.verified);
+     const model=available.some(m=>m.id===candidate.model)?candidate.model:recommended||bestCodingModel(verified.length?verified:available);
+     setConfig({...candidate,model});
+     const declared=new Set(candidate.freeModels.map(s=>s.trim()).filter(Boolean));
+     const pickedFree=available.find(m=>m.id===model)?.verified||(candidate.routerFreeOnly&&declared.has(model));
+     setStatus(candidate.proxyPreset==='horde'?'Connected. Only active models with supported chat templates are shown. Volunteer queues can be slow; generation remains experimental.': 'Connected. '+available.length+' route'+(available.length===1?'':'s')+' found'+(verified.length?' ('+verified.length+' verified free)':'')+'. '+(pickedFree?'The selected route reports zero pricing.':'The selected route has no verified zero pricing; your router controls billing.'));
    }
    if(abort.signal.aborted)return;setOk(true);onReady(candidate.provider);
   }catch(e){if(!abort.signal.aborted)setStatus((e as Error).message);else setStatus('Connection stopped or timed out. Check your router, then try again.')}
@@ -123,10 +129,10 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
      <div className="router-detail-heading"><strong>{preset.name} connection</strong><a href={preset.docs} target="_blank" rel="noreferrer">Setup guide <ArrowUpRight size={12}/></a></div>
      <label>OpenAI-compatible API base URL<input disabled={disabled} readOnly={!!desktop&&config.managed} value={config.proxyUrl} onChange={e=>{update({proxyUrl:e.target.value,managed:false,freeModels:[],routerFreeOnly:false,model:''});setModels([])}} placeholder="https://your-free-router.example/v1" autoComplete="off" spellCheck={false}/></label>
      <label>Router API key <span className="optional-field">if your router requires one</span><input ref={keyInput} disabled={disabled} type="password" readOnly={!!desktop&&config.managed} value={apiKey} onChange={e=>{setKey(e.target.value.trim());setOk(false)}} placeholder="Your own key · never shared across endpoints" autoComplete="off" spellCheck={false}/></label>
-     {desktop&&config.managed?<div className="info-box managed-route"><ShieldCheck size={18}/><span><strong>Managed free route: <code>{config.model}</code></strong><br/>MicoCode configures and verifies this route automatically. You do not need to enter model IDs or confirm pricing.<br/><button className="secondary" disabled={disabled} onClick={()=>update({managed:false})}>Configure manually</button></span></div>:<details className="router-advanced" open={!models.length}><summary>Free route setup</summary><p>Routers can also offer paid models. We only show zero-price metadata or the exact free routes you declare here. Disable paid fallbacks in your router first.</p><label>Free model IDs<input disabled={disabled} value={config.freeModels.join(', ')} onChange={e=>update({freeModels:e.target.value.split(',').map(s=>s.trim()).slice(0,50),model:''})} placeholder="Exact model IDs, separated by commas" spellCheck={false}/></label><label className="setting-switch"><input disabled={disabled} type="checkbox" checked={config.routerFreeOnly} onChange={e=>update({routerFreeOnly:e.target.checked})}/><span><strong>My router uses free routes only</strong><small>Required for IDs without pricing. MicoCode cannot inspect your router’s downstream billing.</small></span></label></details>}
+     {desktop&&config.managed?<div className="info-box managed-route"><ShieldCheck size={18}/><span><strong>Managed free route: <code>{config.model}</code></strong><br/>MicoCode configures and verifies this route automatically. You do not need to enter model IDs or confirm pricing.<br/><button className="secondary" disabled={disabled} onClick={()=>update({managed:false})}>Configure manually</button></span></div>:<details className="router-advanced" open={!models.length}><summary>Free route setup</summary><p>Routers can also offer paid models. Every route your router exposes is listed for selection below; verified zero-price routes are marked. Disable paid fallbacks in your router first.</p><label>Free model IDs<input disabled={disabled} value={config.freeModels.join(', ')} onChange={e=>update({freeModels:e.target.value.split(',').map(s=>s.trim()).slice(0,50),model:''})} placeholder="Exact model IDs, separated by commas" spellCheck={false}/></label><label className="setting-switch"><input disabled={disabled} type="checkbox" checked={config.routerFreeOnly} onChange={e=>update({routerFreeOnly:e.target.checked})}/><span><strong>My router uses free routes only</strong><small>Required for IDs without pricing. MicoCode cannot inspect your router’s downstream billing.</small></span></label></details>}
      <p className="field-help">{desktop&&config.managed?'MicoCode configured this local connection automatically. The managed route is free; additional upstream accounts may require your own sign-in.':<>Requests go directly from your browser to this URL. Allow <code>{location.origin}</code> in the router’s CORS settings. Local routers may require local-network permission.</>}</p>
     </>}
-    {models.length>0&&<label>Available free model<select disabled={disabled} value={config.model} onChange={e=>update({model:e.target.value})}>{models.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}</select></label>}
+     {!(desktop&&config.managed)&&<><label>Model <span className="optional-field">pick a route or type any model ID</span><input disabled={disabled} list="proxy-models" value={config.model} onChange={e=>update({model:e.target.value})} placeholder="Select a discovered route or type a model ID" spellCheck={false}/><datalist id="proxy-models">{visibleModels.map(m=><option key={m.id} value={m.id}>{m.name+(m.verified?' · verified free':'')}</option>)}</datalist></label>{config.model.trim()&&models.length>0&&!selectedVerified&&<p className="field-help">That route has no verified zero pricing. Your router controls billing; disable paid fallbacks there first.</p>}</>}
    </>:config.provider==='browser'?<>
     <div className="section-label">FREE, RIGHT HERE</div><h3>A coding model that stays with you.</h3><p>Download once, then generate on your GPU without a service quota. A recent Chrome or Edge with WebGPU is required. Speed and quality depend on your hardware.</p>
     <label>Model size<select disabled={disabled} value={config.browserSize} onChange={e=>update({browserSize:e.target.value as Config['browserSize']})}><option value="0.5B">Qwen Coder 0.5B · lightest</option><option value="1.5B">Qwen Coder 1.5B · balanced</option><option value="3B">Qwen Coder 3B · better quality</option></select></label>

@@ -1,5 +1,5 @@
 import {checkProject,exactEdit,isPrivatePath,mergeFiles,qualityReview,validateReply} from './core.mjs';
-import {discoverProxy,normalizeEndpoint} from './providers.mjs';
+import {listProxyModels,normalizeEndpoint} from './providers.mjs';
 import {resilientRequest} from './resilience.mjs';
 import type {AgentReply,Changes,Config,Files,Project} from './types';
 type Chat = {role:'system'|'user'|'assistant';content:string};
@@ -51,11 +51,11 @@ export async function complete(messages:Chat[],config:Config,key:string,signal:A
 export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|'plan';config:Config;key:string;signal:AbortSignal;onMessage:(text:string,role:'assistant'|'activity')=>void;onChanges:(c:Changes)=>void;onToken:(t:string)=>void}) {
  const {project,prompt,mode,config,key,signal,onMessage,onChanges,onToken}=args;
  let changes:Changes={...project.changes};
- if(config.provider==='proxy') {
-  onMessage('Verifying available free routes…','activity');
-  const available=await discoverProxy(config,key,AbortSignal.any([signal,AbortSignal.timeout(20000)]));
-  if(!available.some((m:{id:string})=>m.id===config.model))throw new Error('The selected free route is no longer available. Reconnect and select an active free model.');
- }
+  if(config.provider==='proxy') {
+   onMessage('Verifying the selected route…','activity');
+   const available=await listProxyModels(config,key,AbortSignal.any([signal,AbortSignal.timeout(20000)]));
+   if(!available.some((m:{id:string})=>m.id===config.model))throw new Error('The selected model is no longer available on the router. Reconnect and select another model.');
+  }
  const contextLimit=config.provider==='browser'?6500:config.provider==='proxy'&&(config.proxyPreset==='horde'||config.managed)?10000:50000;
  const prior=project.messages.filter(m=>m.role==='user'||m.role==='assistant').slice(-4).map(m=>`${m.role}: ${m.text}`).join('\n').slice(-1800);
  const instruction=systemPrompt+(config.quality==='polished'?polishPrompt:'')+(mode==='plan'?'\nPLAN MODE: Do not write, edit or delete files. Inspect files and explain your plan.':'');
