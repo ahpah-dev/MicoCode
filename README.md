@@ -6,6 +6,9 @@ Little ideas. Real things. A free agentic coding workspace for Windows and the b
 
 ## Windows app
 
+Version 0.3.1 repairs managed free-route settings on setup, restore, and reconnect. Switching providers preserves the managed connection and engine. Managed routes do not require entering free model IDs or checking a pricing declaration; these controls apply only to manual connections.
+
+
 Download the x64 installer or portable executable. The workspace, Electron, and a private Node runtime are included. No separate Node installation or terminal is needed. Windows 10/11 x64 is supported. This community release is unsigned; Windows may show a publisher warning.
 
 Open **Models → Free proxies → Set up & connect** on 9Router, CLIProxyAPI, or LiteLLM. MicoCode downloads the official provider, verifies release archives, installs it privately, starts it on localhost, configures a free route, and verifies the catalogue. Setup shows progress, supports cancellation, and reuses completed installations. No global npm installation, administrator access, pasted router key, or provider account is required for the default route.
