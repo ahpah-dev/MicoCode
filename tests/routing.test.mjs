@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {credentialSlot,freeCatalogue,normalizeEndpoint,readCredential,writeCredential} from '../lib/mico/providers.mjs';
+import {applyManagedConnection,credentialSlot,freeCatalogue,normalizeEndpoint,readCredential,writeCredential,rememberProfile,recallProfile} from '../lib/mico/providers.mjs';
 import {abortableSleep,createRequester,ProviderError,retryDelay} from '../lib/mico/resilience.mjs';
 import {POST as ai} from '../api/ai.ts';
 import {POST as horde} from '../api/horde.ts';
@@ -25,6 +25,27 @@ test('credentials never follow a switch to another endpoint or anonymous provide
  assert.equal(readCredential({...first,provider:'openrouter'},storage),'');
  assert.equal(credentialSlot({...first,proxyPreset:'horde'}),'');
  writeCredential(first,'',storage);assert.equal(readCredential(first,storage),'');
+});
+test('native setup repairs missing free declarations for only its configured local route',()=>{
+ const result={config:{provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:55000/v1',model:'mico-free/free-code',routerEngine:'local'},key:'private'};
+ const config=applyManagedConnection({freeModels:[],routerFreeOnly:false,temperature:.2},result);
+ assert.deepEqual(config.freeModels,['mico-free/free-code']);assert.equal(config.routerFreeOnly,true);assert.equal(config.managed,true);assert.equal(config.temperature,.2);
+ const data={data:[{id:'mico-free/free-code'},{id:'unknown'},{id:'paid',pricing:{prompt:1,completion:1}}]};
+ assert.deepEqual(freeCatalogue(data,config.freeModels,config.routerFreeOnly).map(m=>m.id),['mico-free/free-code']);
+ assert.deepEqual(freeCatalogue(data).map(m=>m.id),[]);
+ for(const patch of [{proxyUrl:'https://remote.example/v1'},{model:'paid'},{proxyPreset:'custom'}])assert.throws(()=>applyManagedConnection({}, {...result,config:{...result.config,...patch}}));
+});
+test('switching provider profiles preserves native ownership, engine, and free declarations',()=>{
+ const map=new Map(),storage={getItem:k=>map.get(k)||null,setItem:(k,v)=>map.set(k,v)};
+ const native=applyManagedConnection({}, {config:{provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:55000/v1',model:'mico-free/free-code',routerEngine:'community'},key:'private'});
+ rememberProfile(native,storage);
+ const restored=recallProfile({provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:20128/v1',freeModels:[],routerFreeOnly:false,managed:false},storage);
+ assert.equal(restored.managed,true);assert.equal(restored.routerEngine,'community');assert.equal(restored.proxyUrl,native.proxyUrl);assert.deepEqual(restored.freeModels,native.freeModels);assert.equal(restored.routerFreeOnly,true);
+});
+test('legacy manual profiles are never promoted to managed or declared-free routes',()=>{
+ const storage={getItem:()=>JSON.stringify({'proxy:9router':{model:'unknown',proxyUrl:'http://127.0.0.1:20128/v1'}})};
+ const restored=recallProfile({provider:'proxy',proxyPreset:'9router',managed:true,routerFreeOnly:true},storage);
+ assert.equal(restored.managed,false);assert.equal(restored.routerFreeOnly,false);assert.deepEqual(restored.freeModels,[]);
 });
 test('retry headers support seconds, dates, and request-reset durations',()=>{
  const now=Date.parse('2026-10-10T10:00:00Z');
