@@ -1,0 +1,77 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {credentialSlot,freeCatalogue,normalizeEndpoint,readCredential,writeCredential} from '../lib/mico/providers.mjs';
+import {abortableSleep,createRequester,ProviderError,retryDelay} from '../lib/mico/resilience.mjs';
+import {POST as ai} from '../api/ai.ts';
+import {POST as horde} from '../api/horde.ts';
+
+test('router addresses reject leaked credentials and insecure remote destinations',()=>{
+ assert.equal(normalizeEndpoint('http://127.0.0.1:20128/v1/'),'http://127.0.0.1:20128/v1');
+ for(const address of ['http://example.com/v1','https://user:password@example.com/v1','https://example.com/v1?key=secret','file:///etc/passwd'])assert.throws(()=>normalizeEndpoint(address));
+});
+test('free discovery hides paid and unknown routes until exact free IDs are declared',()=>{
+ const data={data:[{id:'zero',pricing:{prompt:'0',completion:'0'}},{id:'paid-free',pricing:{prompt:'1',completion:'1'}},{id:'unknown'},{id:'missing-price',pricing:{prompt:'0'}}]};
+ assert.deepEqual(freeCatalogue(data).map(m=>m.id),['zero']);
+ assert.deepEqual(freeCatalogue(data,['unknown'],true).map(m=>m.id),['zero','unknown']);
+ assert.deepEqual(freeCatalogue(data,['unknown'],false).map(m=>m.id),['zero']);
+ assert.deepEqual(freeCatalogue(data,['paid-free'],true).map(m=>m.id),['zero']);
+});
+test('credentials never follow a switch to another endpoint or anonymous provider',()=>{
+ const map=new Map();const storage={getItem:key=>map.get(key),setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)};
+ const first={provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:20128/v1'};
+ writeCredential(first,'private',storage);
+ assert.equal(readCredential(first,storage),'private');
+ assert.equal(readCredential({...first,proxyUrl:'https://different.example/v1'},storage),'');
+ assert.equal(readCredential({...first,provider:'openrouter'},storage),'');
+ assert.equal(credentialSlot({...first,proxyPreset:'horde'}),'');
+ writeCredential(first,'',storage);assert.equal(readCredential(first,storage),'');
+});
+test('retry headers support seconds, dates, and request-reset durations',()=>{
+ const now=Date.parse('2026-10-10T10:00:00Z');
+ assert.equal(retryDelay(new Headers({'Retry-After':'3'}),now),3000);
+ assert.equal(retryDelay(new Headers({'Retry-After':'Sat, 10 Oct 2026 10:00:05 GMT'}),now),5000);
+ assert.equal(retryDelay(new Headers({'x-ratelimit-reset-requests':'2m'}),now),120000);
+});
+test('transient retries honor Retry-After and remain bounded',async()=>{
+ let time=0,calls=0;const waits=[];
+ const request=createRequester({now:()=>time,sleep:async ms=>{waits.push(ms);time+=ms},random:()=>0});
+ const result=await request(async()=>++calls===1?Response.json({error:'busy'},{status:429,headers:{'Retry-After':'5'}}):Response.json({ok:true}));
+ assert.equal(result.status,200);assert.equal(calls,2);assert.deepEqual(waits,[5000]);
+ calls=0;await assert.rejects(()=>request(async()=>{calls++;return Response.json({error:'busy'},{status:503})},{scope:'bounded'}),ProviderError);assert.equal(calls,3);
+});
+test('daily quotas, billing, and long resets stop without model or credential rotation',async()=>{
+ let calls=0;const request=createRequester({now:()=>0,sleep:async()=>assert.fail('Do not sleep beyond the bounded wait')});
+ await assert.rejects(()=>request(async()=>{calls++;return Response.json({error:{message:'Daily free quota exhausted'}},{status:429})},{scope:'quota'}),e=>e.exhausted===true);assert.equal(calls,1);
+ await assert.rejects(()=>request(async()=>{calls++;return Response.json({ok:true})},{scope:'quota'}));assert.equal(calls,1);
+ await assert.rejects(()=>request(async()=>{calls++;return Response.json({error:'busy'},{status:429,headers:{'Retry-After':'120'}})},{scope:'long'}));assert.equal(calls,2);
+ await assert.rejects(()=>request(async()=>{calls++;return Response.json({error:'Insufficient credits'},{status:402})},{scope:'credits'}),e=>e.exhausted);assert.equal(calls,3);
+});
+test('stopping a cooldown aborts promptly',async()=>{
+ const abort=new AbortController();const sleep=abortableSleep(60000,abort.signal);abort.abort();await assert.rejects(()=>sleep,e=>e.name==='AbortError');
+});
+test('successful quota headers pace the following request until reset',async()=>{
+ let time=10000;const waits=[];const request=createRequester({now:()=>time,sleep:async ms=>{waits.push(ms);time+=ms}});
+ await request(async()=>Response.json({ok:true},{headers:{'x-ratelimit-remaining':'0','x-ratelimit-reset':'14'}}));
+ await request(async()=>Response.json({ok:true}));assert.deepEqual(waits,[4000]);
+});
+test('one connection serializes generations',async()=>{
+ let finish;let calls=0;const request=createRequester();
+ const first=request(async()=>{calls++;await new Promise(resolve=>{finish=resolve});return Response.json({ok:true})});
+ await new Promise(resolve=>setTimeout(resolve,0));
+ const second=request(async()=>{calls++;return Response.json({ok:true})});
+ await new Promise(resolve=>setTimeout(resolve,0));assert.equal(calls,1);finish();await Promise.all([first,second]);assert.equal(calls,2);
+});
+test('OpenRouter relay enforces zero price and only same-provider free fallbacks',async()=>{
+ const previous=globalThis.fetch;let sent;
+ globalThis.fetch=async(url,options)=>{assert.equal(url,'https://openrouter.ai/api/v1/chat/completions');sent=JSON.parse(options.body);return Response.json({choices:[]},{headers:{'Retry-After':'7','x-ratelimit-remaining':'0'}})};
+ try{
+  const req=body=>new Request('https://micocode.vercel.app/api/ai',{method:'POST',headers:{Authorization:'Bearer test-key-12345','Content-Type':'application/json'},body:JSON.stringify(body)});
+  assert.equal((await ai(req({model:'paid/model',messages:[]}))).status,400);
+  const result=await ai(req({model:'example/model:free',messages:[{role:'user',content:'test'}],freeFallback:true}));
+  assert.equal(result.status,200);assert.deepEqual(sent.provider.max_price,{prompt:0,completion:0});assert.deepEqual(sent.models,['example/model:free','openrouter/free']);assert.equal(result.headers.get('retry-after'),'7');assert.equal(result.headers.get('x-ratelimit-remaining'),'0');
+ }finally{globalThis.fetch=previous}
+});
+test('community relay cannot be used as an arbitrary URL proxy',async()=>{
+ const previous=globalThis.fetch;globalThis.fetch=async()=>assert.fail('Invalid request must never reach upstream');
+ try{assert.equal((await horde(new Request('https://micocode.vercel.app/api/horde',{method:'POST',body:JSON.stringify({action:'proxy',url:'http://127.0.0.1/private'})}))).status,400)}finally{globalThis.fetch=previous}
+});

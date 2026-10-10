@@ -1,9 +1,10 @@
 import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
 import {fileURLToPath} from 'node:url';
-import {POST as ai} from './api/ai';
-import {POST as connection} from './api/connection';
-import {GET as models} from './api/models';
+import {POST as ai} from './api/ai.ts';
+import {POST as connection} from './api/connection.ts';
+import {GET as models} from './api/models.ts';
+import {POST as horde} from './api/horde.ts';
 
 const root=fileURLToPath(new URL('.',import.meta.url));
 export default defineConfig({
@@ -12,7 +13,7 @@ export default defineConfig({
  plugins:[react(),{name:'micocode-local-api',configureServer(server){
   server.middlewares.use(async(req,res,next)=>{
    const path=(req.url||'').split('?')[0];
-   const handler=path==='/api/models'&&req.method==='GET'?models:path==='/api/ai'&&req.method==='POST'?ai:path==='/api/connection'&&req.method==='POST'?connection:null;
+   const handler=path==='/api/models'&&req.method==='GET'?models:path==='/api/ai'&&req.method==='POST'?ai:path==='/api/connection'&&req.method==='POST'?connection:path==='/api/horde'&&req.method==='POST'?horde:null;
    if(!handler)return next();
    try{
     const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk));
