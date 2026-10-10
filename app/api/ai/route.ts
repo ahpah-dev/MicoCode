@@ -1,1 +1,1 @@
-export {POST} from '../../../../api/ai';
+export {POST} from '../../../api/ai';

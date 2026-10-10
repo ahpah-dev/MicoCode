@@ -1,1 +1,1 @@
-export {GET} from '../../../../api/models';
+export {GET} from '../../../api/models';
