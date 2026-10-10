@@ -121,7 +121,10 @@ export class ProviderManager{
   if(!await exists(path.join(appDir,'server.js'))){
    this.emit(id,'install','Installing 9Router '+versions.nine+' with MicoCode’s bundled Node runtime…');await mkdir(dir,{recursive:true});
    await writeFile(path.join(dir,'package.json'),JSON.stringify({name:'mico-managed-9router',private:true,dependencies:{'9router':versions.nine}}));
-   await this.run(node,[path.join(this.runtime,'node_modules','npm','bin','npm-cli.js'),'install','--ignore-scripts','--omit=dev','--no-audit','--no-fund','--registry=https://registry.npmjs.org/'],{cwd:dir,signal,env:{PATH:this.runtime+path.delimiter+process.env.PATH,npm_config_cache:path.join(this.root,'npm-cache')}});
+   const npmDir=path.join(this.root,'runtime','node-'+versions.node),npmCLI=path.join(npmDir,'npm','bin','npm-cli.js');
+   if(!await exists(npmCLI))await extractVerifiedZip(path.join(this.runtime,'npm-runtime.zip'),npmDir,signal);
+   const npmConfig=path.join(this.root,'npmrc');await writeFile(npmConfig,'registry=https://registry.npmjs.org/\nignore-scripts=true\n');
+   await this.run(node,[npmCLI,'install','--ignore-scripts','--omit=dev','--no-audit','--no-fund','--registry=https://registry.npmjs.org/'],{cwd:dir,signal,env:{PATH:this.runtime+path.delimiter+process.env.PATH,npm_config_cache:path.join(this.root,'npm-cache'),npm_config_userconfig:npmConfig}});
   }
   const port=await freePort(),base='http://127.0.0.1:'+port;const password=await this.secret('9router-password'),jwt=await this.secret('9router-jwt');
   this.emit(id,'start','Starting your private 9Router on localhost…');
