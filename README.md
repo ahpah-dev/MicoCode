@@ -6,9 +6,9 @@ Little ideas. Real things. A free agentic coding workspace for Windows and the b
 
 ## Windows app
 
-Version 0.3.2 exposes every installed Ollama model as a selectable managed route on 9Router, CLIProxyAPI, and LiteLLM. Open Models after Set up & connect and pick any installed model; the choice survives re-setup and restore while the route is still offered. Manual router connections list every exposed route with verified-free badges, or accept a typed model ID.
+Version 0.3.3 lists every model your router exposes in a searchable, provider-grouped picker — including all 9Router provider models and combos — with verified-free and paid badges. If models are missing, check the key's permissions, enabled models per connection, and any disabled list in the router dashboard. Managed 9Router, CLIProxyAPI, and LiteLLM connections expose every installed Ollama model as a selectable route, and manual connections accept a typed model ID.
 
-The 0.3.2 Windows downloads send managed requests through MicoCode's protected local server to the installed router. Install the replacement download over the previous installation, then run **Set up & connect** again to refresh the route list.
+The 0.3.3 Windows downloads send managed requests through MicoCode's protected local server to the installed router. Install the replacement download over the previous installation, then run **Set up & connect** again to refresh the route list.
 
 
 Download the x64 installer or portable executable. The workspace, Electron, and a private Node runtime are included. No separate Node installation or terminal is needed. Windows 10/11 x64 is supported. This community release is unsigned; Windows may show a publisher warning.
