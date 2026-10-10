@@ -1,0 +1,4 @@
+import type {Project} from './types';
+const open=()=>new Promise<IDBDatabase>((resolve,reject)=>{ const r=indexedDB.open('micocode-workspace',1);r.onupgradeneeded=()=>r.result.createObjectStore('state');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error); });
+export async function loadProjects():Promise<Project[]|undefined> { const db=await open();return new Promise((resolve,reject)=>{const tx=db.transaction('state'); const r=tx.objectStore('state').get('projects');r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);tx.oncomplete=()=>db.close();}); }
+export async function saveProjects(projects:Project[]) { const db=await open(); return new Promise<void>((resolve,reject)=>{const tx=db.transaction('state','readwrite');tx.objectStore('state').put(projects,'projects');tx.oncomplete=()=>{db.close();resolve()};tx.onerror=()=>{db.close();reject(tx.error)};}); }

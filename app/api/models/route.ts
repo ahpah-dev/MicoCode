@@ -1,0 +1,3 @@
+export async function GET() {
+ try {const r=await fetch('https://openrouter.ai/api/v1/models',{signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error();const {data}=await r.json() as {data:Array<{id:string;name:string;context_length:number;pricing:{prompt:string;completion:string}}>};return Response.json({models:data.filter((m:{id:string;pricing:{prompt:string;completion:string}})=>m.id.endsWith(':free')&&Number(m.pricing.prompt)===0&&Number(m.pricing.completion)===0).map((m:{id:string;name:string;context_length:number})=>({id:m.id,name:m.name,context:m.context_length}))},{headers:{'Cache-Control':'public, max-age=300'}})}catch{return Response.json({error:'Free model discovery is unavailable. The free router is still selectable.'},{status:502})}
+}

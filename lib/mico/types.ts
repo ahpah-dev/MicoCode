@@ -1,0 +1,10 @@
+export type Files = Record<string, string>;
+export type Changes = Record<string, string | null>;
+export type Message = { id:string; role:'user'|'assistant'|'activity'|'error'; text:string; time:number };
+export type Checkpoint = { id:string; name:string; time:number; files:Files };
+export type Project = { id:string; name:string; files:Files; active:string; messages:Message[]; checkpoints:Checkpoint[]; changes:Changes; updated:number };
+export type Config = { provider:'browser'|'ollama'|'openrouter'; model:string; ollamaUrl:string; browserSize:'0.5B'|'1.5B'|'3B'; temperature:number; maxSteps:number };
+export type AgentAction = { type:'read_file'|'write_file'|'delete_file'|'search'|'list_files'|'check_project'; path?:string; content?:string; query?:string };
+export type AgentReply = { message:string; actions:AgentAction[]; done:boolean };
+export const defaultConfig:Config = {provider:'browser',model:'openrouter/free',ollamaUrl:'http://localhost:11434',browserSize:'1.5B',temperature:0.2,maxSteps:12};
+export const uid = () => crypto.randomUUID();

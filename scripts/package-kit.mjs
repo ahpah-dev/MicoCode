@@ -1,0 +1,11 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import JSZip from 'jszip';
+const root=fileURLToPath(new URL('../',import.meta.url));
+const zip=new JSZip();
+for(const [name,source] of [['micocode-proxy.mjs','public/micocode-proxy.mjs'],['Start-MicoCode.cmd','scripts/Start-MicoCode.cmd'],['README.txt','scripts/local-kit-README.txt']])zip.file(name,await fs.readFile(path.join(root,source)),{date:new Date('2026-10-10T00:00:00Z')});
+await fs.mkdir(path.join(root,'public/downloads'),{recursive:true});
+const data=await zip.generateAsync({type:'nodebuffer',compression:'DEFLATE'});
+await fs.writeFile(path.join(root,'public/downloads/MicoCode-local-kit.zip'),data);
+console.log('Local kit built: '+data.length+' bytes');

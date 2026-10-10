@@ -1,0 +1,9 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {safePath,isPrivatePath,mergeFiles,validateReply,checkProject,diffLines} from '../lib/mico/core.mjs';
+test('workspace paths reject traversal and prototype mutation',()=>{for(const p of ['../secret','/root','a/../b','__proto__','x/constructor','C:\\secret'])assert.throws(()=>safePath(p));assert.equal(safePath('./src/app.js'),'src/app.js')});
+test('secrets and dependency directories stay out of agent context',()=>{for(const p of ['.env','.env.local','a/.env.production','key.pem','node_modules/x.js','.git/config'])assert.equal(isPrivatePath(p),true);assert.equal(isPrivatePath('src/app.js'),false)});
+test('staged edits are isolated and atomically applied',()=>{const files={'a.txt':'before','b.txt':'keep'};const changes={'a.txt':'after','b.txt':null,'c.txt':'new'};assert.deepEqual(mergeFiles(files,changes),{'a.txt':'after','c.txt':'new'});assert.equal(files['a.txt'],'before');assert.equal(files['b.txt'],'keep')});
+test('agent protocol refuses unknown operations, secrets, and malformed writes',()=>{for(const action of [{type:'shell',content:'rm'},{type:'write_file',path:'.env',content:'secret'},{type:'write_file',path:'a.js',content:55}])assert.throws(()=>validateReply(JSON.stringify({message:'x',actions:[action],done:true})));assert.equal(validateReply('```json\n{"message":"Ready","actions":[],"done":true}\n```').done,true)});
+test('project checks report broken resources and invalid JSON',()=>{assert.equal(checkProject({'index.html':'<script src="app.js"></script>','app.js':'','a.json':'{}'}).length,0);assert.equal(checkProject({'index.html':'<script src="missing.js"></script>','a.json':'bad'}).length,2)});
+test('review includes the actual removed and added lines',()=>{const lines=diffLines('one\ntwo\nthree','one\nchanged\nthree');assert.ok(lines.some(l=>l.kind==='remove'&&l.text==='two'));assert.ok(lines.some(l=>l.kind==='add'&&l.text==='changed'))});
