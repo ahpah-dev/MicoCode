@@ -35,7 +35,7 @@ async function start(){
  const appDir=app.getAppPath(),dataDir=app.getPath('userData');const vault=await createVault(dataDir);let gatewayKey=await vault.get('gateway');
  if(!gatewayKey){gatewayKey='sk-mico-'+randomBytes(24).toString('hex');await vault.set('gateway',gatewayKey)}
  server=await createLocalServer({webDir:path.join(appDir,'web'),port:smoke?19287:19286,gatewayKey,getOllamaUpstream:()=>manager?.ollamaUpstream,getOllamaModel:()=>manager?.ollamaModel});
- manager=new ProviderManager({dataDir,runtimeDir:path.join(process.resourcesPath,'node-runtime'),gatewayBase:server.origin+'/managed/v1',gatewayKey,vault,onProgress:progress=>{if(window&&!window.isDestroyed())window.webContents.send('mico:progress',progress)}});
+ manager=new ProviderManager({dataDir,runtimeDir:app.isPackaged?path.join(process.resourcesPath,'node-runtime'):path.join(appDir,'..','resources','node-runtime'),gatewayBase:server.origin+'/managed/v1',gatewayKey,vault,onProgress:progress=>{if(window&&!window.isDestroyed())window.webContents.send('mico:progress',progress)}});
  window=new BrowserWindow({width:1440,height:950,minWidth:720,minHeight:540,title:'MicoCode',backgroundColor:backgrounds.forest,show:false,autoHideMenuBar:true,icon:path.join(appDir,'icon.ico'),webPreferences:{preload:path.join(appDir,'preload.cjs'),nodeIntegration:false,nodeIntegrationInWorker:false,contextIsolation:true,sandbox:true,webSecurity:true,partition:'persist:micocode'}});
  window.removeMenu();secureWindow(window,server.origin);
  ipcMain.handle('mico:setup',(event,provider,engine)=>{validateSender(event);return manager.setup(assertProvider(provider),engine)});
@@ -62,9 +62,28 @@ async function start(){
  let managedSetup;
  if(smokeProvider){
   assertProvider(smokeProvider);
-  const result=await window.webContents.executeJavaScript(`window.micoDesktop.setup(${JSON.stringify(smokeProvider)},'local')`);
+  let ui;
+  if(process.argv.includes('--smoke-ui')){
+   ui=await window.webContents.executeJavaScript(`(async()=>{
+    const wait=async check=>{const end=Date.now()+180000;while(Date.now()<end){const value=check();if(value)return value;await new Promise(r=>setTimeout(r,100))}throw Error('UI setup timed out: '+document.querySelector('.connection-status')?.textContent)};
+    const click=async name=>{const button=await wait(()=>Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()===name));button.click();await new Promise(r=>setTimeout(r,100))};
+    await click('Models');
+    const setup=await wait(()=>document.querySelector('button[aria-label="Set up and connect 9Router"]'));setup.click();
+    await wait(()=>!setup.disabled&&document.querySelector('.connection-status')?.textContent&&!/^Preparing|Connecting/.test(document.querySelector('.connection-status').textContent));
+    const initial=!!document.querySelector('.connection-status.success')&&!!document.querySelector('.managed-route');
+    const cards=()=>Array.from(document.querySelectorAll('.provider-grid button'));
+    cards().find(b=>b.textContent.includes('Ollama')).click();await new Promise(r=>setTimeout(r,100));
+    cards().find(b=>b.textContent.includes('Free proxies')).click();await new Promise(r=>setTimeout(r,100));
+    const restored=!!document.querySelector('.managed-route');
+    await click('Connect & verify');
+    await wait(()=>!document.querySelector('.connection-actions button')?.disabled&&document.querySelector('.connection-status')?.textContent.includes('connected'));
+    return {initial,restored,success:!!document.querySelector('.connection-status.success'),managed:!!document.querySelector('.managed-route'),status:document.querySelector('.connection-status')?.textContent};
+   })()`);
+   if(!ui.initial||!ui.restored||!ui.success||!ui.managed)throw Error('Managed connection UI failed: '+JSON.stringify(ui));
+  }
+  const result=ui?manager.connections.get(smokeProvider):await window.webContents.executeJavaScript(`window.micoDesktop.setup(${JSON.stringify(smokeProvider)},'local')`);
   const response=await fetch(result.config.proxyUrl+'/models',{headers:{Authorization:'Bearer '+result.key}});
-  managedSetup={provider:smokeProvider,model:result.config.model,status:response.status};
+  managedSetup={provider:smokeProvider,model:result.config.model,status:response.status,...(ui?{ui}:{})};
  }
  const api=await fetch(server.origin+'/api/models');
  const report={version:app.getVersion(),...state,invalidProviderRejected:invalid,statusCount,...(managedSetup?{managedSetup}:{}),apiStatus:api.status,errors};

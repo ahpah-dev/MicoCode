@@ -2,6 +2,7 @@ import {spawn} from 'node:child_process';
 import {mkdir,readFile,writeFile,access,readdir,rm} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import path from 'node:path';
+import {freeCatalogue} from '../lib/mico/providers.mjs';
 import net from 'node:net';
 import {randomBytes} from 'node:crypto';
 import {artifacts,versions} from './artifacts.mjs';
@@ -108,7 +109,7 @@ export class ProviderManager{
   const local=connection.config.provider==='ollama';const url=local?connection.config.ollamaUrl+'/api/tags':connection.config.proxyUrl+'/models';
   const r=await this.fetch(url,{headers:connection.key?{Authorization:'Bearer '+connection.key}:{},signal:AbortSignal.any([signal,AbortSignal.timeout(20000)])});
   if(!r.ok)throw new Error('The installed provider did not accept its connection ('+r.status+'). Retry setup.');
-  const d=await r.json();const ids=(d.data||d.models||[]).map(m=>m.id||m.name);if(!ids.includes(connection.config.model))throw new Error('The router did not expose the configured free model. Retry setup.');
+  const d=await r.json();const ids=local?(d.models||[]).map(m=>m.name):freeCatalogue(d,connection.config.freeModels,connection.config.routerFreeOnly).map(m=>m.id);if(!ids.includes(connection.config.model))throw new Error('The router did not expose the configured free model. Retry setup.');
  }
  async nineRequest(base,route,signal,{method='GET',body}={}){
   const r=await this.fetch(base+route,{method,headers:{'Content-Type':'application/json',Cookie:this.cookies.get('9router')||''},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.any([signal,AbortSignal.timeout(20000)])});
