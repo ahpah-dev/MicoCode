@@ -5,6 +5,8 @@ export type Checkpoint = { id:string; name:string; time:number; files:Files };
 export type Project = { id:string; name:string; files:Files; active:string; messages:Message[]; checkpoints:Checkpoint[]; changes:Changes; updated:number };
 export type ProxyPreset = '9router'|'litellm'|'cliproxy'|'horde'|'custom';
 export type Config = {
+ managed?:boolean;
+ routerEngine?:'local'|'community';
  provider:'browser'|'ollama'|'openrouter'|'proxy'; model:string; ollamaUrl:string;
  browserSize:'0.5B'|'1.5B'|'3B'; temperature:number; maxSteps:number;
  proxyPreset:ProxyPreset; proxyUrl:string; freeModels:string[]; routerFreeOnly:boolean;

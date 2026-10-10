@@ -1,0 +1,38 @@
+appId: app.micocode.desktop
+productName: MicoCode
+electronVersion: 44.7.0
+directories:
+  app: build/desktop-app
+  output: release
+  buildResources: build/desktop-app
+files:
+  - main.cjs
+  - preload.cjs
+  - package.json
+  - LICENSE
+  - icon.ico
+  - web/**
+  - "!node_modules/**"
+extraResources:
+  - from: build/resources/node-runtime
+    to: node-runtime
+asar: true
+win:
+  icon: build/desktop-app/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  signAndEditExecutable: true
+nsis:
+  artifactName: MicoCode-Setup-${version}-x64.exe
+  oneClick: true
+  perMachine: false
+  allowElevation: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  deleteAppDataOnUninstall: false
+portable:
+  artifactName: MicoCode-Portable-${version}-x64.exe
+  requestExecutionLevel: user

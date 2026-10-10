@@ -1,0 +1,80 @@
+import {app,BrowserWindow,ipcMain,nativeTheme,safeStorage,shell,session,dialog} from 'electron';
+import {readFile,writeFile,mkdir,rename} from 'node:fs/promises';
+import {randomBytes} from 'node:crypto';
+import path from 'node:path';
+import {ProviderManager,assertProvider} from './provider-manager.mjs';
+import {createLocalServer} from './server.mjs';
+
+const smoke=process.argv.includes('--smoke-test');
+const smokePath=process.argv.find(x=>x.startsWith('--smoke-output='))?.slice('--smoke-output='.length);
+const smokeProvider=process.argv.find(x=>x.startsWith('--smoke-provider='))?.slice('--smoke-provider='.length);
+const testData=process.argv.find(x=>x.startsWith('--test-data='))?.slice('--test-data='.length);
+if(smoke&&testData)app.setPath('userData',path.resolve(testData));
+app.setAppUserModelId('app.micocode.desktop');
+let window,manager,server,quitting=false;const dashboards=new Set();
+const backgrounds={forest:'#111815',graphite:'#151515',midnight:'#101624',violet:'#191322',paper:'#f8f6ef'};
+const allowedHosts=new Set(['micocode.vercel.app','github.com','openrouter.ai','docs.litellm.ai','ollama.com','docs.ollama.com','oai.aihorde.net','aihorde.net','nodejs.org']);
+function safeExternal(url){try{const u=new URL(url);return u.protocol==='https:'&&allowedHosts.has(u.hostname)&&!u.username&&!u.password}catch{return false}}
+async function createVault(dir){
+ await mkdir(dir,{recursive:true});const file=path.join(dir,'credentials.bin');let values={};
+ if(!safeStorage.isEncryptionAvailable())throw new Error('Windows credential encryption is unavailable. Restart Windows and try again.');
+ try{values=JSON.parse(safeStorage.decryptString(await readFile(file)))}catch(e){if(e.code!=='ENOENT')throw new Error('MicoCode could not read its protected credentials. Your projects remain stored on this device.')}
+ let writing=Promise.resolve();
+ return {get:async key=>values[key]||null,set:async(key,value)=>{values[key]=value;writing=writing.then(async()=>{await writeFile(file+'.tmp',safeStorage.encryptString(JSON.stringify(values)),{mode:0o600});await rename(file+'.tmp',file)});await writing}};
+}
+function validateSender(event){
+ if(!window||event.sender!==window.webContents||event.senderFrame!==window.webContents.mainFrame||!event.senderFrame.url.startsWith(server.origin+'/app/'))throw new Error('This action is available only in the MicoCode workspace.');
+}
+function secureWindow(win,ownOrigin){
+ win.webContents.setWindowOpenHandler(({url})=>{if(safeExternal(url))void shell.openExternal(url);return {action:'deny'}});
+ win.webContents.on('will-navigate',(event,url)=>{if(new URL(url).origin!==ownOrigin){event.preventDefault();if(safeExternal(url))void shell.openExternal(url)}});
+ win.webContents.on('will-attach-webview',event=>event.preventDefault());
+ win.webContents.session.setPermissionRequestHandler((_contents,permission,callback)=>callback(permission==='local-network-access'));
+}
+async function start(){
+ const appDir=app.getAppPath(),dataDir=app.getPath('userData');const vault=await createVault(dataDir);let gatewayKey=await vault.get('gateway');
+ if(!gatewayKey){gatewayKey='sk-mico-'+randomBytes(24).toString('hex');await vault.set('gateway',gatewayKey)}
+ server=await createLocalServer({webDir:path.join(appDir,'web'),port:smoke?19287:19286,gatewayKey,getOllamaUpstream:()=>manager?.ollamaUpstream,getOllamaModel:()=>manager?.ollamaModel});
+ manager=new ProviderManager({dataDir,runtimeDir:path.join(process.resourcesPath,'node-runtime'),gatewayBase:server.origin+'/managed/v1',gatewayKey,vault,onProgress:progress=>{if(window&&!window.isDestroyed())window.webContents.send('mico:progress',progress)}});
+ window=new BrowserWindow({width:1440,height:950,minWidth:720,minHeight:540,title:'MicoCode',backgroundColor:backgrounds.forest,show:false,autoHideMenuBar:true,icon:path.join(appDir,'icon.ico'),webPreferences:{preload:path.join(appDir,'preload.cjs'),nodeIntegration:false,nodeIntegrationInWorker:false,contextIsolation:true,sandbox:true,webSecurity:true,partition:'persist:micocode'}});
+ window.removeMenu();secureWindow(window,server.origin);
+ ipcMain.handle('mico:setup',(event,provider,engine)=>{validateSender(event);return manager.setup(assertProvider(provider),engine)});
+ ipcMain.handle('mico:cancel',event=>{validateSender(event);manager.cancel()});
+ ipcMain.handle('mico:status',event=>{validateSender(event);return manager.statuses()});
+ let restoration;
+ ipcMain.handle('mico:restore',event=>{validateSender(event);return restoration||(restoration=manager.restore())});
+ ipcMain.handle('mico:stop',(event,provider)=>{validateSender(event);return manager.stop(assertProvider(provider))});
+ ipcMain.handle('mico:appearance',(event,theme)=>{validateSender(event);if(!Object.hasOwn(backgrounds,theme))throw new Error('Unknown theme.');window.setBackgroundColor(backgrounds[theme]);nativeTheme.themeSource=theme==='paper'?'light':'dark'});
+ ipcMain.handle('mico:dashboard',async(event,provider)=>{
+  validateSender(event);assertProvider(provider);const connection=manager.connections.get(provider);if(!connection?.dashboard)throw new Error('Set up 9Router before opening its dashboard.');
+  const url=new URL(connection.dashboard);const dashboardSession=session.fromPartition('persist:micocode-9router');
+  const cookie=manager.cookies.get(provider)?.split('=');if(cookie?.length===2)await dashboardSession.cookies.set({url:url.origin,name:cookie[0],value:cookie[1],httpOnly:true,sameSite:'lax',path:'/'});
+  const win=new BrowserWindow({width:1200,height:800,title:'9Router · MicoCode',autoHideMenuBar:true,webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,session:dashboardSession}});dashboards.add(win);win.on('closed',()=>dashboards.delete(win));secureWindow(win,url.origin);await win.loadURL(url.href);
+ });
+ const errors=[];window.webContents.on('console-message',details=>{if(details.level==='error')errors.push(details.message.slice(0,220))});window.webContents.on('render-process-gone',()=>errors.push('Renderer exited unexpectedly.'));
+ await window.loadURL(server.origin+'/app/');
+ if(!smoke){window.show();return}
+ // Release smoke check runs only under an explicit test flag and uses an isolated profile.
+ await new Promise(resolve=>setTimeout(resolve,2000));
+ const state=await window.webContents.executeJavaScript(`({title:document.title,workspace:!!document.querySelector('.app-shell'),bridge:!!window.micoDesktop,node:typeof window.require,theme:document.documentElement.dataset.theme})`);
+ const invalid=await window.webContents.executeJavaScript(`window.micoDesktop.setup('arbitrary-shell').then(()=>false,()=>true)`);
+ const statusCount=await window.webContents.executeJavaScript(`window.micoDesktop.providerStatus().then(rows=>rows.length)`);
+ let managedSetup;
+ if(smokeProvider){
+  assertProvider(smokeProvider);
+  const result=await window.webContents.executeJavaScript(`window.micoDesktop.setup(${JSON.stringify(smokeProvider)},'local')`);
+  const response=await fetch(result.config.proxyUrl+'/models',{headers:{Authorization:'Bearer '+result.key}});
+  managedSetup={provider:smokeProvider,model:result.config.model,status:response.status};
+ }
+ const api=await fetch(server.origin+'/api/models');
+ const report={version:app.getVersion(),...state,invalidProviderRejected:invalid,statusCount,...(managedSetup?{managedSetup}:{}),apiStatus:api.status,errors};
+ report.passed=state.workspace&&state.bridge&&state.node==='undefined'&&invalid&&statusCount===4&&(!managedSetup||managedSetup.status===200)&&api.ok&&errors.length===0;
+ if(smokePath)await writeFile(smokePath,JSON.stringify(report,null,2));await manager.close();await server.close();app.exit(report.passed?0:1);
+}
+if(!app.requestSingleInstanceLock())app.quit();
+else{
+ app.on('second-instance',()=>{if(window){if(window.isMinimized())window.restore();window.show();window.focus()}});
+ app.whenReady().then(start).catch(async error=>{if(smoke&&smokePath)await writeFile(smokePath,JSON.stringify({passed:false,error:error.message},null,2));else dialog.showErrorBox('MicoCode could not open',error.code==='EADDRINUSE'?'MicoCode’s local workspace port is in use. Close the other instance and retry.':error.message);app.quit()});
+ app.on('window-all-closed',()=>app.quit());
+ app.on('before-quit',event=>{if(quitting)return;event.preventDefault();quitting=true;for(const win of dashboards)win.close();Promise.resolve(manager?.close()).then(()=>server?.close()).finally(()=>app.exit())});
+}

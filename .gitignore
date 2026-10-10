@@ -8,3 +8,7 @@ dist/
 .env*
 *.tsbuildinfo
 .openai/
+
+build/
+release/
+*.log

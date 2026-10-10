@@ -1,0 +1,73 @@
+import http from 'node:http';
+import path from 'node:path';
+import {readFile,stat} from 'node:fs/promises';
+import {POST as horde} from '../api/horde.ts';
+import {POST as ai} from '../api/ai.ts';
+import {POST as connection} from '../api/connection.ts';
+import {GET as models} from '../api/models.ts';
+
+const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.zip':'application/zip','.wasm':'application/wasm','.woff2':'font/woff2'};
+const json=(error,status=400)=>Response.json({error},{status});
+export function isLocalRequest(request,origin){return new URL(request.url).origin===origin&&(!request.headers.get('origin')||request.headers.get('origin')===origin)&&request.headers.get('sec-fetch-site')!=='cross-site'}
+export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaUpstream=()=>null,getOllamaModel=()=>null}){
+ let origin='http://127.0.0.1:'+port;
+ async function handle(request){
+  if(!isLocalRequest(request,origin))return json('Origin is not allowed.',403);
+  const url=new URL(request.url),route=url.pathname;
+  const managed=route.match(/^\/managed\/(local|community)\/v1\/(models|chat\/completions)$/);
+  if(managed||route.startsWith('/managed/v1/')){
+   if(request.headers.get('authorization')!=='Bearer '+gatewayKey)return json('A managed connection key is required.',401);
+   const action=managed?.[2]||route.slice('/managed/v1/'.length),engine=managed?.[1]||'community';
+   if(engine==='local'){
+    const upstream=getOllamaUpstream(),model=getOllamaModel();if(!upstream||!model)return json('Set up the local coding engine first.',503);
+    if(action==='models'&&request.method==='GET')return Response.json({object:'list',data:[{id:'free-code',name:model,object:'model',owned_by:'micocode-local',pricing:{prompt:'0',completion:'0'}}]});
+    if(action==='chat/completions'&&request.method==='POST'){
+     const body=await request.json();if(body.model!=='free-code')return json('This managed route supports only its configured free model.');
+     if(!Array.isArray(body.messages)||body.messages.length>80||!body.messages.every(m=>m&&['system','user','assistant'].includes(m.role)&&typeof m.content==='string'))return json('Invalid coding messages.');
+     const r=await fetch(upstream+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model,messages:body.messages,format:'json',stream:false,options:{temperature:Math.max(0,Math.min(1,Number(body.temperature)||.2)),num_predict:4096}}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(125000)])});
+     const d=await r.json();if(!r.ok)return json('The local model could not finish this request.',r.status);
+     return Response.json({id:'mico-'+Date.now(),object:'chat.completion',model:'free-code',choices:[{index:0,message:{role:'assistant',content:d.message?.content||''},finish_reason:'stop'}],usage:{prompt_tokens:d.prompt_eval_count||0,completion_tokens:d.eval_count||0}});
+    }return json('Unsupported managed route.',404);
+   }
+   if(action==='models'&&request.method==='GET'){
+    // Verify real anonymous community availability, then expose one stable free route to each router.
+    const r=await horde(new Request(origin+'/api/horde',{method:'POST',body:JSON.stringify({action:'models'})}));const d=await r.json();
+    if(!r.ok)return json(d.error,r.status);if(!d.models?.length)return json('No free community workers are available. Retry later or set up Ollama for local inference.',503);
+    return Response.json({object:'list',data:[{id:'free-code',object:'model',owned_by:'micocode-community',pricing:{prompt:'0',completion:'0'}}]});
+   }
+   if(action==='chat/completions'&&request.method==='POST'){
+    const body=await request.json();if(body.model!=='free-code')return json('This managed route supports only its configured free model.');
+    const r=await horde(new Request(origin+'/api/horde',{method:'POST',body:JSON.stringify({action:'models'})}));const d=await r.json();if(!r.ok)return json(d.error,r.status);
+    const available=d.models||[];const model=available.find(m=>m.id.includes('Llama-3.2-3B-Instruct'))?.id||available.find(m=>/coder|qwen/i.test(m.id))?.id||available[0]?.id;
+    if(!model)return json('No free community workers are available. Try Ollama or retry later.',503);
+    return horde(new Request(origin+'/api/horde',{method:'POST',body:JSON.stringify({action:'complete',model,messages:body.messages,temperature:body.temperature})}));
+   }return json('Unsupported managed route.',404);
+  }
+  if(route.startsWith('/managed/ollama/')){
+   const upstream=getOllamaUpstream();if(!upstream)return json('Set up Ollama in Connections first.',503);
+   const suffix=route.slice('/managed/ollama'.length);
+   if(!(request.method==='GET'&&suffix==='/api/tags')&&!(request.method==='POST'&&suffix==='/api/chat'))return json('Unsupported local model route.',404);
+   const response=await fetch(upstream+suffix,{method:request.method,headers:{'Content-Type':'application/json'},...(request.method==='POST'?{body:await request.text()}:{}),signal:request.signal});
+   return new Response(response.body,{status:response.status,headers:{'Content-Type':'application/json'}});
+  }
+  const api=route==='/api/horde'?horde:route==='/api/ai'?ai:route==='/api/connection'?connection:route==='/api/models'?models:null;
+  if(api)return request.method===(route==='/api/models'?'GET':'POST')?api(request):json('Method not allowed.',405);
+  if(request.method!=='GET')return json('Method not allowed.',405);
+  if(route==='/app')return new Response(null,{status:302,headers:{Location:'/app/'}});
+  let relative=decodeURIComponent(route);if(relative.endsWith('/'))relative+='index.html';
+  const file=path.resolve(webDir,'.'+relative);if(!file.startsWith(path.resolve(webDir)+path.sep))return json('Invalid path.',403);
+  try{const data=await readFile(file);return new Response(data,{headers:{'Content-Type':mime[path.extname(file)]||'application/octet-stream','Cache-Control':route.startsWith('/assets/')?'public, max-age=31536000, immutable':'no-cache','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https: http://127.0.0.1:* http://localhost:*; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'"}})}catch{return json('Not found.',404)}
+ }
+ const server=http.createServer(async(req,res)=>{
+  const abort=new AbortController();res.on('close',()=>{if(!res.writableEnded)abort.abort()});
+  try{
+   if(req.headers.host!==new URL(origin).host){res.writeHead(403);res.end('Invalid host.');return}
+   let bytes=0;const parts=[];for await(const chunk of req){bytes+=chunk.length;if(bytes>200000){res.writeHead(413);res.end('Request is too large.');return}parts.push(chunk)}
+   const request=new Request(origin+req.url,{method:req.method,headers:req.headers,...(parts.length?{body:Buffer.concat(parts)}:{}),signal:abort.signal});
+   const response=await handle(request);res.writeHead(response.status,Object.fromEntries(response.headers));
+   if(response.body)for await(const chunk of response.body){if(!res.write(chunk))await new Promise(resolve=>res.once('drain',resolve))}res.end();
+  }catch(e){if(!res.headersSent)res.writeHead(e instanceof SyntaxError?400:502,{'Content-Type':'application/json'});res.end(JSON.stringify({error:e instanceof SyntaxError?'Invalid request.':'The local request could not finish. Please retry.'}))}
+ });
+ await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(port,'127.0.0.1',resolve)});origin='http://127.0.0.1:'+server.address().port;
+ return {origin,handle,server,close:()=>new Promise(resolve=>{server.close(resolve);server.closeIdleConnections();server.closeAllConnections()})};
+}

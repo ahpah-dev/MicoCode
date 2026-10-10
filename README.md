@@ -1,63 +1,78 @@
 # MicoCode
 
-A local-first browser coding workspace with a real agent loop, CodeMirror editor, isolated HTML/CSS/JavaScript preview, project import/export, staged diffs, and checkpoints.
+Little ideas. Real things. A free agentic coding workspace for Windows and the browser.
 
-## Run locally
+[Website & downloads](https://micocode.vercel.app) · [Browser workspace](https://micocode.vercel.app/app/) · [Windows releases](https://github.com/ahpah-dev/MicoCode/releases)
 
-Requires Node.js 22.13+.
+## Windows app
 
-    npm ci
-    npm run dev
+Download the x64 installer or portable executable. The workspace, Electron, and a private Node runtime are included. No separate Node installation or terminal is needed. Windows 10/11 x64 is supported. This community release is unsigned; Windows may show a publisher warning.
 
-The website runs at http://127.0.0.1:5175 and the workspace at /app/. To build: `npm run build`.
+Open **Models → Free proxies → Set up & connect** on 9Router, CLIProxyAPI, or LiteLLM. MicoCode downloads the official provider, verifies release archives, installs it privately, starts it on localhost, configures a free route, and verifies the catalogue. Setup shows progress, supports cancellation, and reuses completed installations. No global npm installation, administrator access, pasted router key, or provider account is required for the default route.
 
-Hosted app: https://micocode.vercel.app/app/
-Introduction and downloads: https://micocode.vercel.app
+The default **local engine** uses Ollama. MicoCode reuses an existing installation and model, or downloads the official portable runtime and Qwen Coder 1.5B automatically. A fresh setup may download a large runtime plus about 1 GB for the model. Local inference has no service quota or per-message fee; hardware, memory, context, and speed still matter.
 
-`npm run package:kit` regenerates the local model kit. `npm run typecheck` checks TypeScript. The Vercel deployment serves the landing page and workspace together, with the cloud relay in `/api`.
+The optional **community engine** uses AI Horde's documented anonymous access and sends prompts and requested files to volunteer workers. It is experimental: availability, queues, and model quality vary. The public service returned generation errors during the latest release probe, so it is not the default. Additional upstream accounts require your own authorized sign-in or key. MicoCode does not create accounts, bypass provider restrictions, or enable paid fallback.
 
-## Free inference
+**Ollama → Set up & connect** connects local models directly. MicoCode restores the last managed connection when reopened, stops processes it started when closed, and leaves pre-existing Ollama servers running. Installations stay in the application profile. The manager encrypts generated connection credentials with Windows encryption. Only the trusted workspace can invoke narrowly scoped native setup APIs; generated previews cannot access them.
 
-- Browser: WebLLM and Qwen2.5 Coder, downloaded to the browser and run with WebGPU. No provider quota; hardware, memory, and context limits apply. This path is integrated and type/build checked, but a browser model download was not performed during release verification.
-- Ollama: use an existing local model. A dependency-free loopback relay is included at `public/micocode-proxy.mjs`. Run `node public/micocode-proxy.mjs --origin https://YOUR-SITE`. It listens on 127.0.0.1:11435 and forwards only model listing and chat to Ollama on 127.0.0.1:11434. No OS shell or filesystem access is exposed. Keep it running while using local inference. MicoCode automatically discovers this relay when no other provider is configured.
-- OpenRouter: the built-in HTTPS relay accepts your session API key and only free model IDs with a zero-price routing limit. The current free catalogue is fetched dynamically. Provider quotas and availability apply. No cloud key was available for an end-to-end cloud generation test.
-- Free proxies: connection presets for [9Router](https://github.com/decolua/9router), [LiteLLM](https://docs.litellm.ai/docs/simple_proxy), [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI), and any OpenAI-compatible endpoint. Routers must already be installed, running, and configured with authorized free routes. MicoCode does not install or sign you into these third-party tools. Use the setup link in Connections, paste your router's URL/key, and connect. Once configured, the preset's Connect button reconnects in one click.
-- AI Horde: a fixed relay uses the community's documented anonymous access. Only live worker models with supported chat templates are shown; unknown templates are excluded after a live probe returned HTTP 500. A subsequent anonymous generation with Llama 3.2 3B returned a real response. This experimental route needs no key or billing, but volunteer queues, model quality, and availability vary. It is not a guaranteed inference route.
+## Appearance
 
-### Configure a free proxy
+Choose **Forest, Graphite, Midnight, Violet, or Paper** with the palette button or Settings. Workspace surfaces, controls, dialogs, and the editor follow the theme, which persists on the device. Paper is a light theme.
 
-In Models → Free proxies, select a preset. 9Router defaults to `http://127.0.0.1:20128/v1`; LiteLLM to port 4000; CLIProxyAPI to port 8317. Set your exact URL and key if needed. The browser calls these endpoints directly: configure CORS for your MicoCode origin and allow local-network access when prompted. Remote URLs must use HTTPS. Keys cannot be embedded in URLs and are never forwarded to a different endpoint.
+## Coding tools
 
-The model picker hides paid and unknown models. It accepts explicit zero-price metadata, or exact model IDs you declare after checking **My router uses free routes only**. Known nonzero prices are always rejected. Disable paid fallbacks in your router: MicoCode cannot inspect or guarantee billing inside an opaque third-party router. A name containing “free” is not treated as proof of zero cost. No automatic cross-router fallback is performed.
+- An agent loop reads files and ranges, searches, plans, stages exact edits/writes/deletes, and runs static resource and quality checks.
+- Plan mode cannot change files. Existing-file rewrites require a full read; patches must match previously read text exactly once.
+- Review diffs before applying. Applied changes create a checkpoint; up to 20 are retained. Stop preserves staged work.
+- CodeMirror supplies autocomplete, folding, and syntax highlighting. The isolated HTML/CSS/JavaScript preview supports desktop/mobile views and console output.
+- Create projects from templates, import text files or ZIPs, search, edit, and export applied files. Secret and dependency paths are excluded.
 
-### Smart limit handling and polished code
+The console exposes named workspace commands, not an OS shell. npm builds, backend processes, Git remotes, and publishing generated projects require local development tools. Import supports 150 text files, 150 KB/file, and 2 MB total. Static checks do not replace runtime testing.
 
-Connections → Momentum & code quality controls four defaults: smart limit handling, free OpenRouter fallback, lean context, and polished code. The request queue serializes generations per connection and paces cloud requests. It honors Retry-After / reset headers, retries transient errors at most twice with backoff, and supports immediate cancellation. Authentication, credit, budget, and daily-quota errors stop. Long resets return control instead of waiting indefinitely. Changing a model does not clear a connection cooldown. This improves resilience within provider rules; it does not remove quotas.
+## Other free connections
 
-OpenRouter fallback only tries the free router under the same zero-price cap. Lean context retains the original task and latest tool results while dropping older results when the context budget is exceeded. File ranges and unique exact-match patches reduce full-file rewrites. Polished mode adds design/accessibility guidance and a final static review. Token savings are estimates; no fixed percentage or code quality guarantee is claimed.
+The browser edition includes WebLLM/Qwen Coder on compatible WebGPU hardware, existing local Ollama, OpenRouter's zero-price router, anonymous AI Horde, and custom OpenAI-compatible endpoints. Automatic provider installation is exclusive to Windows.
 
-No paid fallback, random public proxy, API-key sharing, or quota evasion is used.
+For manually configured routers, set the exact URL and its own key. Remote endpoints must use HTTPS; allow the exact MicoCode origin in CORS. Browser keys are isolated by endpoint and remain in the tab's session. Discovery accepts verified zero pricing or exact routes declared free by the owner; known positive prices are excluded. Names containing “free” are not price proof. Downstream billing in manually configured routers remains the owner's responsibility.
 
-## Agent workflow
+OpenRouter requires your own key. Each request enforces zero maximum prompt/completion pricing, with free routes only for fallback. Provider quotas still apply. Smart limit handling honors retry/reset headers, paces requests, retries transient failures at most twice, and supports cancellation. Daily quota, budget, credit, and authentication errors stop. It does not remove limits or rotate credentials across providers.
 
-Describe a task → inspect files or ranges → stage exact edits/writes/deletes → run resource and quality checks → review diff → apply. Each application saves an automatic checkpoint. Plan mode cannot write, edit, or delete. Existing-file rewrites require a full read; patches require previously read exact text that matches once. Stop interrupts generation and preserves staged edits. Invalid responses get at most two consecutive repair attempts. Small models may need smaller tasks.
+Polished mode supplies responsive and accessibility guidance plus a final static review. Lean context preserves the original task and recent tool results, trims older results, reads ranges, and prefers exact edits. Small models benefit from smaller tasks; no quality or token-saving percentage is guaranteed.
 
 ## Storage and privacy
 
-Projects, conversations, proposed edits, and up to 20 checkpoints live in browser IndexedDB. Connection URLs, declared free model IDs, and preferences are saved locally. API keys live only in sessionStorage, isolated by exact endpoint, and are never persisted by MicoCode's relay. Cloud inference sends prompts and requested file contents to the selected connection and its providers. Community services may process or retain this data under their own terms. Secret and dependency paths are excluded on import and from agent tools. Exports contain current applied files, not pending edits. Export regularly: clearing site data removes projects.
+Projects, chats, proposed edits, and checkpoints live in IndexedDB on the device. Windows uses a persistent private profile; the website uses browser storage. Themes and preferences are saved locally. Browser API keys stay in session storage. The Windows manager encrypts its generated credentials; third-party provider configuration files remain in the private profile as required by those tools.
 
-## Browser edition scope
+Local inference stays on the computer. Cloud inference shares prompts and requested file contents with the chosen endpoint and provider. Export backups regularly: deleting an application profile or clearing site data removes its workspace. Uninstalling MicoCode preserves its application data.
 
-HTML/CSS/JavaScript projects run in a sandbox without same-origin access. Local JS imports are rewritten for preview. Circular module imports, npm packages requiring a build, Node/Python servers, a full OS terminal, Git remotes, collaboration, and deployment of generated projects are not part of this edition. The console exposes named workspace commands and preview output, never a fake shell. Import supports up to 150 text files, 150 KB/file, and 2 MB total. Project checks validate JSON and HTML resource references, not full JS syntax or application correctness.
+## Develop and build
+
+Requires Node.js 22.13+. Desktop builds run on Windows x64.
+
+```sh
+npm ci
+npm run dev
+npm run typecheck
+npm test
+npm run build:web
+npm run package:windows
+```
+
+Development runs at `http://127.0.0.1:5175`, workspace `/app/`. Windows builds appear in `release/`. Packaging downloads a pinned official Node 24 runtime, checks its SHA-256 digest, bundles web assets and local API handlers, and produces NSIS and portable executables. See `electron-builder.yml`; exact provider versions and archive checksums live in `desktop/artifacts.mjs`.
+
+`npm run package:kit` retains the optional browser/Ollama relay kit, which requires separately installed Node and Ollama.
 
 ## Verification
 
-- `npm test`: workspace protections, exact edits and partial reads, plan-mode isolation, quality checks, free-only filtering, endpoint/key isolation, retry timing and cancellation, quota stops, serialized requests, zero-price relay behavior, and arbitrary proxy rejection.
-- `npx tsc --noEmit` and production build.
-- `node scripts/check-agent.mjs`: real local Ollama integration test. This optional release test expects a local relay and the model named in the test; adjust the model to your machine.
-- Anonymous cloud release probe: a real Llama 3.2 3B run through AI Horde read a synthetic HTML file and staged the requested exact edit, preserving the original. Two transient provider failures recovered within the bounded retry budget. The run reached its four-step test limit; community availability and small-model behavior remain variable.
-- Browser checks: agent request, staged review, apply, checkpoint restore, preview script execution and console capture, responsive workspace.
+`npm test` covers file protections, plan isolation, exact/partial edits, review, free model filtering, credential isolation, pacing, bounded retries, quota stops, cancellation, allowed native providers/engines, archive traversal/link rejection, and local server host/origin checks. TypeScript and production builds are checked too.
 
-## Design and scope
+`node scripts/verify-desktop-providers.mjs build/provider-test` downloads official providers into an isolated test profile. Release checks installed 9Router, CLIProxyAPI, and LiteLLM, reused local Ollama, verified all four catalogues and idempotent reconnection, and received a real model response through 9Router's local route. Set `MICOCODE_VERIFY_GENERATION=1` for that generation probe.
 
-MicoCode is independent software inspired by agentic coding workflows such as OpenCode and Antigravity. It is not affiliated with those products. This release is a browser edition, not a desktop installer. The local kit contains a Windows launcher and cross-platform inference relay; it requires Node.js and an installed Ollama model.
+A packaged executable smoke check verifies the actual renderer, native bridge, absence of renderer Node access, rejected arbitrary installer IDs, and local API responses. Browser checks cover theme selection/persistence, light/dark editors, dialogs, staged edits, apply/restore, preview scripts, console capture, and responsive layout. Browser model download and authenticated OpenRouter generation need suitable GPU hardware and an account key; they are not claimed as release-tested here.
+
+## Credits
+
+MicoCode uses React, CodeMirror, WebLLM, Electron, and Node.js. Managed providers are independent projects: [9Router](https://github.com/decolua/9router), [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI), [LiteLLM](https://github.com/BerriAI/litellm), [uv](https://github.com/astral-sh/uv), and [Ollama](https://github.com/ollama/ollama). Their licenses and service terms apply to their software and services.
+
+MicoCode is independent software inspired by OpenCode and Antigravity, and is not affiliated with those products or the listed providers. MicoCode is MIT licensed.

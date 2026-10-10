@@ -1,6 +1,6 @@
 {
   "name": "micocode",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
@@ -12,7 +12,10 @@
     "preview": "vite preview --config vite.config.browser.ts",
     "test": "node --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
-    "package:kit": "node scripts/package-kit.mjs"
+    "package:kit": "node scripts/package-kit.mjs",
+    "build:desktop": "npm run build:web && node scripts/prepare-desktop.mjs",
+    "package:windows": "npm run build:desktop && electron-builder --config electron-builder.yml --win --publish never",
+    "desktop": "electron build/desktop-app"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",
@@ -33,9 +36,14 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2",
     "typescript": "5.9.3",
-    "vite": "8.3.4"
+    "vite": "8.3.4",
+    "yauzl": "3.4.0"
   },
   "type": "module",
-  "description": "A local-first agentic coding workspace. Little ideas. Real things."
+  "description": "A local-first agentic coding workspace. Little ideas. Real things.",
+  "license": "MIT"
 }
