@@ -8,8 +8,8 @@ import type {Config,ProxyPreset} from '@/lib/mico/types';
 import {isManagedProvider,type ManagedProvider,type SetupProgress} from '@/lib/mico/desktop';
 
 type Model={id:string;name:string;verified?:boolean};
-type Props={config:Config;setConfig:(c:Config,key?:string)=>void;apiKey:string;setKey:(s:string)=>void;onClose:()=>void;onReady:(s:string)=>void;locked?:boolean};
-export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,locked=false}:Props){
+type Props={config:Config;setConfig:(c:Config,key?:string)=>void;apiKey:string;setKey:(s:string)=>void;onClose:()=>void;onReady:(s:string)=>void;locked?:boolean;restoring?:boolean};
+export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,locked=false,restoring=false}:Props){
  const [status,setStatus]=useState('');
  const [busy,setBusy]=useState(false);
  const [ok,setOk]=useState(false);
@@ -19,7 +19,7 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
  const desktop=window.micoDesktop;
  const controller=useRef<AbortController|null>(null);
  const keyInput=useRef<HTMLInputElement>(null);
- const disabled=busy||locked;
+ const disabled=busy||locked||restoring;
  const preset=proxyPresets.find(p=>p.id===config.proxyPreset)!;
  const cloud=config.provider==='openrouter'||(config.provider==='proxy'&&!(desktop&&config.managed&&config.routerEngine==='local'));
  const update=(patch:Partial<Config>)=>{setConfig({...config,...patch});setStatus('');setOk(false)};
@@ -145,6 +145,7 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
    <div className="connection-actions"><button className="primary" onClick={()=>void connect()} disabled={disabled}>{busy?<LoaderCircle size={16} className="spin"/>:ok?<Check size={16}/>:config.provider==='browser'?<Download size={16}/>:<Zap size={16}/>} {busy?'Connecting…':config.provider==='browser'?(browserReady(config.browserSize)?'Check model':'Download & load model'):'Connect & verify'}</button>{busy&&config.provider!=='browser'&&!progress&&<button className="secondary" onClick={cancel}>Cancel</button>}<span className="muted">{cloud?'Free routes · provider limits apply':'No service usage quota'}</span></div>
    {status&&<div role="status" className={'connection-status '+(ok?'success':'')}>{status}</div>}
    {locked&&<p className="field-help">Stop the current agent run to change connections.</p>}
+   {restoring&&<p className="field-help" role="status">Restoring your managed connection. Setup will be available when it is ready.</p>}
    <details className="momentum-settings"><summary><SlidersHorizontal size={14}/> Momentum & code quality <span>Customize</span></summary>
     <label className="setting-switch"><input type="checkbox" disabled={disabled} checked={config.resilience} onChange={e=>update({resilience:e.target.checked})}/><span><strong>Smart limit handling</strong><small>Request pacing, reset-aware cooldowns, and up to two transient retries. Daily quota and billing errors stop immediately.</small></span></label>
     <label className="setting-switch"><input type="checkbox" disabled={disabled} checked={config.freeFallback} onChange={e=>update({freeFallback:e.target.checked})}/><span><strong>Free model fallback</strong><small>OpenRouter can switch to its free router when a selected free model is unavailable. Always zero price.</small></span></label>
