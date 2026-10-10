@@ -8,7 +8,7 @@ const root=process.cwd(),dataDir=path.resolve(process.argv[2]||'build/provider-t
 await mkdir(dataDir,{recursive:true});
 const secrets=new Map(),vault={get:async key=>secrets.get(key),set:async(key,value)=>secrets.set(key,value)};
 let manager;const gatewayKey='integration-only-free-route';
-const server=await createLocalServer({webDir:path.join(root,'dist-web'),port:19187,gatewayKey,getOllamaUpstream:()=>manager.ollamaUpstream,getOllamaModel:()=>manager.ollamaModel});
+const server=await createLocalServer({webDir:path.join(root,'dist-web'),port:19187,gatewayKey,getOllamaUpstream:()=>manager.ollamaUpstream,getOllamaModel:()=>manager.ollamaModel,getOllamaModels:()=>manager.ollamaModels});
 const diagnostics=new Map();
 manager=new ProviderManager({dataDir,runtimeDir:path.join(root,'build','resources','node-runtime'),gatewayBase:server.origin+'/managed/v1',gatewayKey,vault,onProgress:p=>{if(p.percent===undefined||p.percent===100)console.log(p.provider+': '+p.stage+' · '+p.message)},onDiagnostic:(id,line)=>diagnostics.set(id,(diagnostics.get(id)||'').slice(-3000)+line)});
 const results=[];

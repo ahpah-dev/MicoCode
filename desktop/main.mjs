@@ -34,7 +34,7 @@ function secureWindow(win,ownOrigin){
 async function start(){
  const appDir=app.getAppPath(),dataDir=app.getPath('userData');const vault=await createVault(dataDir);let gatewayKey=await vault.get('gateway');
  if(!gatewayKey){gatewayKey='sk-mico-'+randomBytes(24).toString('hex');await vault.set('gateway',gatewayKey)}
- server=await createLocalServer({webDir:path.join(appDir,'web'),port:smoke?19287:19286,gatewayKey,getOllamaUpstream:()=>manager?.ollamaUpstream,getOllamaModel:()=>manager?.ollamaModel,getManagedConnection:id=>manager?.connections.get(id)});
+  server=await createLocalServer({webDir:path.join(appDir,'web'),port:smoke?19287:19286,gatewayKey,getOllamaUpstream:()=>manager?.ollamaUpstream,getOllamaModel:()=>manager?.ollamaModel,getOllamaModels:()=>manager?.ollamaModels,getManagedConnection:id=>manager?.connections.get(id)});
  manager=new ProviderManager({dataDir,runtimeDir:app.isPackaged?path.join(process.resourcesPath,'node-runtime'):path.join(appDir,'..','resources','node-runtime'),gatewayBase:server.origin+'/managed/v1',gatewayKey,vault,onProgress:progress=>{if(window&&!window.isDestroyed())window.webContents.send('mico:progress',progress)}});
  window=new BrowserWindow({width:1440,height:950,minWidth:720,minHeight:540,title:'MicoCode',backgroundColor:backgrounds.forest,show:false,autoHideMenuBar:true,icon:path.join(appDir,'icon.ico'),webPreferences:{preload:path.join(appDir,'preload.cjs'),nodeIntegration:false,nodeIntegrationInWorker:false,contextIsolation:true,sandbox:true,webSecurity:true,partition:'persist:micocode'}});
  window.removeMenu();secureWindow(window,server.origin);

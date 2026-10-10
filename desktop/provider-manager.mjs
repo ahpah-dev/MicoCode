@@ -2,7 +2,7 @@ import {spawn} from 'node:child_process';
 import {mkdir,readFile,writeFile,access,readdir,rm} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import path from 'node:path';
-import {freeCatalogue} from '../lib/mico/providers.mjs';
+import {freeCatalogue,routeSlug} from '../lib/mico/providers.mjs';
 import net from 'node:net';
 import {randomBytes} from 'node:crypto';
 import {artifacts,versions} from './artifacts.mjs';
@@ -14,16 +14,18 @@ export function assertEngine(engine){if(!['local','community'].includes(engine))
 const exists=async file=>{try{await access(file,constants.F_OK);return true}catch{return false}};
 const pause=(ms,signal)=>new Promise((resolve,reject)=>{if(signal?.aborted)return reject(new Error('Setup cancelled.'));const done=()=>{signal?.removeEventListener('abort',abort);resolve()};const timer=setTimeout(done,ms);const abort=()=>{clearTimeout(timer);reject(new Error('Setup cancelled.'))};signal?.addEventListener('abort',abort,{once:true})});
 async function freePort(){return new Promise((resolve,reject)=>{const s=net.createServer();s.once('error',reject);s.listen(0,'127.0.0.1',()=>{const port=s.address().port;s.close(()=>resolve(port))})})}
-export function liteLLMConfig(port,key,base,upstreamKey){
- return `model_list:\n  - model_name: free-code\n    litellm_params:\n      model: openai/free-code\n      api_base: ${JSON.stringify(base)}\n      api_key: ${JSON.stringify(upstreamKey)}\n      timeout: 600\n      max_retries: 0\ngeneral_settings:\n  master_key: ${JSON.stringify(key)}\nlitellm_settings:\n  drop_params: true\n  num_retries: 0\n  request_timeout: 600\n`;
+export function liteLLMConfig(port,key,base,upstreamKey,routes=['free-code']){
+ const entries=routes.map(id=>`  - model_name: ${JSON.stringify(id)}\n    litellm_params:\n      model: ${JSON.stringify('openai/'+id)}\n      api_base: ${JSON.stringify(base)}\n      api_key: ${JSON.stringify(upstreamKey)}\n      timeout: 600\n      max_retries: 0`).join('\n');
+ return `model_list:\n${entries}\ngeneral_settings:\n  master_key: ${JSON.stringify(key)}\nlitellm_settings:\n  drop_params: true\n  num_retries: 0\n  request_timeout: 600\n`;
 }
-export function cliProxyConfig(port,key,base,upstreamKey,authDir){
- return `server:\n  host: 127.0.0.1\n  port: ${port}\naccess:\n  api-keys:\n    - ${JSON.stringify(key)}\nmanagement:\n  allow-remote: false\n  secret-key: \"\"\n  disable-control-panel: true\noauth:\n  auth-dir: ${JSON.stringify(authDir.replace(/\\/g,'/'))}\napi-keys:\n  openai-compatibility:\n    - name: micocode-community\n      base-url: ${JSON.stringify(base)}\n      keys:\n        - api-key: ${JSON.stringify(upstreamKey)}\n      models:\n        - name: free-code\n          alias: free-code\n          input-modalities: [text]\nrequests:\n  passthrough-headers: false\nobservability:\n  logs:\n    request-log: false\n    debug: false\n`;
+export function cliProxyConfig(port,key,base,upstreamKey,authDir,routes=['free-code']){
+ const models=routes.map(id=>`        - name: ${JSON.stringify(id)}\n          alias: ${JSON.stringify(id)}\n          input-modalities: [text]`).join('\n');
+ return `server:\n  host: 127.0.0.1\n  port: ${port}\naccess:\n  api-keys:\n    - ${JSON.stringify(key)}\nmanagement:\n  allow-remote: false\n  secret-key: ""\n  disable-control-panel: true\noauth:\n  auth-dir: ${JSON.stringify(authDir.replace(/\\/g,'/'))}\napi-keys:\n  openai-compatibility:\n    - name: micocode-community\n      base-url: ${JSON.stringify(base)}\n      keys:\n        - api-key: ${JSON.stringify(upstreamKey)}\n      models:\n${models}\nrequests:\n  passthrough-headers: false\nobservability:\n  logs:\n    request-log: false\n    debug: false\n`;
 }
 export class ProviderManager{
  constructor({dataDir,runtimeDir,gatewayBase,gatewayKey,onProgress=()=>{},vault,fetchImpl=fetch,onDiagnostic=()=>{}}){
   this.root=path.join(dataDir,'providers');this.runtime=runtimeDir;this.gatewayBase=gatewayBase;this.gatewayKey=gatewayKey;
-  this.notify=onProgress;this.vault=vault;this.fetch=fetchImpl;this.diagnostic=onDiagnostic;this.children=new Map();this.connections=new Map();this.active=null;this.cookies=new Map();this.ollamaUpstream=null;this.closing=false;
+   this.notify=onProgress;this.vault=vault;this.fetch=fetchImpl;this.diagnostic=onDiagnostic;this.children=new Map();this.connections=new Map();this.active=null;this.cookies=new Map();this.ollamaUpstream=null;this.ollamaModel=null;this.ollamaModels=null;this.closing=false;
  }
  folder(id){return path.join(this.root,assertProvider(id))}
  versionFolder(id){return path.join(this.folder(id),id==='9router'?versions.nine:id==='litellm'?versions.litellm:artifacts[id].version)}
@@ -116,6 +118,17 @@ export class ProviderManager{
   const cookie=r.headers.get('set-cookie')?.split(';')[0];if(cookie)this.cookies.set('9router',cookie);
   const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error('9Router configuration could not finish ('+r.status+'). Retry setup.');return d;
  }
+ // Every route the managed engine currently offers, read from the gateway itself
+ // so routers, connections, and the model picker share one source of truth.
+ async managedRoutes(gatewayBase,signal){
+  const r=await this.fetch(gatewayBase+'/models',{headers:{Authorization:'Bearer '+this.gatewayKey},signal:AbortSignal.any([signal,AbortSignal.timeout(20000)])});
+  const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error('The managed model catalogue is unavailable ('+r.status+'). Retry setup.');
+  const routes=(d.data||[]).filter(m=>m&&typeof m.id==='string'&&m.id);
+  if(!routes.length)throw new Error('The managed engine exposed no models. Retry setup.');
+  return routes;
+ }
+ // Default to the installed coder model when it is offered, otherwise the first route.
+ preferredRoute(routes){return routes.find(r=>r.name===this.ollamaModel)?.id||routes[0].id}
  async setupNine(signal,gatewayBase){
   const id='9router',dir=this.versionFolder(id),node=path.join(this.runtime,'node.exe');
   const appDir=path.join(dir,'node_modules','9router','app');
@@ -131,20 +144,23 @@ export class ProviderManager{
   this.emit(id,'start','Starting your private 9Router on localhost…');
   const entry=await exists(path.join(appDir,'custom-server.js'))?'custom-server.js':'server.js';
   this.start(id,node,['--dns-result-order=ipv4first',path.join(appDir,entry)],{cwd:appDir,env:{PORT:String(port),HOSTNAME:'127.0.0.1',DATA_DIR:path.join(this.folder(id),'data'),INITIAL_PASSWORD:password,JWT_SECRET:jwt,NODE_ENV:'production',AUTH_COOKIE_SECURE:'false'}});
-  await this.ready(base+'/api/health',id,signal);this.emit(id,'configure','Creating a protected connection and a protected free-only route…');
+  await this.ready(base+'/api/health',id,signal);this.emit(id,'configure','Creating a protected connection and protected free-only routes…');
   await this.nineRequest(base,'/api/auth/login',signal,{method:'POST',body:{password}});
   await this.nineRequest(base,'/api/settings',signal,{method:'PATCH',body:{requireApiKey:true,requireLogin:true,cloudEnabled:false,tunnelEnabled:false,tunnelDashboardAccess:false,enableObservability:false,rtkEnabled:false,capacityAdapter:{vision:{enabled:false,models:[]},pdf:{enabled:false,models:[]},audioInput:{enabled:false,models:[]},videoInput:{enabled:false,models:[]}}}});
   const nodes=await this.nineRequest(base,'/api/provider-nodes',signal);let nodeInfo=nodes.nodes?.find(n=>n.prefix==='mico-free');
   if(nodeInfo){await this.nineRequest(base,'/api/provider-nodes/'+encodeURIComponent(nodeInfo.id),signal,{method:'PUT',body:{...nodeInfo,baseUrl:gatewayBase}})}
   else nodeInfo=(await this.nineRequest(base,'/api/provider-nodes',signal,{method:'POST',body:{name:'MicoCode free engine',prefix:'mico-free',apiType:'chat',type:'openai-compatible',baseUrl:gatewayBase}})).node;
   const {connections=[]}=await this.nineRequest(base,'/api/providers',signal);const existing=connections.find(c=>c.provider===nodeInfo.id);
-  const providerBody={provider:nodeInfo.id,name:'MicoCode free engine',apiKey:this.gatewayKey,defaultModel:'free-code',testStatus:'active',isActive:true,lastError:null,lastErrorAt:null};
+  const routes=await this.managedRoutes(gatewayBase,signal);const preferred=this.preferredRoute(routes);
+  const providerBody={provider:nodeInfo.id,name:'MicoCode free engine',apiKey:this.gatewayKey,defaultModel:preferred,testStatus:'active',isActive:true,lastError:null,lastErrorAt:null};
   await this.nineRequest(base,existing?'/api/providers/'+encodeURIComponent(existing.id):'/api/providers',signal,{method:existing?'PUT':'POST',body:providerBody});
-  await this.nineRequest(base,'/api/models/custom',signal,{method:'POST',body:{providerAlias:'mico-free',id:'free-code',name:'Free coding engine',type:'llm'}});
+  for(const route of routes){
+   await this.nineRequest(base,'/api/models/custom',signal,{method:'POST',body:{providerAlias:'mico-free',id:route.id,name:route.name||route.id,type:'llm'}});
+  }
   const {keys=[]}=await this.nineRequest(base,'/api/keys',signal);let key=keys.find(k=>k.name==='MicoCode desktop')?.key;
   if(!key)key=(await this.nineRequest(base,'/api/keys',signal,{method:'POST',body:{name:'MicoCode desktop'}})).key;
   if(!key)throw new Error('9Router did not create a connection key.');await this.vault.set('9router-client',key);
-  return {config:{provider:'proxy',proxyPreset:id,proxyUrl:base+'/v1',model:'mico-free/free-code',freeModels:['mico-free/free-code'],routerFreeOnly:true},key,dashboard:base+'/dashboard'};
+  return {config:{provider:'proxy',proxyPreset:id,proxyUrl:base+'/v1',model:'mico-free/'+preferred,freeModels:routes.map(r=>'mico-free/'+r.id),routerFreeOnly:true},key,dashboard:base+'/dashboard'};
  }
  async findExecutable(dir,names){
   for(const name of names){const file=path.join(dir,name);if(await exists(file))return file}
@@ -154,11 +170,12 @@ export class ProviderManager{
  async setupCLI(signal,gatewayBase){
   const id='cliproxy',dir=await this.installZip(id,artifacts[id],signal);const exe=await this.findExecutable(dir,['cli-proxy-api.exe','CLIProxyAPI.exe']);
   const port=await freePort(),key=await this.secret('cliproxy-client'),configFile=path.join(this.folder(id),'config.yaml');
-  this.emit(id,'configure','Configuring CLIProxyAPI with only the selected free engine…');
-  await writeFile(configFile,cliProxyConfig(port,key,gatewayBase,this.gatewayKey,path.join(this.folder(id),'auth')),{mode:0o600});
+  this.emit(id,'configure','Configuring CLIProxyAPI with every installed free model…');
+  const routes=await this.managedRoutes(gatewayBase,signal);const preferred=this.preferredRoute(routes);
+  await writeFile(configFile,cliProxyConfig(port,key,gatewayBase,this.gatewayKey,path.join(this.folder(id),'auth'),routes.map(r=>r.id)),{mode:0o600});
   this.emit(id,'start','Starting CLIProxyAPI on localhost…');this.start(id,exe,['--config',configFile],{cwd:dir});
   const base='http://127.0.0.1:'+port+'/v1';await this.ready(base+'/models',id,signal,{Authorization:'Bearer '+key});
-  return {config:{provider:'proxy',proxyPreset:id,proxyUrl:base,model:'free-code',freeModels:['free-code'],routerFreeOnly:true},key};
+  return {config:{provider:'proxy',proxyPreset:id,proxyUrl:base,model:preferred,freeModels:routes.map(r=>r.id),routerFreeOnly:true},key};
  }
  async setupLite(signal,gatewayBase){
   const id='litellm',dir=this.versionFolder(id),python=path.join(dir,'Scripts','python.exe');
@@ -171,9 +188,11 @@ export class ProviderManager{
    await this.run(uv,['pip','install','--python',python,'litellm[proxy]=='+versions.litellm],{signal,env});
   }
   const port=await freePort(),key=await this.secret('litellm-client'),configFile=path.join(this.folder(id),'config.yaml');
-  this.emit(id,'configure','Configuring LiteLLM with a free-only route and a private client key…');await writeFile(configFile,liteLLMConfig(port,key,gatewayBase,this.gatewayKey),{mode:0o600});
+  this.emit(id,'configure','Configuring LiteLLM with every installed free model and a private client key…');
+  const routes=await this.managedRoutes(gatewayBase,signal);const preferred=this.preferredRoute(routes);
+  await writeFile(configFile,liteLLMConfig(port,key,gatewayBase,this.gatewayKey,routes.map(r=>r.id)),{mode:0o600});
   this.emit(id,'start','Starting LiteLLM on localhost…');this.start(id,path.join(dir,'Scripts','litellm.exe'),['--config',configFile,'--host','127.0.0.1','--port',String(port)],{cwd:dir,env:{PYTHONNOUSERSITE:'1',PYTHONUTF8:'1',PYTHONIOENCODING:'utf-8',LITELLM_TELEMETRY:'False',DO_NOT_TRACK:'1',LITELLM_MODE:'PRODUCTION'}});
-  const base='http://127.0.0.1:'+port+'/v1';await this.ready(base+'/models',id,signal,{Authorization:'Bearer '+key});return {config:{provider:'proxy',proxyPreset:id,proxyUrl:base,model:'free-code',freeModels:['free-code'],routerFreeOnly:true},key};
+  const base='http://127.0.0.1:'+port+'/v1';await this.ready(base+'/models',id,signal,{Authorization:'Bearer '+key});return {config:{provider:'proxy',proxyPreset:id,proxyUrl:base,model:preferred,freeModels:routes.map(r=>r.id),routerFreeOnly:true},key};
  }
  async setupOllama(signal){
   const id='ollama';await mkdir(this.folder(id),{recursive:true});let base=this.ollamaUpstream||'http://127.0.0.1:11434';let reusable=false;
@@ -185,16 +204,19 @@ export class ProviderManager{
    base='http://127.0.0.1:'+await freePort();this.emit(id,'start','Starting a private Ollama instance…');
    this.start(id,exe,['serve'],{env:{OLLAMA_HOST:base,OLLAMA_MODELS:path.join(this.folder(id),'models'),OLLAMA_ORIGINS:this.gatewayBase.split('/managed/')[0]}});await this.ready(base+'/api/version',id,signal);
   }
-  this.ollamaUpstream=base;const r=await this.fetch(base+'/api/tags',{signal});const d=await r.json();
-  let model=d.models?.find(m=>m.name.toLowerCase().includes('coder'))?.name||d.models?.[0]?.name;
+   this.ollamaUpstream=base;const r=await this.fetch(base+'/api/tags',{signal});const d=await r.json();
+   const installed=(d.models||[]).map(m=>m?.name).filter(n=>typeof n==='string'&&n);
+   let model=installed.find(n=>n.toLowerCase().includes('coder'))||installed[0];
   if(!model){
    this.emit(id,'download','Downloading Qwen Coder 1.5B (about 1 GB). This model runs free on your computer…');
    const pull=await this.fetch(base+'/api/pull',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:versions.model,stream:true}),signal});if(!pull.ok||!pull.body)throw new Error('Ollama could not download the coding model. Check available disk space and retry.');
    const reader=pull.body.getReader(),decoder=new TextDecoder();let pending='';
    while(true){const {value,done}=await reader.read();if(done)break;pending+=decoder.decode(value,{stream:true});let lineEnd;while((lineEnd=pending.indexOf('\n'))!==-1){const part=pending.slice(0,lineEnd);pending=pending.slice(lineEnd+1);if(!part.trim())continue;const state=JSON.parse(part);if(state.error)throw new Error('Ollama model download failed. Check your connection and disk space.');this.emit(id,'download',state.status?.startsWith('pulling')?'Downloading Qwen Coder to your computer…':state.status||'Preparing coding model…',state.total?Math.round(state.completed/state.total*100):undefined)}}
-   model=versions.model;
-  }
-  this.ollamaModel=model;this.emit(id,'configure','Connecting your local coding model through the built-in relay…');
+    model=versions.model;installed.push(model);
+   }
+   // Every installed model becomes a selectable managed route; the coder pick stays the default.
+   const taken=new Set();this.ollamaModels=installed.map(name=>({name,route:routeSlug(name,taken)}));
+   this.ollamaModel=model;this.emit(id,'configure','Connecting your local coding model through the built-in relay…');
   return {config:{provider:'ollama',ollamaUrl:this.gatewayBase.replace('/managed/v1','/managed/ollama'),model},key:''};
  }
 }

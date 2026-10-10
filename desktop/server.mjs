@@ -15,7 +15,7 @@ export function managedClientConnection(connection,origin){
  if(!['9router','cliproxy','litellm'].includes(id))throw new Error('Unsupported managed router.');
  return {...connection,config:{...connection.config,proxyUrl:origin+'/providers/'+id+'/v1'}};
 }
-export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaUpstream=()=>null,getOllamaModel=()=>null,getManagedConnection=()=>null,fetchImpl=fetch}){
+export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaUpstream=()=>null,getOllamaModel=()=>null,getOllamaModels=()=>null,getManagedConnection=()=>null,fetchImpl=fetch}){
  let origin='http://127.0.0.1:'+port;
  async function handle(request){
   if(!isLocalRequest(request,origin))return json('Origin is not allowed.',403);
@@ -28,13 +28,15 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
    const expected=action==='models'?'GET':'POST';if(request.method!==expected)return json('Method not allowed.',405);
    const target=new URL(connection.config.proxyUrl);
    if(target.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(target.hostname)||target.username||target.password||target.search||target.hash||target.pathname!=='/v1')return json('Invalid managed router configuration. Reconnect in Models.',503);
-   let body;
-   if(expected==='POST'){
-    body=await request.json();
-    if(body.model!==connection.config.model)return json('This managed router supports only its configured free model.');
-    if(!Array.isArray(body.messages)||!body.messages.length||body.messages.length>80||!body.messages.every(m=>m&&['system','user','assistant'].includes(m.role)&&typeof m.content==='string'))return json('Invalid coding messages.');
-    body={model:body.model,messages:body.messages,temperature:body.temperature,max_tokens:body.max_tokens,stream:false};
-   }
+    let body;
+    if(expected==='POST'){
+     body=await request.json();
+     // The router may offer several managed routes; the allowlist travels with the connection.
+     const allowed=new Set([connection.config.model,...(Array.isArray(connection.config.freeModels)?connection.config.freeModels:[])]);
+     if(!allowed.has(body.model))return json('This managed router supports only its configured free models.');
+     if(!Array.isArray(body.messages)||!body.messages.length||body.messages.length>80||!body.messages.every(m=>m&&['system','user','assistant'].includes(m.role)&&typeof m.content==='string'))return json('Invalid coding messages.');
+     body={model:body.model,messages:body.messages,temperature:body.temperature,max_tokens:body.max_tokens,stream:false};
+    }
    try{
     const r=await fetchImpl(target.href.replace(/\/$/,'')+'/'+action,{method:expected,redirect:'error',headers:{Authorization:'Bearer '+connection.key,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(action==='models'?20000:610000)])});
     const headers={'Content-Type':r.headers.get('content-type')||'application/json','Cache-Control':'no-store'};
@@ -46,20 +48,22 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
   if(managed||route.startsWith('/managed/v1/')){
    if(request.headers.get('authorization')!=='Bearer '+gatewayKey)return json('A managed connection key is required.',401);
    const action=managed?.[2]||route.slice('/managed/v1/'.length),engine=managed?.[1]||'community';
-   if(engine==='local'){
-    const upstream=getOllamaUpstream(),model=getOllamaModel();if(!upstream||!model)return json('Set up the local coding engine first.',503);
-    if(action==='models'&&request.method==='GET')return Response.json({object:'list',data:[{id:'free-code',name:model,object:'model',owned_by:'micocode-local',pricing:{prompt:'0',completion:'0'}}]});
-    if(action==='chat/completions'&&request.method==='POST'){
-     const body=await request.json();if(body.model!=='free-code')return json('This managed route supports only its configured free model.');
-     if(!Array.isArray(body.messages)||body.messages.length>80||!body.messages.every(m=>m&&['system','user','assistant'].includes(m.role)&&typeof m.content==='string'))return json('Invalid coding messages.');
-     const requested=Number(body.max_tokens);const outputLimit=Number.isFinite(requested)&&requested>0?Math.min(4096,Math.max(1,Math.floor(requested))):1800;
-     try{
-      const r=await fetchImpl(upstream+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model,messages:body.messages,format:'json',stream:false,options:{temperature:Math.max(0,Math.min(1,Number(body.temperature)||.2)),num_predict:outputLimit}}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(600000)])});
-      const d=await r.json();if(!r.ok)return json('The local model could not finish this request.',r.status);
-      return Response.json({id:'mico-'+Date.now(),object:'chat.completion',model:'free-code',choices:[{index:0,message:{role:'assistant',content:d.message?.content||''},finish_reason:d.done_reason==='length'?'length':'stop'}],usage:{prompt_tokens:d.prompt_eval_count||0,completion_tokens:d.eval_count||0}});
-     }catch(e){if(request.signal.aborted)throw e;return json(e.name==='TimeoutError'?'The local coding model took too long. Try a smaller model or a shorter task.':'The local coding engine stopped responding. Reconnect it in Models.',e.name==='TimeoutError'?504:503)}
-    }return json('Unsupported managed route.',404);
-   }
+    if(engine==='local'){
+     const upstream=getOllamaUpstream(),inventory=typeof getOllamaModels==='function'?getOllamaModels():null;
+     if(!upstream||!Array.isArray(inventory)||!inventory.length)return json('Set up the local coding engine first.',503);
+     if(action==='models'&&request.method==='GET')return Response.json({object:'list',data:inventory.filter(m=>m&&typeof m.route==='string'&&m.route).map(m=>({id:m.route,name:typeof m.name==='string'?m.name:m.route,object:'model',owned_by:'micocode-local',pricing:{prompt:'0',completion:'0'}}))});
+     if(action==='chat/completions'&&request.method==='POST'){
+      const body=await request.json();const entry=inventory.find(m=>m&&m.route===body.model);
+      if(!entry)return json('That local model is not installed. Re-run Set up & connect to refresh the list.',400);
+      if(!Array.isArray(body.messages)||body.messages.length>80||!body.messages.every(m=>m&&['system','user','assistant'].includes(m.role)&&typeof m.content==='string'))return json('Invalid coding messages.');
+      const requested=Number(body.max_tokens);const outputLimit=Number.isFinite(requested)&&requested>0?Math.min(4096,Math.max(1,Math.floor(requested))):1800;
+      try{
+       const r=await fetchImpl(upstream+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:entry.name,messages:body.messages,format:'json',stream:false,options:{temperature:Math.max(0,Math.min(1,Number(body.temperature)||.2)),num_predict:outputLimit}}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(600000)])});
+       const d=await r.json();if(!r.ok)return json('The local model could not finish this request.',r.status);
+       return Response.json({id:'mico-'+Date.now(),object:'chat.completion',model:body.model,choices:[{index:0,message:{role:'assistant',content:d.message?.content||''},finish_reason:d.done_reason==='length'?'length':'stop'}],usage:{prompt_tokens:d.prompt_eval_count||0,completion_tokens:d.eval_count||0}});
+      }catch(e){if(request.signal.aborted)throw e;return json(e.name==='TimeoutError'?'The local coding model took too long. Try a smaller model or a shorter task.':'The local coding engine stopped responding. Reconnect it in Models.',e.name==='TimeoutError'?504:503)}
+     }return json('Unsupported managed route.',404);
+    }
    if(action==='models'&&request.method==='GET'){
     // Verify real anonymous community availability, then expose one stable free route to each router.
     const r=await horde(new Request(origin+'/api/horde',{method:'POST',body:JSON.stringify({action:'models'})}));const d=await r.json();

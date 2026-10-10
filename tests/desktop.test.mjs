@@ -19,10 +19,14 @@ test('provider archives cannot escape, create links, or overwrite a destination'
   const link=new JSZip();link.file('link','../outside',{unixPermissions:0o120777});const bad=path.join(root,'link.zip');await writeFile(bad,await link.generateAsync({type:'nodebuffer',platform:'UNIX'}));await assert.rejects(extractVerifiedZip(bad,path.join(root,'bad')),/Links and special files/);
  }finally{await rm(root,{recursive:true,force:true})}
 });
-test('private router configs expose only the selected free route on loopback',()=>{
- const cli=cliProxyConfig(30001,'sk-client','http://127.0.0.1:19286/managed/v1','sk-internal','C:\\Mico\\auth');
- const lite=liteLLMConfig(30002,'sk-client','http://127.0.0.1:19286/managed/v1','sk-internal');
- assert.match(cli,/host: 127\.0\.0\.1/);assert.match(cli,/allow-remote: false/);assert.match(cli,/disable-control-panel: true/);assert.match(cli,/alias: free-code/);assert.match(lite,/model: openai\/free-code/);assert.doesNotMatch(cli+lite,/openrouter\.ai|antigravity-credits: true|claude|paid/);
+test('private router configs expose every managed route on loopback',()=>{
+ const routes=['qwen2-5-coder-3b','llama3-1-8b'];
+ const cli=cliProxyConfig(30001,'sk-client','http://127.0.0.1:19286/managed/v1','sk-internal','C:\\Mico\\auth',routes);
+ const lite=liteLLMConfig(30002,'sk-client','http://127.0.0.1:19286/managed/v1','sk-internal',routes);
+ assert.match(cli,/host: 127\.0\.0\.1/);assert.match(cli,/allow-remote: false/);assert.match(cli,/disable-control-panel: true/);
+ for(const id of routes){assert.match(cli,new RegExp('alias: "'+id+'"'));assert.match(lite,new RegExp('model_name: "'+id+'"'));assert.match(lite,new RegExp('model: "openai/'+id+'"'))}
+ assert.match(cliProxyConfig(30001,'k','b','u','C:\\a'),/alias: "free-code"/);
+ assert.doesNotMatch(cli+lite,/openrouter\.ai|antigravity-credits: true|claude|paid/);
 });
 test('native server rejects hostile hosts and origins and protects the managed gateway',async()=>{
  const root=await mkdtemp(path.join(os.tmpdir(),'mico-web-'));await writeFile(path.join(root,'index.html'),'<h1>Local workspace</h1>');const server=await createLocalServer({webDir:root,port:0,gatewayKey:'private'});
@@ -65,11 +69,35 @@ test('stopped and invalid managed routers return readable errors without arbitra
  }finally{await server.close()}
 });
 
-test('local managed generation honors requested output length',async()=>{
- const limits=[];const server=await createLocalServer({webDir:os.tmpdir(),port:0,gatewayKey:'private',getOllamaUpstream:()=> 'http://127.0.0.1:11434',getOllamaModel:()=> 'test-coder',fetchImpl:async(url,options)=>{assert.equal(url,'http://127.0.0.1:11434/api/chat');limits.push(JSON.parse(options.body).options.num_predict);return Response.json({message:{content:'{"message":"Hello"}'}})}});
+test('managed renderer transport accepts any configured free model',async()=>{
+ const connection={config:{provider:'proxy',proxyPreset:'cliproxy',proxyUrl:'http://127.0.0.1:55002/v1',model:'qwen2-5-coder-3b',freeModels:['qwen2-5-coder-3b','llama3-1-8b']},key:'private-client'};
+ const server=await createLocalServer({webDir:os.tmpdir(),port:0,gatewayKey:'internal',getManagedConnection:()=>connection,fetchImpl:async()=>Response.json({choices:[{message:{content:'{}'}}]})});
  try{
-  for(const max_tokens of [20,9000,undefined]){const r=await fetch(server.origin+'/managed/local/v1/chat/completions',{method:'POST',headers:{Authorization:'Bearer private','Content-Type':'application/json'},body:JSON.stringify({model:'free-code',messages:[{role:'user',content:'Hello'}],max_tokens})});assert.equal(r.status,200);assert.ok((await r.json()).choices[0].message.content)}
-  assert.deepEqual(limits,[20,4096,1800]);
+  const endpoint=server.origin+'/providers/cliproxy/v1/chat/completions';const headers={Authorization:'Bearer private-client','Content-Type':'application/json',Origin:server.origin};
+  const body={model:'llama3-1-8b',messages:[{role:'user',content:'Hi'}]};
+  assert.equal((await fetch(endpoint,{method:'POST',headers,body:JSON.stringify(body)})).status,200);
+  assert.equal((await fetch(endpoint,{method:'POST',headers,body:JSON.stringify({...body,model:'paid-model'})})).status,400);
+ }finally{await server.close()}
+});
+
+test('local managed generation serves every installed model',async()=>{
+ const limits=[];const bodies=[];
+ const inventory=[{name:'test-coder',route:'test-coder'},{name:'test-chat',route:'test-chat'}];
+ const server=await createLocalServer({webDir:os.tmpdir(),port:0,gatewayKey:'private',getOllamaUpstream:()=> 'http://127.0.0.1:11434',getOllamaModels:()=> inventory,fetchImpl:async(url,options)=>{assert.equal(url,'http://127.0.0.1:11434/api/chat');const parsed=JSON.parse(options.body);bodies.push(parsed.model);limits.push(parsed.options.num_predict);return Response.json({message:{content:'{"message":"Hello"}'}})}});
+ try{
+  const catalogue=await (await fetch(server.origin+'/managed/local/v1/models',{headers:{Authorization:'Bearer private'}})).json();
+  assert.deepEqual(catalogue.data.map(m=>m.id),['test-coder','test-chat']);
+  for(const max_tokens of [20,9000,undefined]){const r=await fetch(server.origin+'/managed/local/v1/chat/completions',{method:'POST',headers:{Authorization:'Bearer private','Content-Type':'application/json'},body:JSON.stringify({model:'test-chat',messages:[{role:'user',content:'Hello'}],max_tokens})});assert.equal(r.status,200);assert.ok((await r.json()).choices[0].message.content)}
+  assert.deepEqual(limits,[20,4096,1800]);assert.deepEqual(bodies,['test-chat','test-chat','test-chat']);
+  const unknown=await fetch(server.origin+'/managed/local/v1/chat/completions',{method:'POST',headers:{Authorization:'Bearer private','Content-Type':'application/json'},body:JSON.stringify({model:'removed-model',messages:[{role:'user',content:'Hello'}]})});
+  assert.equal(unknown.status,400);
+ }finally{await server.close()}
+});
+
+test('local managed routes require engine setup',async()=>{
+ const server=await createLocalServer({webDir:os.tmpdir(),port:0,gatewayKey:'private',getOllamaUpstream:()=>null});
+ try{
+  assert.equal((await fetch(server.origin+'/managed/local/v1/models',{headers:{Authorization:'Bearer private'}})).status,503);
  }finally{await server.close()}
 });
 

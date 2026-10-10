@@ -6,14 +6,14 @@ Little ideas. Real things. A free agentic coding workspace for Windows and the b
 
 ## Windows app
 
-Version 0.3.1 repairs managed free-route settings on setup, restore, and reconnect. Switching providers preserves the managed connection and engine. Managed routes do not require entering free model IDs or checking a pricing declaration; these controls apply only to manual connections.
+Version 0.3.2 exposes every installed Ollama model as a selectable managed route on 9Router, CLIProxyAPI, and LiteLLM. Open Models after Set up & connect and pick any installed model; the choice survives re-setup and restore while the route is still offered. Manual router connections list every exposed route with verified-free badges, or accept a typed model ID.
 
-The corrected 0.3.1 Windows downloads send managed requests through MicoCode's protected local server to the installed router. Catalogue discovery and prompt generation use the same connection, so upstream CORS requirements cannot hide router errors. Local inference respects the requested output length, allows time for model loading, and remains cancellable. Timeout messages distinguish slow generation from an unreachable router. Install the replacement download over the previous 0.3.1 installation, then run **Set up & connect** again.
+The 0.3.2 Windows downloads send managed requests through MicoCode's protected local server to the installed router. Install the replacement download over the previous installation, then run **Set up & connect** again to refresh the route list.
 
 
 Download the x64 installer or portable executable. The workspace, Electron, and a private Node runtime are included. No separate Node installation or terminal is needed. Windows 10/11 x64 is supported. This community release is unsigned; Windows may show a publisher warning.
 
-Open **Models → Free proxies → Set up & connect** on 9Router, CLIProxyAPI, or LiteLLM. MicoCode downloads the official provider, verifies release archives, installs it privately, starts it on localhost, configures a free route, and verifies the catalogue. Setup shows progress, supports cancellation, and reuses completed installations. No global npm installation, administrator access, pasted router key, or provider account is required for the default route.
+Open **Models → Free proxies → Set up & connect** on 9Router, CLIProxyAPI, or LiteLLM. MicoCode downloads the official provider, verifies release archives, installs it privately, starts it on localhost, configures free routes for every installed model, and verifies the catalogue. Setup shows progress, supports cancellation, and reuses completed installations. No global npm installation, administrator access, pasted router key, or provider account is required for the default route.
 
 The default **local engine** uses Ollama. MicoCode reuses an existing installation and model, or downloads the official portable runtime and Qwen Coder 1.5B automatically. A fresh setup may download a large runtime plus about 1 GB for the model. Local inference has no service quota or per-message fee; hardware, memory, context, and speed still matter.
 
