@@ -3,7 +3,7 @@ import {readFile,writeFile,mkdir,rename} from 'node:fs/promises';
 import {randomBytes} from 'node:crypto';
 import path from 'node:path';
 import {ProviderManager,assertProvider} from './provider-manager.mjs';
-import {createLocalServer} from './server.mjs';
+import {createLocalServer,managedClientConnection} from './server.mjs';
 
 const smoke=process.argv.includes('--smoke-test');
 const smokePath=process.argv.find(x=>x.startsWith('--smoke-output='))?.slice('--smoke-output='.length);
@@ -34,15 +34,15 @@ function secureWindow(win,ownOrigin){
 async function start(){
  const appDir=app.getAppPath(),dataDir=app.getPath('userData');const vault=await createVault(dataDir);let gatewayKey=await vault.get('gateway');
  if(!gatewayKey){gatewayKey='sk-mico-'+randomBytes(24).toString('hex');await vault.set('gateway',gatewayKey)}
- server=await createLocalServer({webDir:path.join(appDir,'web'),port:smoke?19287:19286,gatewayKey,getOllamaUpstream:()=>manager?.ollamaUpstream,getOllamaModel:()=>manager?.ollamaModel});
+ server=await createLocalServer({webDir:path.join(appDir,'web'),port:smoke?19287:19286,gatewayKey,getOllamaUpstream:()=>manager?.ollamaUpstream,getOllamaModel:()=>manager?.ollamaModel,getManagedConnection:id=>manager?.connections.get(id)});
  manager=new ProviderManager({dataDir,runtimeDir:app.isPackaged?path.join(process.resourcesPath,'node-runtime'):path.join(appDir,'..','resources','node-runtime'),gatewayBase:server.origin+'/managed/v1',gatewayKey,vault,onProgress:progress=>{if(window&&!window.isDestroyed())window.webContents.send('mico:progress',progress)}});
  window=new BrowserWindow({width:1440,height:950,minWidth:720,minHeight:540,title:'MicoCode',backgroundColor:backgrounds.forest,show:false,autoHideMenuBar:true,icon:path.join(appDir,'icon.ico'),webPreferences:{preload:path.join(appDir,'preload.cjs'),nodeIntegration:false,nodeIntegrationInWorker:false,contextIsolation:true,sandbox:true,webSecurity:true,partition:'persist:micocode'}});
  window.removeMenu();secureWindow(window,server.origin);
- ipcMain.handle('mico:setup',(event,provider,engine)=>{validateSender(event);return manager.setup(assertProvider(provider),engine)});
+ ipcMain.handle('mico:setup',async(event,provider,engine)=>{validateSender(event);return managedClientConnection(await manager.setup(assertProvider(provider),engine),server.origin)});
  ipcMain.handle('mico:cancel',event=>{validateSender(event);manager.cancel()});
  ipcMain.handle('mico:status',event=>{validateSender(event);return manager.statuses()});
  let restoration;
- ipcMain.handle('mico:restore',event=>{validateSender(event);return restoration||(restoration=manager.restore())});
+ ipcMain.handle('mico:restore',event=>{validateSender(event);return restoration||(restoration=manager.restore().then(result=>managedClientConnection(result,server.origin)))});
  ipcMain.handle('mico:stop',(event,provider)=>{validateSender(event);return manager.stop(assertProvider(provider))});
  ipcMain.handle('mico:appearance',(event,theme)=>{validateSender(event);if(!Object.hasOwn(backgrounds,theme))throw new Error('Unknown theme.');window.setBackgroundColor(backgrounds[theme]);nativeTheme.themeSource=theme==='paper'?'light':'dark'});
  ipcMain.handle('mico:dashboard',async(event,provider)=>{
@@ -56,6 +56,7 @@ async function start(){
  if(!smoke){window.show();return}
  // Release smoke check runs only under an explicit test flag and uses an isolated profile.
  await new Promise(resolve=>setTimeout(resolve,2000));
+ await restoration;
  const state=await window.webContents.executeJavaScript(`({title:document.title,workspace:!!document.querySelector('.app-shell'),bridge:!!window.micoDesktop,node:typeof window.require,theme:document.documentElement.dataset.theme})`);
  const invalid=await window.webContents.executeJavaScript(`window.micoDesktop.setup('arbitrary-shell').then(()=>false,()=>true)`);
  const statusCount=await window.webContents.executeJavaScript(`window.micoDesktop.providerStatus().then(rows=>rows.length)`);
@@ -68,7 +69,7 @@ async function start(){
     const wait=async check=>{const end=Date.now()+180000;while(Date.now()<end){const value=check();if(value)return value;await new Promise(r=>setTimeout(r,100))}throw Error('UI setup timed out: '+document.querySelector('.connection-status')?.textContent)};
     const click=async name=>{const button=await wait(()=>Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()===name));button.click();await new Promise(r=>setTimeout(r,100))};
     await click('Models');
-    const setup=await wait(()=>document.querySelector('button[aria-label="Set up and connect 9Router"]'));setup.click();
+    const setup=await wait(()=>{const b=document.querySelector('button[aria-label="Set up and connect 9Router"]');return b&&!b.disabled?b:null});setup.click();
     await wait(()=>!setup.disabled&&document.querySelector('.connection-status')?.textContent&&!/^Preparing|Connecting/.test(document.querySelector('.connection-status').textContent));
     const initial=!!document.querySelector('.connection-status.success')&&!!document.querySelector('.managed-route');
     const cards=()=>Array.from(document.querySelectorAll('.provider-grid button'));
@@ -81,13 +82,29 @@ async function start(){
    })()`);
    if(!ui.initial||!ui.restored||!ui.success||!ui.managed)throw Error('Managed connection UI failed: '+JSON.stringify(ui));
   }
-  const result=ui?manager.connections.get(smokeProvider):await window.webContents.executeJavaScript(`window.micoDesktop.setup(${JSON.stringify(smokeProvider)},'local')`);
+  const result=ui?managedClientConnection(manager.connections.get(smokeProvider),server.origin):await window.webContents.executeJavaScript(`window.micoDesktop.setup(${JSON.stringify(smokeProvider)},'local')`);
   const response=await fetch(result.config.proxyUrl+'/models',{headers:{Authorization:'Bearer '+result.key}});
   managedSetup={provider:smokeProvider,model:result.config.model,status:response.status,...(ui?{ui}:{})};
+  if(process.argv.includes('--smoke-generation')){
+   managedSetup.generation=await window.webContents.executeJavaScript(`(async()=>{const start=Date.now();try{const r=await fetch(${JSON.stringify(result.config.proxyUrl+'/chat/completions')},{method:'POST',redirect:'error',headers:{'Content-Type':'application/json',Authorization:${JSON.stringify('Bearer '+result.key)}},body:JSON.stringify({model:${JSON.stringify(result.config.model)},messages:[{role:'user',content:'Reply with a short JSON object containing a greeting.'}],stream:false,max_tokens:512}),signal:AbortSignal.timeout(130000)});const d=await r.json();return {status:r.status,hasContent:!!d.choices?.[0]?.message?.content,milliseconds:Date.now()-start,...(!r.ok?{error:d.error}:{})}}catch(e){return {name:e.name,error:e.message,milliseconds:Date.now()-start}}})()`);
+  }
+  if(process.argv.includes('--smoke-agent')){
+   managedSetup.agent=await window.webContents.executeJavaScript(`(async()=>{
+    const wait=async check=>{const end=Date.now()+650000;while(Date.now()<end){const value=check();if(value)return value;await new Promise(r=>setTimeout(r,100))}throw Error('Agent UI generation timed out')};
+    document.querySelector('[aria-label="Close dialog"]')?.click();await new Promise(r=>setTimeout(r,100));
+    const mode=document.querySelector('.mode-toggle');if(mode.textContent.includes('Agent'))mode.click();
+    const before={assistant:document.querySelectorAll('.message.assistant').length,error:document.querySelectorAll('.message.error').length,activity:document.querySelectorAll('.message.activity').length};
+    const input=document.querySelector('[aria-label="Message Mico"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'Give a concise three-step plan for a small HTML portfolio. Do not edit files. Return one JSON action object with a short message, an empty actions array, and done:true.');input.dispatchEvent(new Event('input',{bubbles:true}));await new Promise(r=>setTimeout(r,100));
+    const start=Date.now();document.querySelector('[aria-label="Send message"]').click();await wait(()=>document.querySelector('[aria-label="Stop agent"]'));
+    await wait(()=>document.querySelector('[aria-label="Send message"]'));
+    return {assistant:document.querySelectorAll('.message.assistant').length>before.assistant,error:Array.from(document.querySelectorAll('.message.error .message-text')).slice(before.error).map(e=>e.textContent).join(' | ')||null,activity:Array.from(document.querySelectorAll('.message.activity')).slice(before.activity).map(e=>e.textContent),milliseconds:Date.now()-start};
+   })()`);
+  }
  }
  const api=await fetch(server.origin+'/api/models');
  const report={version:app.getVersion(),...state,invalidProviderRejected:invalid,statusCount,...(managedSetup?{managedSetup}:{}),apiStatus:api.status,errors};
- report.passed=state.workspace&&state.bridge&&state.node==='undefined'&&invalid&&statusCount===4&&(!managedSetup||managedSetup.status===200)&&api.ok&&errors.length===0;
+ report.passed=state.workspace&&state.bridge&&state.node==='undefined'&&invalid&&statusCount===4&&(!managedSetup||managedSetup.status===200)&&(!managedSetup?.generation||managedSetup.generation.status===200&&managedSetup.generation.hasContent)&&(!managedSetup?.agent||managedSetup.agent.assistant&&!managedSetup.agent.error)&&api.ok&&errors.length===0;
+ const screenshot=process.argv.find(x=>x.startsWith('--smoke-screenshot='))?.slice('--smoke-screenshot='.length);if(screenshot)await writeFile(screenshot,(await window.webContents.capturePage()).toPNG());
  if(smokePath)await writeFile(smokePath,JSON.stringify(report,null,2));await manager.close();await server.close();app.exit(report.passed?0:1);
 }
 if(!app.requestSingleInstanceLock())app.quit();

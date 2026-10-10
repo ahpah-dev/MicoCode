@@ -9,11 +9,39 @@ import {GET as models} from '../api/models.ts';
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.zip':'application/zip','.wasm':'application/wasm','.woff2':'font/woff2'};
 const json=(error,status=400)=>Response.json({error},{status});
 export function isLocalRequest(request,origin){return new URL(request.url).origin===origin&&(!request.headers.get('origin')||request.headers.get('origin')===origin)&&request.headers.get('sec-fetch-site')!=='cross-site'}
-export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaUpstream=()=>null,getOllamaModel=()=>null}){
+export function managedClientConnection(connection,origin){
+ if(!connection||connection.config.provider!=='proxy')return connection;
+ const id=connection.config.proxyPreset;
+ if(!['9router','cliproxy','litellm'].includes(id))throw new Error('Unsupported managed router.');
+ return {...connection,config:{...connection.config,proxyUrl:origin+'/providers/'+id+'/v1'}};
+}
+export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaUpstream=()=>null,getOllamaModel=()=>null,getManagedConnection=()=>null,fetchImpl=fetch}){
  let origin='http://127.0.0.1:'+port;
  async function handle(request){
   if(!isLocalRequest(request,origin))return json('Origin is not allowed.',403);
   const url=new URL(request.url),route=url.pathname;
+  const providerRoute=route.match(/^\/providers\/(9router|cliproxy|litellm)\/v1\/(models|chat\/completions)$/);
+  if(providerRoute){
+   const [,id,action]=providerRoute,connection=getManagedConnection(id);
+   if(!connection)return json('Your managed router is stopped. Open Models and click Set up & connect.',503);
+   if(!connection.key||request.headers.get('authorization')!=='Bearer '+connection.key)return json('Reconnect your managed router to refresh its protected connection.',401);
+   const expected=action==='models'?'GET':'POST';if(request.method!==expected)return json('Method not allowed.',405);
+   const target=new URL(connection.config.proxyUrl);
+   if(target.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(target.hostname)||target.username||target.password||target.search||target.hash||target.pathname!=='/v1')return json('Invalid managed router configuration. Reconnect in Models.',503);
+   let body;
+   if(expected==='POST'){
+    body=await request.json();
+    if(body.model!==connection.config.model)return json('This managed router supports only its configured free model.');
+    if(!Array.isArray(body.messages)||!body.messages.length||body.messages.length>80||!body.messages.every(m=>m&&['system','user','assistant'].includes(m.role)&&typeof m.content==='string'))return json('Invalid coding messages.');
+    body={model:body.model,messages:body.messages,temperature:body.temperature,max_tokens:body.max_tokens,stream:false};
+   }
+   try{
+    const r=await fetchImpl(target.href.replace(/\/$/,'')+'/'+action,{method:expected,redirect:'error',headers:{Authorization:'Bearer '+connection.key,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(action==='models'?20000:610000)])});
+    const headers={'Content-Type':r.headers.get('content-type')||'application/json','Cache-Control':'no-store'};
+    for(const name of ['retry-after','x-ratelimit-remaining','x-ratelimit-reset']){const value=r.headers.get(name);if(value)headers[name]=value}
+    return new Response(r.body,{status:r.status,headers});
+   }catch(e){if(request.signal.aborted)throw e;return json(e.name==='TimeoutError'?'The coding model took too long. Try a smaller local model or a shorter task.':'Your managed router stopped responding. Open Models and click Set up & connect.',e.name==='TimeoutError'?504:503)}
+  }
   const managed=route.match(/^\/managed\/(local|community)\/v1\/(models|chat\/completions)$/);
   if(managed||route.startsWith('/managed/v1/')){
    if(request.headers.get('authorization')!=='Bearer '+gatewayKey)return json('A managed connection key is required.',401);
@@ -24,9 +52,12 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
     if(action==='chat/completions'&&request.method==='POST'){
      const body=await request.json();if(body.model!=='free-code')return json('This managed route supports only its configured free model.');
      if(!Array.isArray(body.messages)||body.messages.length>80||!body.messages.every(m=>m&&['system','user','assistant'].includes(m.role)&&typeof m.content==='string'))return json('Invalid coding messages.');
-     const r=await fetch(upstream+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model,messages:body.messages,format:'json',stream:false,options:{temperature:Math.max(0,Math.min(1,Number(body.temperature)||.2)),num_predict:4096}}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(125000)])});
-     const d=await r.json();if(!r.ok)return json('The local model could not finish this request.',r.status);
-     return Response.json({id:'mico-'+Date.now(),object:'chat.completion',model:'free-code',choices:[{index:0,message:{role:'assistant',content:d.message?.content||''},finish_reason:'stop'}],usage:{prompt_tokens:d.prompt_eval_count||0,completion_tokens:d.eval_count||0}});
+     const requested=Number(body.max_tokens);const outputLimit=Number.isFinite(requested)&&requested>0?Math.min(4096,Math.max(1,Math.floor(requested))):1800;
+     try{
+      const r=await fetchImpl(upstream+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model,messages:body.messages,format:'json',stream:false,options:{temperature:Math.max(0,Math.min(1,Number(body.temperature)||.2)),num_predict:outputLimit}}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(600000)])});
+      const d=await r.json();if(!r.ok)return json('The local model could not finish this request.',r.status);
+      return Response.json({id:'mico-'+Date.now(),object:'chat.completion',model:'free-code',choices:[{index:0,message:{role:'assistant',content:d.message?.content||''},finish_reason:d.done_reason==='length'?'length':'stop'}],usage:{prompt_tokens:d.prompt_eval_count||0,completion_tokens:d.eval_count||0}});
+     }catch(e){if(request.signal.aborted)throw e;return json(e.name==='TimeoutError'?'The local coding model took too long. Try a smaller model or a shorter task.':'The local coding engine stopped responding. Reconnect it in Models.',e.name==='TimeoutError'?504:503)}
     }return json('Unsupported managed route.',404);
    }
    if(action==='models'&&request.method==='GET'){

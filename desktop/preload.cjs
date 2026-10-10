@@ -1,6 +1,6 @@
 const {contextBridge,ipcRenderer}=require('electron');
 if(process.isMainFrame)contextBridge.exposeInMainWorld('micoDesktop',Object.freeze({
- version:'0.3.0',
+ version:'0.3.1',
  setup:(provider,engine)=>ipcRenderer.invoke('mico:setup',provider,engine),
  cancelSetup:()=>ipcRenderer.invoke('mico:cancel'),
  providerStatus:()=>ipcRenderer.invoke('mico:status'),

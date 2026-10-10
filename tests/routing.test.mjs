@@ -82,6 +82,12 @@ test('one connection serializes generations',async()=>{
  const second=request(async()=>{calls++;return Response.json({ok:true})});
  await new Promise(resolve=>setTimeout(resolve,0));assert.equal(calls,1);finish();await Promise.all([first,second]);assert.equal(calls,2);
 });
+
+test('generation timeouts are distinguished from an unreachable router',async()=>{
+ const request=createRequester();
+ await assert.rejects(request(async()=>{throw new DOMException('Expired','TimeoutError')}),e=>e.status===504&&/smaller local model/.test(e.message)&&!/CORS/.test(e.message));
+ const controller=new AbortController();controller.abort();await assert.rejects(request(async()=>Response.json({}),{signal:controller.signal}),e=>e.name==='AbortError');
+});
 test('OpenRouter relay enforces zero price and only same-provider free fallbacks',async()=>{
  const previous=globalThis.fetch;let sent;
  globalThis.fetch=async(url,options)=>{assert.equal(url,'https://openrouter.ai/api/v1/chat/completions');sent=JSON.parse(options.body);return Response.json({choices:[]},{headers:{'Retry-After':'7','x-ratelimit-remaining':'0'}})};

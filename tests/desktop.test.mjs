@@ -6,7 +6,7 @@ import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
 import JSZip from 'jszip';
 import {archivePath,extractVerifiedZip,downloadVerified} from '../desktop/install.mjs';
 import {assertProvider,assertEngine,cliProxyConfig,liteLLMConfig,ProviderManager} from '../desktop/provider-manager.mjs';
-import {isLocalRequest,createLocalServer} from '../desktop/server.mjs';
+import {isLocalRequest,createLocalServer,managedClientConnection} from '../desktop/server.mjs';
 
 test('provider automation only accepts supported installer IDs',()=>{for(const id of ['9router','cliproxy','litellm','ollama'])assert.equal(assertProvider(id),id);for(const id of ['../ollama','custom','powershell','9router;whoami',null])assert.throws(()=>assertProvider(id))});
 test('managed engines cannot be changed to paid or arbitrary destinations',()=>{assert.equal(assertEngine('local'),'local');assert.equal(assertEngine('community'),'community');for(const value of ['paid','https://other.example','custom',null])assert.throws(()=>assertEngine(value))});
@@ -36,3 +36,50 @@ test('native server rejects hostile hosts and origins and protects the managed g
  }finally{await server.close();await rm(root,{recursive:true,force:true})}
 });
 test('cancelled setup does not begin a download',async()=>{const abort=new AbortController();abort.abort();await assert.rejects(downloadVerified({url:'https://example.com/file.zip',sha256:'0'.repeat(64),maxBytes:1},path.join(os.tmpdir(),'mico-cancel-test.zip'),abort.signal),/abort/i)});
+
+test('managed renderer transport reaches its real router without requiring upstream CORS',async()=>{
+ const connection={config:{provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:55001/v1',model:'mico-free/free-code'},key:'private-client'};let sent;let calls=0;
+ const server=await createLocalServer({webDir:os.tmpdir(),port:0,gatewayKey:'internal',getManagedConnection:id=>id==='9router'?connection:null,fetchImpl:async(url,options)=>{calls++;sent={url,options};return Response.json({error:{message:'Daily free quota exhausted'}},{status:429,headers:{'Retry-After':'120'}})}});
+ try{
+  const exposed=managedClientConnection(connection,server.origin);assert.equal(exposed.config.proxyUrl,server.origin+'/providers/9router/v1');assert.equal(connection.config.proxyUrl,'http://127.0.0.1:55001/v1');
+  const endpoint=exposed.config.proxyUrl+'/chat/completions';const headers={Authorization:'Bearer private-client','Content-Type':'application/json',Origin:server.origin};
+  const body={model:connection.config.model,messages:[{role:'user',content:'A coding task'}],max_tokens:30,stream:true,url:'https://paid.example'};
+  const r=await fetch(endpoint,{method:'POST',headers,body:JSON.stringify(body)});assert.equal(r.status,429);assert.equal(r.headers.get('retry-after'),'120');assert.equal((await r.json()).error.message,'Daily free quota exhausted');
+  assert.equal(sent.url,'http://127.0.0.1:55001/v1/chat/completions');assert.equal(sent.options.redirect,'error');assert.equal(sent.options.headers.Authorization,'Bearer private-client');assert.equal(JSON.parse(sent.options.body).stream,false);assert.equal(JSON.parse(sent.options.body).url,undefined);
+  assert.equal((await fetch(endpoint,{method:'POST',headers,body:JSON.stringify({...body,model:'paid-model'})})).status,400);
+  assert.equal((await fetch(endpoint,{method:'POST',headers:{...headers,Origin:'https://other.example'},body:JSON.stringify(body)})).status,403);
+  assert.equal((await fetch(endpoint,{method:'POST',headers:{...headers,Authorization:'Bearer other'},body:JSON.stringify(body)})).status,401);
+  assert.equal((await fetch(endpoint)).status,401);assert.equal(calls,1);
+ }finally{await server.close()}
+});
+
+test('stopped and invalid managed routers return readable errors without arbitrary forwarding',async()=>{
+ let connection=null;let failure=new TypeError('Connection refused');let calls=0;
+ const server=await createLocalServer({webDir:os.tmpdir(),port:0,getManagedConnection:()=>connection,fetchImpl:async()=>{calls++;throw failure}});
+ try{
+  const url=server.origin+'/providers/9router/v1/models',options={headers:{Authorization:'Bearer private'}};
+  let r=await fetch(url,options);assert.equal(r.status,503);assert.match((await r.json()).error,/Set up & connect/);
+  connection={key:'private',config:{proxyUrl:'https://remote.example/v1'}};assert.equal((await fetch(url,options)).status,503);assert.equal(calls,0);
+  connection.config.proxyUrl='http://127.0.0.1:55001/v1';r=await fetch(url,options);assert.equal(r.status,503);assert.match((await r.json()).error,/Set up & connect/);
+  failure=new DOMException('Expired','TimeoutError');r=await fetch(url,options);assert.equal(r.status,504);assert.match((await r.json()).error,/smaller local model/);
+ }finally{await server.close()}
+});
+
+test('local managed generation honors requested output length',async()=>{
+ const limits=[];const server=await createLocalServer({webDir:os.tmpdir(),port:0,gatewayKey:'private',getOllamaUpstream:()=> 'http://127.0.0.1:11434',getOllamaModel:()=> 'test-coder',fetchImpl:async(url,options)=>{assert.equal(url,'http://127.0.0.1:11434/api/chat');limits.push(JSON.parse(options.body).options.num_predict);return Response.json({message:{content:'{"message":"Hello"}'}})}});
+ try{
+  for(const max_tokens of [20,9000,undefined]){const r=await fetch(server.origin+'/managed/local/v1/chat/completions',{method:'POST',headers:{Authorization:'Bearer private','Content-Type':'application/json'},body:JSON.stringify({model:'free-code',messages:[{role:'user',content:'Hello'}],max_tokens})});assert.equal(r.status,200);assert.ok((await r.json()).choices[0].message.content)}
+  assert.deepEqual(limits,[20,4096,1800]);
+ }finally{await server.close()}
+});
+
+test('stopping a managed generation cancels the forwarded request',async()=>{
+ let forwarded;let started;const ready=new Promise(resolve=>{started=resolve});
+ const connection={config:{proxyUrl:'http://127.0.0.1:55001/v1',model:'mico-free/free-code'},key:'private'};
+ const server=await createLocalServer({webDir:os.tmpdir(),port:0,getManagedConnection:()=>connection,fetchImpl:async(_url,options)=>{forwarded=options.signal;started();return new Promise((_resolve,reject)=>options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true}))}});
+ try{
+  const controller=new AbortController();const pending=fetch(server.origin+'/providers/9router/v1/chat/completions',{method:'POST',headers:{Authorization:'Bearer private','Content-Type':'application/json'},body:JSON.stringify({model:connection.config.model,messages:[{role:'user',content:'test'}]}),signal:controller.signal});
+  await ready;controller.abort();await assert.rejects(pending,e=>e.name==='AbortError');
+  await Promise.race([new Promise(resolve=>forwarded.aborted?resolve():forwarded.addEventListener('abort',resolve,{once:true})),new Promise((_resolve,reject)=>setTimeout(()=>reject(new Error('Forwarded request was not cancelled')),1000))]);assert.equal(forwarded.aborted,true);
+ }finally{await server.close()}
+});
