@@ -1,0 +1,90 @@
+/* Product polish: restrained surfaces, clear hierarchy, and a crisp model workflow. */
+.app-shell{background:var(--tone-5)}
+.topbar{background:color-mix(in srgb,var(--tone-10) 94%,var(--tone-5));border-bottom-color:color-mix(in srgb,var(--tone-35) 45%,transparent);backdrop-filter:blur(16px)}
+.header-connect{min-height:35px;border-radius:8px;padding:8px 12px;background:var(--tone-15);transition:background .18s,border-color .18s,transform .18s}
+.header-connect:hover{background:var(--tone-20);border-color:var(--tone-40);transform:translateY(-1px)}
+.header-connect.ready{border-color:color-mix(in srgb,var(--mint) 30%,var(--tone-30));color:var(--tone-90)}
+.file-sidebar,.agent-panel{background:var(--tone-10)}
+.pane-heading,.agent-heading{letter-spacing:.08em}
+.main-workspace{background:var(--tone-5)}
+.workspace-tabs,.workspace-toolbar{background:var(--tone-10)}
+.workspace-tabs>button:not(.icon-button){min-height:43px}
+.view-toggle{border-radius:7px;padding:3px}
+.view-toggle button{min-height:27px;padding:5px 9px;border-radius:5px}
+.view-toggle button.active{background:var(--tone-30);color:var(--tone-95)}
+.welcome{max-width:920px;padding:42px 54px 30px;background-image:radial-gradient(color-mix(in srgb,var(--tone-35) 22%,transparent) .65px,transparent .65px);background-size:24px 24px}
+.welcome-art{height:90px;margin-bottom:12px;transform:scale(.78)}
+.welcome-eyebrow{font-size:9px;letter-spacing:1.6px;color:var(--tone-70)}
+.welcome h1{max-width:720px;font-size:clamp(40px,4.7vw,62px);line-height:1.04;letter-spacing:-3px;margin:14px 0 14px}
+.welcome-description{max-width:510px;font-size:13px;line-height:1.8;color:var(--tone-70)}
+.welcome-first-use{position:absolute;right:18px;top:16px;z-index:5;display:flex;align-items:center;gap:10px;max-width:min(440px,calc(100% - 36px));padding:9px 11px;border:1px solid var(--tone-30);border-radius:9px;background:color-mix(in srgb,var(--tone-10) 94%,transparent);box-shadow:0 12px 34px #0004;backdrop-filter:blur(12px);text-align:left}
+.welcome-first-use>div{min-width:0;flex:1}
+.welcome-first-use strong,.welcome-first-use small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.welcome-first-use strong{font-size:10px;color:var(--tone-85)}
+.welcome-first-use small{font-size:9px;color:var(--tone-55);margin-top:2px}
+.welcome-first-use button{font-size:9px;padding:7px 9px}
+.welcome-first-use.connected{border-color:color-mix(in srgb,var(--mint) 24%,var(--tone-30))}
+.welcome-actions{margin-bottom:27px}
+.template-grid{gap:12px}
+.template-grid>button{border-radius:10px;padding:15px 14px 16px;background:linear-gradient(145deg,color-mix(in srgb,var(--tone-15) 88%,transparent),color-mix(in srgb,var(--tone-10) 90%,transparent));transition:transform .16s,border-color .16s,background .16s}
+.template-grid>button:hover{transform:translateY(-2px);border-color:var(--tone-45);background:var(--tone-15)}
+.template-grid>button>small{white-space:normal;line-height:1.6}
+.agent-panel{border-left-color:color-mix(in srgb,var(--tone-35) 45%,transparent)}
+.agent-heading,.agent-session{background:var(--tone-10)}
+.agent-welcome{padding:34px 8px 24px}
+.agent-welcome h2{font-size:25px;letter-spacing:-.7px}
+.agent-starters button{border-radius:8px;background:color-mix(in srgb,var(--tone-15) 80%,transparent);transition:transform .16s,border-color .16s,background .16s}
+.agent-starters button:hover{transform:translateY(-1px);border-color:var(--tone-40);background:var(--tone-20)}
+.composer{border-radius:10px;background:var(--tone-15);box-shadow:0 10px 28px #0002}
+.composer:focus-within{border-color:color-mix(in srgb,var(--mint) 55%,var(--tone-40));box-shadow:0 0 0 3px color-mix(in srgb,var(--mint) 9%,transparent)}
+.send-button{border-radius:7px}
+.modal{border-color:var(--tone-35);background:linear-gradient(155deg,var(--tone-15),var(--tone-10) 55%);box-shadow:0 32px 100px #0009}
+.modal.wide{width:min(900px,calc(100vw - 36px))}
+.modal-heading{margin-bottom:21px}
+.modal h2{font-size:24px;font-weight:600;letter-spacing:-.75px}
+.provider-card{min-height:115px;border-radius:10px;background:linear-gradient(150deg,var(--tone-15),color-mix(in srgb,var(--tone-10) 80%,transparent));transition:transform .16s,border-color .16s,background .16s}
+.provider-card:hover{transform:translateY(-2px);border-color:var(--tone-45);background:var(--tone-20)}
+.provider-card.active{border-color:color-mix(in srgb,var(--mint) 52%,var(--tone-35));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mint) 12%,transparent);background:color-mix(in srgb,var(--tone-20) 85%,var(--tone-10))}
+.provider-card strong{font-size:12px}
+.router-card{border-radius:10px;transition:transform .16s,border-color .16s,background .16s}
+.router-card:hover{border-color:var(--tone-45);transform:translateY(-1px)}
+.router-card.active{border-color:color-mix(in srgb,var(--mint) 52%,var(--tone-35));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mint) 10%,transparent)}
+.router-card-footer{min-height:42px}
+.router-card-footer>button{border-radius:5px;padding:5px 7px;transition:background .15s}
+.router-card-footer>button:hover{background:var(--tone-25)}
+.router-card-footer>.existing-router-button{border:1px solid color-mix(in srgb,var(--mint) 30%,var(--tone-30));color:var(--mint);white-space:nowrap}
+.router-detail-heading{margin-top:23px}
+.managed-intro{border-color:var(--tone-30);background:linear-gradient(110deg,var(--tone-15),var(--tone-10));padding:16px;border-radius:10px}
+.managed-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:12px 14px;border:1px solid var(--tone-30);border-radius:9px;background:color-mix(in srgb,var(--tone-15) 75%,transparent)}
+.managed-actions>div{flex:1 1 250px;min-width:0}
+.managed-actions>div>strong,.managed-actions>div>.muted{display:block}
+.managed-actions>div>strong{font-size:11px;color:var(--tone-85);margin-bottom:3px}
+.managed-actions .secondary{font-size:10px;padding:8px 10px}
+.connection-actions{padding-top:4px}
+.connection-actions>.primary{min-height:40px;padding-inline:17px;border-radius:8px;box-shadow:0 8px 20px color-mix(in srgb,var(--mint) 10%,transparent)}
+.connection-status{border-radius:8px}
+.model-picker-row{gap:8px}
+.model-picker-row input{min-height:42px;border-radius:8px;background:var(--tone-10)}
+.model-favorites-filter{display:flex;align-items:center;gap:4px;flex-shrink:0;padding:6px 7px;border:1px solid var(--tone-30);border-radius:7px;color:var(--tone-60);font-size:9px;white-space:nowrap}
+.model-favorites-filter.active{border-color:color-mix(in srgb,var(--mint) 45%,var(--tone-30));color:var(--mint);background:color-mix(in srgb,var(--mint) 8%,transparent)}
+.model-count{font-size:9px}
+.model-refresh{width:34px;height:34px;display:grid;place-items:center;flex-shrink:0;border:1px solid var(--tone-30);border-radius:8px;color:var(--tone-70);background:var(--tone-15);transition:background .15s,color .15s,border-color .15s}
+.model-refresh:hover:not(:disabled){background:var(--tone-25);border-color:var(--tone-45);color:var(--tone-90)}
+.model-refresh:disabled{opacity:.5;cursor:wait}
+.model-menu{border-color:var(--tone-35);background:var(--tone-10);box-shadow:0 24px 65px #000b}
+.model-option-row{display:flex;align-items:center;gap:3px;border-radius:7px}
+.model-option{min-height:45px;flex:1;min-width:0}
+.model-option:hover,.model-option.highlighted,.model-option-row:focus-within{background:var(--tone-20)}
+.model-option-row>.model-option{background:transparent}
+.model-favorite{height:32px;width:32px;display:grid;place-items:center;margin-right:5px;border-radius:6px;color:var(--tone-45)}
+.model-favorite:hover,.model-favorite.active{background:var(--tone-25);color:var(--mint)}
+.model-option strong{font-size:11px}
+.model-option small{font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--tone-55)}
+.model-badge.unknown{color:var(--tone-65);background:var(--tone-20)}
+.connection-summary{gap:9px}
+.connection-summary>span{padding:6px 9px;border:1px solid var(--tone-25);border-radius:999px;background:color-mix(in srgb,var(--tone-15) 80%,transparent);font-size:9px}
+.connection-footer{margin-top:22px}
+.momentum-settings{border-radius:10px}
+.primary,.secondary{border-radius:8px}
+@media(max-width:760px){.welcome{padding:82px 22px 20px}.welcome h1{font-size:clamp(38px,10vw,52px);letter-spacing:-2px}.welcome-first-use{top:10px;right:10px;left:10px;max-width:none}.provider-card{min-height:100px}.model-count{display:none}.managed-actions>div{flex-basis:100%}}
+@media(max-width:520px){.model-favorites-filter span{display:none}.model-favorites-filter{padding:8px}.model-option strong{max-width:200px}}

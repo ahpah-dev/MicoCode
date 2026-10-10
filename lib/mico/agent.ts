@@ -26,6 +26,12 @@ export async function loadBrowserModel(size:Config['browserSize'],progress:(s:st
  try{engine=await mod.CreateWebWorkerMLCEngine(worker,model,{initProgressCallback:p=>progress(p.text)},{context_window_size:8192});loadedModel=model;}catch(e){worker.terminate();throw e}
 }
 export function browserReady(size:Config['browserSize']) { return !!engine && loadedModel.includes(`-${size}-`); }
+// Context metadata from the selected router model is in tokens; the agent
+// budgets character slices conservatively and leaves room for prompt overhead.
+export function modelContextBudget(contextLength:number|undefined,fallback:number) {
+ if(!Number.isFinite(contextLength)||!contextLength)return fallback;
+ return Math.min(240000,Math.max(12000,Math.floor(contextLength*1.6)));
+}
 export function stopBrowser() {engine?.interruptGenerate();}
 export async function complete(messages:Chat[],config:Config,key:string,signal:AbortSignal,onToken:(t:string)=>void,onStatus:(t:string)=>void=()=>{}) {
  if(config.provider==='browser') {
@@ -51,12 +57,18 @@ export async function complete(messages:Chat[],config:Config,key:string,signal:A
 export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|'plan';config:Config;key:string;signal:AbortSignal;onMessage:(text:string,role:'assistant'|'activity')=>void;onChanges:(c:Changes)=>void;onToken:(t:string)=>void}) {
  const {project,prompt,mode,config,key,signal,onMessage,onChanges,onToken}=args;
  let changes:Changes={...project.changes};
-  if(config.provider==='proxy') {
-   onMessage('Verifying the selected route…','activity');
-   const available=await listProxyModels(config,key,AbortSignal.any([signal,AbortSignal.timeout(20000)]));
-   if(!available.some((m:{id:string})=>m.id===config.model))throw new Error('The selected model is no longer available on the router. Reconnect and select another model.');
-  }
- const contextLimit=config.provider==='browser'?6500:config.provider==='proxy'&&(config.proxyPreset==='horde'||config.managed)?10000:50000;
+ let discoveredContext:number|undefined;
+   if(config.provider==='proxy') {
+    onMessage('Verifying the selected route…','activity');
+    let available:{id:string;contextLength?:number}[]=[];
+    try{available=await listProxyModels(config,key,AbortSignal.any([signal,AbortSignal.timeout(20000)]))}
+    catch(e){if(!/returned an empty model list|returned no models/i.test((e as Error).message))throw e;onMessage('The router has no public model catalogue. Trying the model ID you entered; the router will enforce its own access rules.','activity')}
+    const selected=available.find((m:{id:string})=>m.id===config.model);
+    if(!selected&&available.length)onMessage('This model ID is not in the catalogue. Trying it directly; your router may reject unavailable or unauthorized models.','activity');
+    discoveredContext=selected?.contextLength;
+   }
+ const contextFallback=config.provider==='browser'?6500:config.provider==='proxy'&&(config.proxyPreset==='horde'||config.managed)?10000:50000;
+ const contextLimit=modelContextBudget(discoveredContext,contextFallback);
  const prior=project.messages.filter(m=>m.role==='user'||m.role==='assistant').slice(-4).map(m=>`${m.role}: ${m.text}`).join('\n').slice(-1800);
  const instruction=systemPrompt+(config.quality==='polished'?polishPrompt:'')+(mode==='plan'?'\nPLAN MODE: Do not write, edit or delete files. Inspect files and explain your plan.':'');
  let observation='';let invalid=0;let polishPass=false;const fullyRead=new Set<string>();const fragments=new Map<string,string[]>();

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {applyManagedConnection,credentialSlot,freeCatalogue,fullCatalogue,groupRouterModels,matchModel,normalizeEndpoint,providerOf,readCredential,routeSlug,writeCredential,rememberProfile,recallProfile} from '../lib/mico/providers.mjs';
+import {applyManagedConnection,bestCodingModel,credentialSlot,freeCatalogue,fullCatalogue,groupRouterModels,matchModel,normalizeEndpoint,providerOf,readCredential,routeSlug,shouldRestoreManagedConnection,writeCredential,rememberProfile,recallProfile} from '../lib/mico/providers.mjs';
 import {abortableSleep,createRequester,ProviderError,retryDelay} from '../lib/mico/resilience.mjs';
 import {POST as ai} from '../api/ai.ts';
 import {POST as horde} from '../api/horde.ts';
@@ -17,8 +17,8 @@ test('free discovery hides paid and unknown routes until exact free IDs are decl
  assert.deepEqual(freeCatalogue(data,['paid-free'],true).map(m=>m.id),['zero']);
 });
 test('full catalogue lists every router model with verified-free flags',()=>{
- const data={data:[{id:'zero',name:'Zero',pricing:{prompt:'0',completion:'0'}},{id:'paid',pricing:{prompt:'1',completion:'0'}},{id:'unknown'},{id:'',},{id:42},{id:'x'.repeat(200)}]};
- assert.deepEqual(fullCatalogue(data),[{id:'zero',name:'Zero',verified:true,paid:false,provider:''},{id:'paid',name:'paid',verified:false,paid:true,provider:''},{id:'unknown',name:'unknown',verified:false,paid:false,provider:''}]);
+ const data={data:[{id:'zero',name:'Zero',context_length:32000,max_completion_tokens:4000,pricing:{prompt:'0',completion:'0'}},{id:'paid',pricing:{prompt:'1',completion:'0'}},{id:'unknown'},{id:'',},{id:42},{id:'x'.repeat(200)}]};
+ assert.deepEqual(fullCatalogue(data),[{id:'zero',name:'Zero',verified:true,paid:false,provider:'',contextLength:32000,maxOutput:4000},{id:'paid',name:'paid',verified:false,paid:true,provider:''},{id:'unknown',name:'unknown',verified:false,paid:false,provider:''}]);
  assert.deepEqual(fullCatalogue({models:[{id:'a'}]}),[{id:'a',name:'a',verified:false,paid:false,provider:''}]);
  assert.deepEqual(fullCatalogue({}),[]);
 });
@@ -37,6 +37,10 @@ test('router catalogues group provider models with pricing flags',()=>{
  const groups=groupRouterModels(catalogue);
  assert.deepEqual(groups.map(g=>g.provider),['combo','glm','kr','Other']);
  assert.ok(matchModel(catalogue[0],'sonnet')&&matchModel(catalogue[0],'KR')&&!matchModel(catalogue[0],'gpt'));
+});
+test('default coding recommendation includes current provider coding models',()=>{
+ assert.equal(bestCodingModel([{id:'glm/glm-4-flash'},{id:'cc/claude-opus-4.6'},{id:'openai/gpt-5-codex'}]),'cc/claude-opus-4.6');
+ assert.equal(bestCodingModel([{id:'openai/gpt-5-codex',contextLength:32000},{id:'cc/claude-sonnet-4.6',contextLength:128000}]),'cc/claude-sonnet-4.6');
 });
 test('credentials never follow a switch to another endpoint or anonymous provider',()=>{
  const map=new Map();const storage={getItem:key=>map.get(key),setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)};
@@ -67,6 +71,12 @@ test('managed route slugs stay readable, bounded, and unique',()=>{
  assert.equal(routeSlug('Qwen2.5-Coder:3b',taken),'qwen2-5-coder-3b-2');
  assert.equal(routeSlug('!!!',taken),'model');
  assert.equal(routeSlug('',taken),'model-2');
+});
+test('desktop restores managed routes only when the saved workspace selected them',()=>{
+ assert.equal(shouldRestoreManagedConnection(undefined),true);
+ assert.equal(shouldRestoreManagedConnection({provider:'proxy',managed:true}),true);
+ assert.equal(shouldRestoreManagedConnection({provider:'proxy',proxyPreset:'9router',managed:false}),false);
+ assert.equal(shouldRestoreManagedConnection({provider:'browser',managed:false}),false);
 });
 test('switching provider profiles preserves native ownership, engine, and free declarations',()=>{
  const map=new Map(),storage={getItem:k=>map.get(k)||null,setItem:(k,v)=>map.set(k,v)};

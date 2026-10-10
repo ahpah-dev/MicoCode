@@ -6,20 +6,20 @@ Little ideas. Real things. A free agentic coding workspace for Windows and the b
 
 ## Windows app
 
-Version 0.3.3 lists every model your router exposes in a searchable, provider-grouped picker — including all 9Router provider models and combos — with verified-free and paid badges. If models are missing, check the key's permissions, enabled models per connection, and any disabled list in the router dashboard. Managed 9Router, CLIProxyAPI, and LiteLLM connections expose every installed Ollama model as a selectable route, and manual connections accept a typed model ID.
+Version 0.4.0 makes your own 9Router a first-class connection in the Windows app. Choose **Use existing** to connect to your running router and browse every model and combo it exposes, grouped by provider. Refresh the catalogue, save favorite models, and see reported pricing and context windows. Model choice is retained, the agent budgets from model context metadata, and restart no longer replaces your own router with MicoCode's private managed instance. If models are missing, check the key's permissions, enabled models per connection, and disabled list in the router dashboard. Provider quotas and billing remain controlled by those providers.
 
-The 0.3.3 Windows downloads send managed requests through MicoCode's protected local server to the installed router. Install the replacement download over the previous installation, then run **Set up & connect** again to refresh the route list.
+The 0.4.0 Windows downloads include the refreshed workspace design and searchable model picker. Install over the previous version. For your own 9Router, open **Models → Your routers → Use existing**, enter its API key, then connect. MicoCode reads `/v1/models`; an unrestricted 9Router API key shows all enabled provider models and combos.
 
 
 Download the x64 installer or portable executable. The workspace, Electron, and a private Node runtime are included. No separate Node installation or terminal is needed. Windows 10/11 x64 is supported. This community release is unsigned; Windows may show a publisher warning.
 
-Open **Models → Free proxies → Set up & connect** on 9Router, CLIProxyAPI, or LiteLLM. MicoCode downloads the official provider, verifies release archives, installs it privately, starts it on localhost, configures free routes for every installed model, and verifies the catalogue. Setup shows progress, supports cancellation, and reuses completed installations. No global npm installation, administrator access, pasted router key, or provider account is required for the default route.
+Open **Models → Your routers**. Choose **Use existing** on 9Router to browse models from your connected providers, or choose **Set up** to install MicoCode's private local route. Managed setup downloads and verifies providers, configures routes for installed Ollama models, and shows progress with cancellation. No global npm installation or administrator access is required.
 
 The default **local engine** uses Ollama. MicoCode reuses an existing installation and model, or downloads the official portable runtime and Qwen Coder 1.5B automatically. A fresh setup may download a large runtime plus about 1 GB for the model. Local inference has no service quota or per-message fee; hardware, memory, context, and speed still matter.
 
 The optional **community engine** uses AI Horde's documented anonymous access and sends prompts and requested files to volunteer workers. It is experimental: availability, queues, and model quality vary. The public service returned generation errors during the latest release probe, so it is not the default. Additional upstream accounts require your own authorized sign-in or key. MicoCode does not create accounts, bypass provider restrictions, or enable paid fallback.
 
-**Ollama → Set up & connect** connects local models directly. MicoCode restores the last managed connection when reopened, stops processes it started when closed, and leaves pre-existing Ollama servers running. Installations stay in the application profile. The manager encrypts generated connection credentials with Windows encryption. Only the trusted workspace can invoke narrowly scoped native setup APIs; generated previews cannot access them.
+**Ollama → Set up & connect** connects local models directly. When a managed connection is selected, MicoCode restores it when reopened, stops processes it started when closed, and leaves pre-existing Ollama servers running. A saved connection to your own 9Router remains selected across restarts. Installations stay in the application profile. The manager encrypts generated connection credentials with Windows encryption. Only the trusted workspace can invoke narrowly scoped native setup APIs; generated previews cannot access them.
 
 ## Appearance
 

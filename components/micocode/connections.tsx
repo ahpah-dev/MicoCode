@@ -8,13 +8,14 @@ import {applyManagedConnection,bestCodingModel,credentialSlot,discoverProxy,list
 import type {Config,ProxyPreset} from '@/lib/mico/types';
 import {isManagedProvider,type ManagedProvider,type SetupProgress} from '@/lib/mico/desktop';
 
-type Model={id:string;name:string;verified?:boolean;paid?:boolean;provider?:string};
+type Model={id:string;name:string;verified?:boolean;paid?:boolean;provider?:string;contextLength?:number;maxOutput?:number};
 type Props={config:Config;setConfig:(c:Config,key?:string)=>void;apiKey:string;setKey:(s:string)=>void;onClose:()=>void;onReady:(s:string)=>void;locked?:boolean;restoring?:boolean};
 export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,locked=false,restoring=false}:Props){
  const [status,setStatus]=useState('');
  const [busy,setBusy]=useState(false);
  const [ok,setOk]=useState(false);
  const [models,setModels]=useState<Model[]>([]);
+ const [refreshingModels,setRefreshingModels]=useState(false);
  const [localModels,setLocalModels]=useState<string[]>([]);
  const [progress,setProgress]=useState<SetupProgress|null>(null);
  const desktop=window.micoDesktop;
@@ -24,10 +25,13 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
  const preset=proxyPresets.find(p=>p.id===config.proxyPreset)!;
  const cloud=config.provider==='openrouter'||(config.provider==='proxy'&&!(desktop&&config.managed&&config.routerEngine==='local'));
  const update=(patch:Partial<Config>)=>{setConfig({...config,...patch});setStatus('');setOk(false)};
- const declaredFree=new Set(config.freeModels.map(s=>s.trim()).filter(Boolean));
- const visibleModels=config.routerFreeOnly?models.filter(m=>m.verified||declaredFree.has(m.id)):models;
+ function selectRouterModel(id:string){
+  update({model:id});
+  const selected=models.find(m=>m.id===id);
+  if(selected){setOk(true);onReady(config.provider);setStatus('Selected '+selected.name+'. Model is listed by '+preset.name+'.')}
+ }
+ const visibleModels=models;
  const selectedPaid=config.proxyPreset!=='horde'&&!!models.find(m=>m.id===config.model.trim())?.paid;
- const routerHint=config.proxyPreset==='horde'?null:'Missing models? In your router dashboard, check this key\u2019s permissions, the enabled models per connection, and any disabled list — restricted keys only see their allow-list.';
  useEffect(()=>()=>controller.current?.abort(),[]);
  useEffect(()=>desktop?.onProgress(event=>setProgress(event)),[desktop]);
  useEffect(()=>{
@@ -45,7 +49,25 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
   if(config.provider==='proxy'&&id===config.proxyPreset)return config;
   const p=proxyPresets.find(p=>p.id===id)!;
   const next=recallProfile({...config,provider:'proxy',managed:false,proxyPreset:id as ProxyPreset,proxyUrl:p.url,model:'',freeModels:[],routerFreeOnly:false});
-  setConfig(next);setModels([]);setStatus('');setOk(false);return next;
+   setConfig(next);setModels([]);setStatus('');setOk(false);return next;
+ }
+ function useExistingNine(){
+  const p=proxyPresets.find(item=>item.id==='9router')!;
+  const saved=recallProfile({...config,provider:'proxy',proxyPreset:'9router' as ProxyPreset,proxyUrl:p.url,model:'',managed:false});
+  const next={...saved,provider:'proxy' as const,proxyPreset:'9router' as const,proxyUrl:saved.managed?p.url:(saved.proxyUrl||p.url),model:'',managed:false,freeModels:[],routerFreeOnly:false};
+  setConfig(next);setModels([]);setStatus('Using your 9Router. Enter its API key, then connect to load every enabled provider model and combo.');setOk(false);
+ }
+ async function refreshProxyModels(){
+  if(disabled||config.provider!=='proxy')return;
+  setRefreshingModels(true);
+  try{
+    const key=readCredential(config);
+   const available:Model[]=await listProxyModels(config,key,AbortSignal.timeout(20000));
+   setModels(available);
+   const providers=new Set(available.map(m=>m.provider).filter(Boolean));
+   setStatus(`Model catalogue refreshed · ${available.length} models${providers.size?` across ${providers.size} providers`:''}.`);
+  }catch(e){setStatus((e as Error).message)}
+  finally{setRefreshingModels(false)}
  }
  async function connect(candidate:Config=config,connectionKey?:string){
   if(disabled)return;
@@ -76,14 +98,16 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
      const key=connectionKey??(credentialSlot(candidate)===credentialSlot(config)?apiKey:readCredential(candidate));
      const available:Model[]=await listProxyModels(candidate,key,abort.signal);
      if(!available.length)throw new Error('No models found on this router. Retry later or type a model ID below.');
-     setModels(available);
-     const recommended=candidate.proxyPreset==='horde'?available.find(m=>m.id.includes('Llama-3.2-3B-Instruct'))?.id:undefined;
-     const verified=available.filter(m=>m.verified);
-     const model=available.some(m=>m.id===candidate.model)?candidate.model:recommended||bestCodingModel(verified.length?verified:available);
+      setModels(available);
+      const recommended=candidate.proxyPreset==='horde'?available.find(m=>m.id.includes('Llama-3.2-3B-Instruct'))?.id:undefined;
+      const verified=available.filter(m=>m.verified);
+      const providerCount=new Set(available.map(m=>m.provider).filter(Boolean)).size;
+      const model=candidate.model.trim()||recommended||bestCodingModel(verified.length?verified:available);
      setConfig({...candidate,model});
      const declared=new Set(candidate.freeModels.map(s=>s.trim()).filter(Boolean));
      const pickedFree=available.find(m=>m.id===model)?.verified||(candidate.routerFreeOnly&&declared.has(model));
-     setStatus(candidate.proxyPreset==='horde'?'Connected. Only active models with supported chat templates are shown. Volunteer queues can be slow; generation remains experimental.': 'Connected. '+available.length+' route'+(available.length===1?'':'s')+' found'+(verified.length?' ('+verified.length+' verified free)':'')+'. '+(pickedFree?'The selected route reports zero pricing.':'The selected route has no verified zero pricing; your router controls billing.'));
+      const routerName=proxyPresets.find(p=>p.id===candidate.proxyPreset)?.name||'router';
+      setStatus(candidate.proxyPreset==='horde'?'Connected. Active community models are available; volunteer queues and throughput vary.':'Connected to '+routerName+'. '+available.length+' model'+(available.length===1?'':'s')+(providerCount?' across '+providerCount+' providers':'')+' found'+(verified.length?' · '+verified.length+' report zero price':'')+'. '+(pickedFree?'Selected model reports zero price.':'Selected model pricing is controlled by your router and provider.'));
    }
    if(abort.signal.aborted)return;setOk(true);onReady(candidate.provider);
   }catch(e){if(!abort.signal.aborted)setStatus((e as Error).message);else setStatus('Connection stopped or timed out. Check your router, then try again.')}
@@ -115,26 +139,26 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
  function downloadSetup(){const origin=location.origin.replace(/'/g,"''");const script=`# MicoCode local AI setup for Windows\n# Installs Ollama if missing, permits only your MicoCode origin, and downloads a coding model.\n$ErrorActionPreference = 'Stop'\nif (-not (Get-Command ollama -ErrorAction SilentlyContinue)) {\n  winget install --id Ollama.Ollama --exact --accept-package-agreements --accept-source-agreements\n  if ($LASTEXITCODE -ne 0) { throw 'Ollama installation failed. Install from https://ollama.com/download and run this script again.' }\n  $env:Path += ';' + (Join-Path $env:LOCALAPPDATA 'Programs\\Ollama')\n}\n$micoOrigin = '${origin}'\n$priorOrigins = [Environment]::GetEnvironmentVariable('OLLAMA_ORIGINS','User')\n$micoOrigins = (@($priorOrigins -split ',' | Where-Object { $_ }) + @($micoOrigin) | Select-Object -Unique) -join ','\n[Environment]::SetEnvironmentVariable('OLLAMA_ORIGINS', $micoOrigins, 'User')\n$env:OLLAMA_ORIGINS = $micoOrigins\nif (Get-Process -Name ollama -ErrorAction SilentlyContinue) {\n  Write-Host 'Quit Ollama from the system tray, reopen it to load the allowed origin, then press Enter.'\n  Read-Host | Out-Null\n} else {\n  Start-Process -FilePath 'ollama' -ArgumentList 'serve' -WindowStyle Hidden\n  Start-Sleep -Seconds 4\n}\nollama pull qwen2.5-coder:3b\nif ($LASTEXITCODE -ne 0) { throw 'Model download failed. Check Ollama is running, then retry.' }\nWrite-Host 'Ready. Return to MicoCode, choose Ollama, and click Connect.'\n`;
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([script],{type:'text/plain'}));a.download='micocode-setup.ps1';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 
- return <Modal title="Find your flow." subtitle="Free models. Familiar routers. One place to connect." onClose={()=>{if(busy&&progress&&desktop)void desktop.cancelSetup();onClose()}} wide>
-  <div className="connection-summary"><span><ShieldCheck size={14}/> Free routes only</span><span><Zap size={14}/> Smart pacing</span><span><SlidersHorizontal size={14}/> Polished code</span></div>
+  return <Modal title="Connect a model." subtitle="Use a local model or connect your own router to choose from its live model catalogue." onClose={()=>{if(busy&&progress&&desktop)void desktop.cancelSetup();onClose()}} wide>
+   <div className="connection-summary"><span><ShieldCheck size={14}/> Your providers, your keys</span><span><Zap size={14}/> Smart limit handling</span><span><SlidersHorizontal size={14}/> Review before applying</span></div>
   <div className="provider-grid">
-   {([{id:'browser',name:'On device',sub:'No key · no service quota',Icon:Cpu},{id:'ollama',name:'Ollama',sub:'Your installed models',Icon:Monitor},{id:'openrouter',name:'OpenRouter',sub:'Verified zero-price cloud',Icon:Cloud},{id:'proxy',name:'Free proxies',sub:'9Router & compatible APIs',Icon:Network}] as const).map(p=><button disabled={disabled} aria-pressed={config.provider===p.id} className={'provider-card '+(config.provider===p.id?'active':'')} key={p.id} onClick={()=>chooseProvider(p.id)}><p.Icon size={21}/><strong>{p.name}</strong><small>{p.sub}</small>{config.provider===p.id&&<Check className="provider-check" size={15}/>}</button>)}
+    {([{id:'browser',name:'On device',sub:'No key · no service quota',Icon:Cpu},{id:'ollama',name:'Ollama',sub:'Your installed models',Icon:Monitor},{id:'openrouter',name:'OpenRouter',sub:'Free-tier models · provider limits apply',Icon:Cloud},{id:'proxy',name:'Your routers',sub:'9Router · LiteLLM · compatible APIs',Icon:Network}] as const).map(p=><button disabled={disabled} aria-pressed={config.provider===p.id} className={'provider-card '+(config.provider===p.id?'active':'')} key={p.id} onClick={()=>chooseProvider(p.id)}><p.Icon size={21}/><strong>{p.name}</strong><small>{p.sub}</small>{config.provider===p.id&&<Check className="provider-check" size={15}/>}</button>)}
   </div>
   <div className="connection-body">
    {config.provider==='proxy'?<>
-    <div className="section-label">BRING YOUR FAVORITE FREE ROUTER</div><h3>A good connection goes a long way.</h3>
-    <p>{desktop?'One button installs, starts, configures, and connects your router. No terminal, copied keys, or global runtime installation.':'Pick a router and reconnect with its saved profile. Automatic router installation is available in the Windows app.'}</p>
-    <div className="managed-intro"><PackageCheck size={20}/><div><strong>{desktop?'Let MicoCode take care of setup.':'Meet MicoCode for Windows.'}</strong><p>{desktop?'9Router, CLIProxyAPI, and LiteLLM use free local Ollama by default. MicoCode downloads a coding model if needed. Anonymous community compute is an optional experimental engine.':'Download the standalone app for automatic 9Router, CLIProxyAPI, LiteLLM, and Ollama setup.'} {!desktop&&<a href="https://micocode.vercel.app/#downloads" target="_blank" rel="noreferrer">Download Windows app ↗</a>}</p></div></div>
-    <>{desktop&&<label className="engine-choice">Free router engine<select disabled={disabled} value={config.routerEngine||'local'} onChange={e=>update({routerEngine:e.target.value as 'local'|'community',model:''})}><option value="local">On this device · Ollama · no service quota</option><option value="community">Free community cloud · no model download · experimental</option></select><small className="field-help">{config.routerEngine==='community'?'Your prompt and requested files go to AI Horde volunteer workers. Availability and queue times vary.':'First setup may download a large Ollama runtime and about 1 GB for the model. Existing Ollama installations and models are reused.'}</small></label>}</><div className="router-grid">{proxyPresets.map(p=><article className={'router-card '+(config.proxyPreset===p.id?'active':'')} key={p.id}><button className="router-select" disabled={disabled} aria-pressed={config.proxyPreset===p.id} onClick={()=>chooseProxy(p.id)}><span className="router-monogram">{p.initial}</span><span><strong>{p.name}</strong><small>{p.description}</small></span>{config.proxyPreset===p.id&&<Check size={13}/>}</button><div className="router-card-footer"><span>{p.id==='horde'?'EXPERIMENTAL · NO KEY':p.id==='custom'?'YOUR FREE ROUTES':desktop?'AUTO SETUP':'SELF-HOSTED'}</span><button disabled={disabled} onClick={()=>quickConnect(p.id)} aria-label={(desktop&&isManagedProvider(p.id)?'Set up and connect ':'Connect ')+p.name}>{desktop&&isManagedProvider(p.id)?'Set up & connect':'Connect'} <ArrowUpRight size={12}/></button></div></article>)}</div>
-    {desktop&&config.managed&&config.proxyPreset==='9router'&&<div className="managed-actions"><button className="secondary" disabled={disabled} onClick={()=>void desktop.openDashboard('9router').catch(e=>setStatus(e.message))}>Open 9Router dashboard <ExternalLink size={13}/></button><span className="muted">MicoCode reconnects this router when you reopen the app.</span></div>}
+     <div className="section-label">CONNECT YOUR MODEL ROUTER</div><h3>Bring all your models into one workspace.</h3>
+     <p>{desktop?'Set up a private local route, or connect your own 9Router to use the providers and combos you already enabled.':'Connect to your own router to load its live model list, grouped by provider, with searchable model IDs and pricing details.'}</p>
+     <div className="managed-intro"><PackageCheck size={20}/><div><strong>{desktop?(config.managed?'Private managed route':'Use your connected router'):'Connect your router'}</strong><p>{desktop?(config.managed?'Managed mode uses a private MicoCode router. Choose “Use existing 9Router” to access the providers you connected yourself.':'Models are loaded live from this router. Usage follows your connected providers and their limits.'):'Connect to your existing router; every model it exposes will appear in the searchable picker.'} {!desktop&&<a href="https://micocode.vercel.app/#downloads" target="_blank" rel="noreferrer">Download Windows app ↗</a>}</p></div></div>
+    <>{desktop&&<label className="engine-choice">Managed router engine<select disabled={disabled} value={config.routerEngine||'local'} onChange={e=>update({routerEngine:e.target.value as 'local'|'community',model:''})}><option value="local">On this device · Ollama · no service quota</option><option value="community">Free community cloud · experimental</option></select><small className="field-help">{config.routerEngine==='community'?'Prompts go to AI Horde volunteer workers. Availability and queue times vary.':'Uses a private MicoCode router with local Ollama. To use your own 9Router providers, choose “Use existing 9Router” on its card.'}</small></label>}</><div className="router-grid">{proxyPresets.map(p=><article className={'router-card '+(config.proxyPreset===p.id?'active':'')} key={p.id}><button className="router-select" disabled={disabled} aria-pressed={config.proxyPreset===p.id} onClick={()=>chooseProxy(p.id)}><span className="router-monogram">{p.initial}</span><span><strong>{p.name}</strong><small>{p.description}</small></span>{config.proxyPreset===p.id&&<Check size={13}/>}</button><div className="router-card-footer"><span>{p.id==='horde'?'COMMUNITY':p.id==='custom'?'OPENAI-COMPATIBLE':desktop?'MANAGED':'SELF-HOSTED'}</span>{desktop&&p.id==='9router'&&<button className="existing-router-button" disabled={disabled} onClick={useExistingNine}>Use existing</button>}<button disabled={disabled} onClick={()=>quickConnect(p.id)} aria-label={(desktop&&isManagedProvider(p.id)?'Set up and connect ':'Connect ')+p.name}>{desktop&&isManagedProvider(p.id)?'Set up':'Connect'} <ArrowUpRight size={12}/></button></div></article>)}</div>
+     {desktop&&config.managed&&config.proxyPreset==='9router'&&<div className="managed-actions"><div><strong>This private router exposes MicoCode’s managed engine.</strong><span className="muted">For your connected providers, use your existing 9Router instead.</span></div><button className="secondary" disabled={disabled} onClick={useExistingNine}>Use my 9Router <ArrowUpRight size={13}/></button><button className="secondary" disabled={disabled} onClick={()=>void desktop.openDashboard('9router').catch(e=>setStatus(e.message))}>Open private dashboard <ExternalLink size={13}/></button></div>}
     {config.proxyPreset==='horde'?<div className="info-box"><Cloud size={17}/><span>AI Horde uses volunteer compute and its documented anonymous access. No account or billing. Queues and model quality vary. Your prompt and requested files go to the community service. <a href={preset.docs} target="_blank" rel="noreferrer">Provider details ↗</a></span></div>:<>
      <div className="router-detail-heading"><strong>{preset.name} connection</strong><a href={preset.docs} target="_blank" rel="noreferrer">Setup guide <ArrowUpRight size={12}/></a></div>
      <label>OpenAI-compatible API base URL<input disabled={disabled} readOnly={!!desktop&&config.managed} value={config.proxyUrl} onChange={e=>{update({proxyUrl:e.target.value,managed:false,freeModels:[],routerFreeOnly:false,model:''});setModels([])}} placeholder="https://your-free-router.example/v1" autoComplete="off" spellCheck={false}/></label>
      <label>Router API key <span className="optional-field">if your router requires one</span><input ref={keyInput} disabled={disabled} type="password" readOnly={!!desktop&&config.managed} value={apiKey} onChange={e=>{setKey(e.target.value.trim());setOk(false)}} placeholder="Your own key · never shared across endpoints" autoComplete="off" spellCheck={false}/></label>
-     {desktop&&config.managed?<div className="info-box managed-route"><ShieldCheck size={18}/><span><strong>Managed free routes</strong><br/>MicoCode configures and verifies these routes automatically. Every model on your engine is selectable; pick one below.<br/>{models.length>0?<ModelPicker models={models} value={config.model} disabled={disabled} onChange={id=>update({model:id})}/>:<>Current route: <code>{config.model}</code><br/>Click Connect &amp; verify to list every installed model.<br/></>}<button className="secondary" disabled={disabled} onClick={()=>update({managed:false})}>Configure manually</button></span></div>:<details className="router-advanced" open={!models.length}><summary>Free route setup</summary><p>Routers can also offer paid models. Every route your router exposes is listed for selection below; verified zero-price routes are marked. Disable paid fallbacks in your router first.</p><label>Free model IDs<input disabled={disabled} value={config.freeModels.join(', ')} onChange={e=>update({freeModels:e.target.value.split(',').map(s=>s.trim()).slice(0,50),model:''})} placeholder="Exact model IDs, separated by commas" spellCheck={false}/></label><label className="setting-switch"><input disabled={disabled} type="checkbox" checked={config.routerFreeOnly} onChange={e=>update({routerFreeOnly:e.target.checked})}/><span><strong>My router uses free routes only</strong><small>Required for IDs without pricing. MicoCode cannot inspect your router’s downstream billing.</small></span></label></details>}
+     {desktop&&config.managed?<div className="info-box managed-route"><ShieldCheck size={18}/><span><strong>Managed MicoCode routes</strong><br/>These use the private engine selected above. For models from your own providers, choose “Use existing” on the 9Router card.<br/>{models.length>0?<ModelPicker models={models} value={config.model} allowCustom={false} disabled={disabled} refreshing={refreshingModels} onRefresh={()=>void refreshProxyModels()} onChange={selectRouterModel}/>:<>Current route: <code>{config.model}</code><br/>Set up and connect to load available models.<br/></>}<button className="secondary" disabled={disabled} onClick={()=>update({managed:false})}>Configure this router manually</button></span></div>:<details className="router-advanced" open={!models.length}><summary>Model access and billing</summary><p>MicoCode lists every model ID exposed by this router. Access, pricing, provider limits, and fallbacks are controlled by your router and connected providers. Badges show pricing only when the router reports it.</p></details>}
      <p className="field-help">{desktop&&config.managed?'MicoCode configured this local connection automatically. The managed route is free; additional upstream accounts may require your own sign-in.':<>Requests go directly from your browser to this URL. Allow <code>{location.origin}</code> in the router’s CORS settings. Local routers may require local-network permission.</>}</p>
     </>}
-     {!(desktop&&config.managed)&&<><ModelPicker models={visibleModels} value={config.model} disabled={disabled} onChange={id=>update({model:id})}/>{config.model.trim()&&models.length>0&&selectedPaid&&<p className="field-help">That route reports paid pricing. Your router controls billing; disable paid fallbacks there first.</p>}{models.length>0&&routerHint&&<p className="field-help">{routerHint}</p>}</>}
+       {!(desktop&&config.managed)&&<><ModelPicker models={visibleModels} value={config.model} disabled={disabled} refreshing={refreshingModels} onRefresh={()=>void refreshProxyModels()} onChange={selectRouterModel}/>{config.model.trim()&&models.length>0&&selectedPaid&&<p className="field-help">That route reports paid pricing. Your router controls billing; usage and provider limits apply.</p>}{config.proxyPreset==='9router'&&<details className="router-advanced model-help"><summary>How to show every 9Router model</summary><p>Connect the API key for your own 9Router instance. Its key must be unrestricted or allow the models you want. Enable provider connections and models in the 9Router dashboard, then refresh the catalogue. MicoCode displays the model IDs that 9Router returns.</p></details>}</>}
    </>:config.provider==='browser'?<>
     <div className="section-label">FREE, RIGHT HERE</div><h3>A coding model that stays with you.</h3><p>Download once, then generate on your GPU without a service quota. A recent Chrome or Edge with WebGPU is required. Speed and quality depend on your hardware.</p>
     <label>Model size<select disabled={disabled} value={config.browserSize} onChange={e=>update({browserSize:e.target.value as Config['browserSize']})}><option value="0.5B">Qwen Coder 0.5B · lightest</option><option value="1.5B">Qwen Coder 1.5B · balanced</option><option value="3B">Qwen Coder 3B · better quality</option></select></label>
