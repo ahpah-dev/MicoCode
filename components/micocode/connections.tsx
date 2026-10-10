@@ -65,9 +65,10 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
     const available:Model[]=await discoverProxy(candidate,key,abort.signal);
     if(!available.length)throw new Error('No active free models found. Retry later or choose another connection.');
     setModels(available);
-    const model=available.some(m=>m.id===candidate.model)?candidate.model:bestCodingModel(available);
+    const recommended=candidate.proxyPreset==='horde'?available.find(m=>m.id.includes('Llama-3.2-3B-Instruct'))?.id:undefined;
+    const model=available.some(m=>m.id===candidate.model)?candidate.model:recommended||bestCodingModel(available);
     setConfig({...candidate,model});
-    setStatus(candidate.proxyPreset==='horde'?'Connected to the catalogue. Volunteer queues can be slow; generation is experimental and was unavailable in our latest test.': 'Connected. '+available.length+' free routes found. '+(available.every(m=>m.verified)?'Zero pricing reported by the router.':'Using your declared free-only routes; downstream billing is controlled by your router.'));
+    setStatus(candidate.proxyPreset==='horde'?'Connected. Only active models with supported chat templates are shown. Volunteer queues can be slow; generation remains experimental.': 'Connected. '+available.length+' free route'+(available.length===1?'':'s')+' found. '+(available.every(m=>m.verified)?'Zero pricing reported by the router.':'Using your declared free-only routes; downstream billing is controlled by your router.'));
    }
    if(abort.signal.aborted)return;setOk(true);onReady(candidate.provider);
   }catch(e){if(!abort.signal.aborted)setStatus((e as Error).message);else setStatus('Connection stopped or timed out. Check your router, then try again.')}

@@ -1,12 +1,13 @@
 // Fixed, documented anonymous endpoint. Never relay user-supplied URLs or credentials.
-type HordeModel={id:string;known_to_horde?:boolean;worker_threads?:number};
+type HordeModel={id:string;known_to_horde?:boolean;worker_threads?:number;template?:string};
 let catalogue:{expires:number;models:{id:string;name:string}[]}|undefined;
 async function models(){
  if(catalogue&&catalogue.expires>Date.now())return catalogue.models;
  const r=await fetch('https://oai.aihorde.net/v1/models',{redirect:'error',signal:AbortSignal.timeout(15000)});
  if(!r.ok)throw new Error('AI Horde model discovery is unavailable.');
  const d=await r.json() as {data?:HordeModel[]};
- const active=(d.data||[]).filter(m=>m.known_to_horde===true&&Number(m.worker_threads)>0).map(m=>({id:m.id,name:m.id.replace(/^[^/]+\//,'')}));
+ // Unknown chat templates can be listed with workers but fail generation in the proxy.
+ const active=(d.data||[]).filter(m=>m.known_to_horde===true&&Number(m.worker_threads)>0&&['llama-3-instruct','chatml','alpaca','mistral-instruct'].includes(m.template||'')).map(m=>({id:m.id,name:m.id.replace(/^[^/]+\//,'')}));
  catalogue={expires:Date.now()+60000,models:active};return active;
 }
 export async function POST(request:Request){

@@ -22,7 +22,7 @@ Introduction and downloads: https://micocode.vercel.app
 - Ollama: use an existing local model. A dependency-free loopback relay is included at `public/micocode-proxy.mjs`. Run `node public/micocode-proxy.mjs --origin https://YOUR-SITE`. It listens on 127.0.0.1:11435 and forwards only model listing and chat to Ollama on 127.0.0.1:11434. No OS shell or filesystem access is exposed. Keep it running while using local inference. MicoCode automatically discovers this relay when no other provider is configured.
 - OpenRouter: the built-in HTTPS relay accepts your session API key and only free model IDs with a zero-price routing limit. The current free catalogue is fetched dynamically. Provider quotas and availability apply. No cloud key was available for an end-to-end cloud generation test.
 - Free proxies: connection presets for [9Router](https://github.com/decolua/9router), [LiteLLM](https://docs.litellm.ai/docs/simple_proxy), [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI), and any OpenAI-compatible endpoint. Routers must already be installed, running, and configured with authorized free routes. MicoCode does not install or sign you into these third-party tools. Use the setup link in Connections, paste your router's URL/key, and connect. Once configured, the preset's Connect button reconnects in one click.
-- AI Horde: a fixed relay uses the community's documented anonymous access. Only live worker models are shown. This experimental route needs no key or billing, but volunteer queues, model quality, and availability vary. Model discovery was reachable; the live anonymous generation probe returned HTTP 500. It is not a guaranteed inference route.
+- AI Horde: a fixed relay uses the community's documented anonymous access. Only live worker models with supported chat templates are shown; unknown templates are excluded after a live probe returned HTTP 500. A subsequent anonymous generation with Llama 3.2 3B returned a real response. This experimental route needs no key or billing, but volunteer queues, model quality, and availability vary. It is not a guaranteed inference route.
 
 ### Configure a free proxy
 
@@ -55,6 +55,7 @@ HTML/CSS/JavaScript projects run in a sandbox without same-origin access. Local 
 - `npm test`: workspace protections, exact edits and partial reads, plan-mode isolation, quality checks, free-only filtering, endpoint/key isolation, retry timing and cancellation, quota stops, serialized requests, zero-price relay behavior, and arbitrary proxy rejection.
 - `npx tsc --noEmit` and production build.
 - `node scripts/check-agent.mjs`: real local Ollama integration test. This optional release test expects a local relay and the model named in the test; adjust the model to your machine.
+- Anonymous cloud release probe: a real Llama 3.2 3B run through AI Horde read a synthetic HTML file and staged the requested exact edit, preserving the original. Two transient provider failures recovered within the bounded retry budget. The run reached its four-step test limit; community availability and small-model behavior remain variable.
 - Browser checks: agent request, staged review, apply, checkpoint restore, preview script execution and console capture, responsive workspace.
 
 ## Design and scope

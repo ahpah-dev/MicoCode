@@ -75,3 +75,12 @@ test('community relay cannot be used as an arbitrary URL proxy',async()=>{
  const previous=globalThis.fetch;globalThis.fetch=async()=>assert.fail('Invalid request must never reach upstream');
  try{assert.equal((await horde(new Request('https://micocode.vercel.app/api/horde',{method:'POST',body:JSON.stringify({action:'proxy',url:'http://127.0.0.1/private'})}))).status,400)}finally{globalThis.fetch=previous}
 });
+test('community discovery excludes unsupported templates and inactive workers',async()=>{
+ const previous=globalThis.fetch;
+ globalThis.fetch=async(url,options)=>{
+  if(url.endsWith('/models'))return Response.json({data:[{id:'live-instruct',known_to_horde:true,worker_threads:1,template:'llama-3-instruct'},{id:'broken-template',known_to_horde:true,worker_threads:3,template:'unknown'},{id:'offline',known_to_horde:true,worker_threads:0,template:'chatml'}]});
+  assert.equal(url,'https://oai.aihorde.net/v1/chat/completions');assert.equal(options.headers.Authorization,'Bearer 0000000000');return Response.json({choices:[{message:{content:'OK'}}]});
+ };
+ const req=body=>new Request('https://micocode.vercel.app/api/horde',{method:'POST',headers:{Authorization:'Bearer not-forwarded'},body:JSON.stringify(body)});
+ try{const r=await horde(req({action:'models'}));assert.deepEqual((await r.json()).models.map(m=>m.id),['live-instruct']);assert.equal((await horde(req({action:'complete',model:'broken-template',messages:[{role:'user',content:'test'}]}))).status,400);assert.equal((await horde(req({action:'complete',model:'live-instruct',messages:[{role:'user',content:'test'}]}))).status,200)}finally{globalThis.fetch=previous}
+});
