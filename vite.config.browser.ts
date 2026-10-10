@@ -1,9 +1,9 @@
 import {defineConfig} from 'vite';
 import react from '@vitejs/plugin-react';
 import {fileURLToPath} from 'node:url';
-import {POST as ai} from './app/api/ai/route';
-import {POST as connection} from './app/api/connection/route';
-import {GET as models} from './app/api/models/route';
+import {POST as ai} from './api/ai';
+import {POST as connection} from './api/connection';
+import {GET as models} from './api/models';
 
 const root=fileURLToPath(new URL('.',import.meta.url));
 export default defineConfig({
