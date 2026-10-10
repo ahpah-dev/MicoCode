@@ -3,6 +3,7 @@ import path from 'node:path';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {ProviderManager} from '../desktop/provider-manager.mjs';
 import {createLocalServer} from '../desktop/server.mjs';
+import {discoverProxy} from '../lib/mico/providers.mjs';
 const root=process.cwd(),dataDir=path.resolve(process.argv[2]||'build/provider-test');
 await mkdir(dataDir,{recursive:true});
 const secrets=new Map(),vault={get:async key=>secrets.get(key),set:async(key,value)=>secrets.set(key,value)};
@@ -15,6 +16,7 @@ try{
  for(const provider of process.argv.slice(3).length?process.argv.slice(3):['9router','cliproxy','litellm','ollama']){
   try{
    const first=await manager.setup(provider),second=await manager.setup(provider);
+   if(first.config.provider==='proxy'){const catalogue=await discoverProxy(first.config,first.key,AbortSignal.timeout(20000));if(!catalogue.some(m=>m.id===first.config.model))throw new Error('Frontend free-route discovery rejected the managed model.');}
    const same=first.config.proxyUrl===second.config.proxyUrl&&first.config.ollamaUrl===second.config.ollamaUrl;
    results.push({provider,connected:true,idempotent:same,model:first.config.model,paidFallback:false});
    console.log(provider+': verified, second setup reused the running instance');
