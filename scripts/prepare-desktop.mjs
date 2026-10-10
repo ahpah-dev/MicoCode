@@ -1,8 +1,9 @@
 import {build} from 'esbuild';
-import {mkdir,readFile,writeFile,cp,access,rm} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,cp,access,rm,readdir} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {deflateSync} from 'node:zlib';
+import JSZip from 'jszip';
 import {versions} from '../desktop/artifacts.mjs';
 import {downloadVerified,extractVerifiedZip} from '../desktop/install.mjs';
 
@@ -45,5 +46,13 @@ try{await access(path.join(nodeDir,'node.exe'))}catch{
  await downloadVerified({url:'https://nodejs.org/dist/v'+versions.node+'/'+zipName,sha256,maxBytes:70000000},zip,AbortSignal.timeout(180000));
  await extractVerifiedZip(zip,stage);await cp(path.join(stage,release),nodeDir,{recursive:true});await rm(stage,{recursive:true,force:true});await rm(zip,{force:true});
  await writeFile(path.join(nodeDir,'mico-runtime.json'),JSON.stringify({version:versions.node,sha256}));
+}
+// electron-builder excludes node_modules from resource copies. Carry npm as an archive,
+// then extract it into the private user profile on first provider setup.
+const npmArchive=path.join(nodeDir,'npm-runtime.zip');
+try{await access(npmArchive)}catch{
+ const zip=new JSZip(),npmDir=path.join(nodeDir,'node_modules','npm');
+ async function addDirectory(dir,relative){for(const item of await readdir(dir,{withFileTypes:true})){const file=path.join(dir,item.name),entry=relative+'/'+item.name;if(item.isDirectory())await addDirectory(file,entry);else if(item.isFile())zip.file(entry,await readFile(file));else throw new Error('Unexpected link in the bundled npm runtime.')}}
+ await addDirectory(npmDir,'npm');await writeFile(npmArchive,await zip.generateAsync({type:'nodebuffer',compression:'DEFLATE'}));
 }
 console.log('Desktop workspace and private runtime are ready.');
