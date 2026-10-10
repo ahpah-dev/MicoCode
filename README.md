@@ -8,6 +8,8 @@ Little ideas. Real things. A free agentic coding workspace for Windows and the b
 
 Version 0.3.1 repairs managed free-route settings on setup, restore, and reconnect. Switching providers preserves the managed connection and engine. Managed routes do not require entering free model IDs or checking a pricing declaration; these controls apply only to manual connections.
 
+The corrected 0.3.1 Windows downloads send managed requests through MicoCode's protected local server to the installed router. Catalogue discovery and prompt generation use the same connection, so upstream CORS requirements cannot hide router errors. Local inference respects the requested output length, allows time for model loading, and remains cancellable. Timeout messages distinguish slow generation from an unreachable router. Install the replacement download over the previous 0.3.1 installation, then run **Set up & connect** again.
+
 
 Download the x64 installer or portable executable. The workspace, Electron, and a private Node runtime are included. No separate Node installation or terminal is needed. Windows 10/11 x64 is supported. This community release is unsigned; Windows may show a publisher warning.
 
