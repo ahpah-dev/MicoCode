@@ -3,6 +3,8 @@ import {mkdir,readFile,writeFile,access,readdir,rm} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import path from 'node:path';
 import {freeCatalogue,fullCatalogue,routeSlug} from '../lib/mico/providers.mjs';
+import {loadOpenCodeModels} from '../lib/mico/opencode.mjs';
+import {managedRouterCatalogue} from './server.mjs';
 import net from 'node:net';
 import {randomBytes} from 'node:crypto';
 import {artifacts,versions} from './artifacts.mjs';
@@ -23,9 +25,9 @@ export function cliProxyConfig(port,key,base,upstreamKey,authDir,routes=['free-c
  return `server:\n  host: 127.0.0.1\n  port: ${port}\naccess:\n  api-keys:\n    - ${JSON.stringify(key)}\nmanagement:\n  allow-remote: false\n  secret-key: ""\n  disable-control-panel: true\noauth:\n  auth-dir: ${JSON.stringify(authDir.replace(/\\/g,'/'))}\napi-keys:\n  openai-compatibility:\n    - name: micocode-community\n      base-url: ${JSON.stringify(base)}\n      keys:\n        - api-key: ${JSON.stringify(upstreamKey)}\n      models:\n${models}\nrequests:\n  passthrough-headers: false\nobservability:\n  logs:\n    request-log: false\n    debug: false\n`;
 }
 export class ProviderManager{
- constructor({dataDir,runtimeDir,gatewayBase,gatewayKey,onProgress=()=>{},vault,fetchImpl=fetch,onDiagnostic=()=>{}}){
+ constructor({dataDir,runtimeDir,gatewayBase,gatewayKey,onProgress=()=>{},vault,fetchImpl=fetch,onDiagnostic=()=>{},loadOpenCodeModelsImpl=loadOpenCodeModels}){
   this.root=path.join(dataDir,'providers');this.runtime=runtimeDir;this.gatewayBase=gatewayBase;this.gatewayKey=gatewayKey;
-   this.notify=onProgress;this.vault=vault;this.fetch=fetchImpl;this.diagnostic=onDiagnostic;this.children=new Map();this.connections=new Map();this.active=null;this.cookies=new Map();this.ollamaUpstream=null;this.ollamaModel=null;this.ollamaModels=null;this.closing=false;
+   this.notify=onProgress;this.vault=vault;this.fetch=fetchImpl;this.diagnostic=onDiagnostic;this.loadOpenCodeModels=loadOpenCodeModelsImpl;this.children=new Map();this.connections=new Map();this.active=null;this.cookies=new Map();this.ollamaUpstream=null;this.ollamaModel=null;this.ollamaModels=null;this.closing=false;
  }
  folder(id){return path.join(this.root,assertProvider(id))}
  versionFolder(id){return path.join(this.folder(id),id==='9router'?versions.nine:id==='litellm'?versions.litellm:artifacts[id].version)}
@@ -48,7 +50,8 @@ export class ProviderManager{
   const child=spawn(exe,args,{...options,env:{...process.env,...options.env},windowsHide:true,shell:false,stdio:['ignore','pipe','pipe']});
   // Consume output without persisting prompts or credentials.
   const log=chunk=>this.diagnostic(id,chunk.toString().replace(/sk-mico-[\w-]+|sk-[a-zA-Z0-9_-]{20,}|integration-only-free-route/g,'[redacted]').slice(-3000));
-  child.stdout.on('data',log);child.stderr.on('data',log);child.on('error',e=>this.diagnostic(id,e.code||'Process start failed.'));child.once('exit',()=>{if(this.children.get(id)===child)this.children.delete(id)});
+  const forget=()=>{if(this.children.get(id)===child){this.children.delete(id);this.connections.delete(id)}};
+  child.stdout.on('data',log);child.stderr.on('data',log);child.on('error',e=>{forget();this.diagnostic(id,e.code||'Process start failed.')});child.once('exit',forget);
   this.children.set(id,child);return child;
  }
  async killChild(child){
@@ -83,8 +86,12 @@ export class ProviderManager{
   const hadChild=this.children.get(id);
   try{
    await mkdir(this.folder(id),{recursive:true});
-   const cached=this.connections.get(id);if(cached&&cached.config.routerEngine===engine&&hadChild?.exitCode===null){this.emit(id,'verify','Checking the running connection…');await this.verify(cached,signal);this.emit(id,'ready','Connected. Your free route is ready.');return cached}
-   if(hadChild?.exitCode===null)await this.stop(id);
+   const cached=this.connections.get(id);if(cached&&cached.config.routerEngine===engine&&hadChild?.exitCode===null){
+    this.emit(id,'verify','Checking the running connection…');
+    try{if(id!=='ollama'&&engine==='local')await this.verifyLocalEngine(signal);if(id==='9router')await this.syncOpenCodeCatalogue(cached,signal);await this.verify(cached,signal);this.emit(id,'ready','Connected. Your free route is ready.');return cached}
+    catch(e){if(signal.aborted)throw e;this.emit(id,'configure','Repairing the private router connection…');await this.stop(id)}
+   }
+   if(this.children.get(id)?.exitCode===null)await this.stop(id);
    if(id!=='ollama'&&engine==='local'){
     this.emit(id,'configure','Preparing the free local engine for your router…');
     const local=await this.setupOllama(signal);await this.verify(local,signal);this.connections.set('ollama',local);
@@ -96,6 +103,7 @@ export class ProviderManager{
    else if(id==='cliproxy')connection=await this.setupCLI(signal,base);
    else if(id==='litellm')connection=await this.setupLite(signal,base);
    else connection=await this.setupOllama(signal);
+   if(id==='9router')await this.syncOpenCodeCatalogue(connection,signal);
    this.emit(id,'verify','Verifying the model catalogue and free route…');await this.verify(connection,signal);
    await writeFile(path.join(this.folder(id),'installed.json'),JSON.stringify({version:id==='9router'?versions.nine:id==='litellm'?versions.litellm:artifacts[id].version}),{mode:0o600});
    connection.config.routerEngine=id==='ollama'?'local':engine;connection.config.managed=true;
@@ -107,13 +115,20 @@ export class ProviderManager{
  async restore(){
   try{const {provider,engine='local'}=JSON.parse(await readFile(path.join(this.root,'last-provider.json'),'utf8'));assertProvider(provider);if(!await exists(path.join(this.folder(provider),'installed.json')))return null;return await this.setup(provider,engine)}catch{return null}
  }
+ async verifyLocalEngine(signal){
+  if(!this.ollamaUpstream||!this.ollamaModel||!Array.isArray(this.ollamaModels)||!this.ollamaModels.length)throw new Error('The local coding engine must be reconnected.');
+  const r=await this.fetch(this.ollamaUpstream+'/api/tags',{signal:AbortSignal.any([signal,AbortSignal.timeout(5000)])});
+  if(!r.ok)throw new Error('The local coding engine stopped responding.');
+  const d=await r.json(),names=new Set((d.models||[]).map(m=>m?.name).filter(n=>typeof n==='string'&&n));
+  if(!names.has(this.ollamaModel)||names.size!==this.ollamaModels.length||this.ollamaModels.some(m=>!names.has(m.name)))throw new Error('The installed local model inventory changed. Reconnecting the router.');
+ }
  async verify(connection,signal){
   const local=connection.config.provider==='ollama';const url=local?connection.config.ollamaUrl+'/api/tags':connection.config.proxyUrl+'/models';
   const r=await this.fetch(url,{headers:connection.key?{Authorization:'Bearer '+connection.key}:{},signal:AbortSignal.any([signal,AbortSignal.timeout(20000)])});
   if(!r.ok)throw new Error('The installed provider did not accept its connection ('+r.status+'). Retry setup.');
    const d=await r.json();
    const nine=connection.config.proxyPreset==='9router';
-   const ids=local?(d.models||[]).map(m=>m.name):(nine?fullCatalogue(d):freeCatalogue(d,connection.config.freeModels,connection.config.routerFreeOnly)).map(m=>m.id);
+   const ids=local?(d.models||[]).map(m=>m.name):(nine?fullCatalogue(managedRouterCatalogue(d,connection)):freeCatalogue(d,connection.config.freeModels,connection.config.routerFreeOnly)).map(m=>m.id);
    if(!ids.includes(connection.config.model))throw new Error('The router did not expose the configured model. Retry setup.');
    if(nine)connection.config.routerModels=ids;
  }
@@ -121,6 +136,62 @@ export class ProviderManager{
   const r=await this.fetch(base+route,{method,headers:{'Content-Type':'application/json',Cookie:this.cookies.get('9router')||''},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.any([signal,AbortSignal.timeout(20000)])});
   const cookie=r.headers.get('set-cookie')?.split(';')[0];if(cookie)this.cookies.set('9router',cookie);
   const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error('9Router configuration could not finish ('+r.status+'). Retry setup.');return d;
+ }
+ async syncOpenCodeCatalogue(connection,signal=AbortSignal.timeout(30000)){
+  if(connection?.config?.proxyPreset!=='9router'||!connection.dashboard||!this.cookies.get('9router'))return {updated:0};
+  delete connection.catalogueWarning;
+  try{
+   const dashboard=new URL(connection.dashboard),api=new URL(connection.config.proxyUrl);
+   if(dashboard.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(dashboard.hostname)||dashboard.origin!==api.origin||dashboard.username||dashboard.password)throw new Error('Invalid private dashboard address.');
+   const [{connections=[]},disabled,clientKeys]=await Promise.all([
+    this.nineRequest(dashboard.origin,'/api/providers',signal),
+    this.nineRequest(dashboard.origin,'/api/models/disabled?providerAlias=oc',signal),
+    this.nineRequest(dashboard.origin,'/api/keys',signal),
+   ]);
+   if(!Array.isArray(disabled.ids)||!Array.isArray(clientKeys.keys))throw new Error('The private router model-access policy could not be checked.');
+   // Keep explicit selections. A prior list stays automatic only while it
+   // exactly matches the marker saved when MicoCode populated that list.
+   const ownsList=c=>{const enabled=c.providerSpecificData?.enabledModels,marker=c.providerSpecificData?.micoFreeCatalogue;return Array.isArray(enabled)&&Array.isArray(marker)&&enabled.length===marker.length&&enabled.every((id,i)=>id===marker[i])};
+   const candidates=connections.filter(c=>{if(!c||c.isActive!==true||!['opencode','opencode-zen'].includes(c.provider)||typeof c.id!=='string'||!c.id)return false;const enabled=c.providerSpecificData?.enabledModels,marker=c.providerSpecificData?.micoFreeCatalogue;return ownsList(c)||marker==null&&(enabled==null||Array.isArray(enabled)&&enabled.length===0)});
+   const models=await this.loadOpenCodeModels(this.fetch,AbortSignal.any([signal,AbortSignal.timeout(20000)]));
+   const verified=new Map(models.filter(m=>m?.verified===true&&m.paid===false&&typeof m.id==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$/.test(m.id)).map(m=>[m.id,m]));
+   const ids=[...verified.keys()];
+   let updated=0;
+   for(const candidate of candidates){
+    const enabled=candidate.providerSpecificData?.enabledModels,marker=candidate.providerSpecificData?.micoFreeCatalogue;
+    if(!ids.length&&!ownsList(candidate))continue;
+    if(Array.isArray(enabled)&&Array.isArray(marker)&&enabled.length===ids.length&&marker.length===ids.length&&ids.every((id,i)=>enabled[i]===id&&marker[i]===id))continue;
+    await this.nineRequest(dashboard.origin,'/api/providers/'+encodeURIComponent(candidate.id),signal,{method:'PUT',body:{providerSpecificData:{enabledModels:ids,micoFreeCatalogue:ids}}});updated++;
+   }
+   const key=clientKeys.keys.find(k=>k&&k.key===connection.key),blocked=new Set(disabled.ids.filter(id=>typeof id==='string'));
+   const allowed=key?.allowedModels;
+   const keyActive=key&&key.isActive!==false&&key.active!==false&&(!key.expiresAt||Date.parse(key.expiresAt)>Date.now());
+   const policyKnown=allowed==null||Array.isArray(allowed)&&allowed.every(id=>typeof id==='string');
+   connection.openCodeFreeModels=[];
+   if(keyActive&&policyKnown){
+    const permitted=Array.isArray(allowed)&&allowed.length?new Set(allowed):null;
+    connection.openCodeFreeModels=[...verified.values()].filter(m=>!blocked.has('*')&&!blocked.has(m.id)&&!blocked.has('oc/'+m.id)&&(!permitted||permitted.has('oc/'+m.id))).map(m=>({
+     id:'oc/'+m.id,name:m.name||m.id,object:'model',owned_by:'OpenCode Free',catalogueSource:'opencode-live',accessUnchecked:true,
+     pricing:{prompt:'0',completion:'0',input:0,output:0},cost:{input:0,output:0},
+     ...(m.contextLength?{context_length:m.contextLength}:{}),...(m.maxOutput?{max_completion_tokens:m.maxOutput}:{}),
+    }));
+   }
+   let warning='';
+   if(!ids.length)warning='No verified free OpenCode text models are currently available. Other router models remain available; refresh later.';
+   else if(!keyActive||!policyKnown)warning='OpenCode public models could not be added because the managed router key access could not be verified. Other router models remain available.';
+   if(warning){connection.catalogueWarning=warning;this.emit('9router','warning',warning);return {updated,models:ids,publicModels:connection.openCodeFreeModels.length,warning}}
+   if(updated||connection.openCodeFreeModels.length)this.emit('9router','configure','Loaded '+connection.openCodeFreeModels.length+' verified free models from the live OpenCode catalogue.');
+   delete connection.catalogueWarning;return {updated,models:ids,publicModels:connection.openCodeFreeModels.length};
+  }catch(e){
+   if(signal.aborted)throw e;
+   connection.openCodeFreeModels=[];
+   const warning='OpenCode model discovery could not refresh. Existing router models remain available; retry Refresh models later.';
+   connection.catalogueWarning=warning;this.emit('9router','warning',warning);return {updated:0,warning};
+  }
+ }
+ async refreshNineCatalogue(signal=AbortSignal.timeout(30000)){
+  const connection=this.connections.get('9router');if(!connection)throw new Error('Your managed 9Router is stopped. Run Set up & connect first.');
+  await this.syncOpenCodeCatalogue(connection,signal);await this.verify(connection,signal);return connection;
  }
  // Every route the managed engine currently offers, read from the gateway itself
  // so routers, connections, and the model picker share one source of truth.

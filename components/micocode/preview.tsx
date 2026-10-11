@@ -3,18 +3,48 @@ import {useEffect,useRef,useState} from 'react';
 import {Monitor,Smartphone,RotateCw,Globe} from 'lucide-react';
 import type {Files} from '@/lib/mico/types';
 function resolveFile(base:string,path:string){ const stack=path.startsWith('/')?[]:base.split('/').slice(0,-1);for(const part of path.split('/')){if(part==='..')stack.pop();else if(part&&part!=='.')stack.push(part)}return stack.join('/'); }
+// HTML serialization does not escape script text. Keep literal closing tags
+// inside JavaScript strings/comments from terminating the generated element.
+function scriptText(code:string){return code.replace(/<\/script/gi,match=>'<\\/'+match.slice(2))}
 export function makePreview(files:Files,entry:string,token:string) {
- const urls:string[]=[];const make=(code:string,type:string)=>{return 'data:'+type+';charset=utf-8,'+encodeURIComponent(code)};
+ const urls:string[]=[];
  const doc=new DOMParser().parseFromString(files[entry]||'<h1>No HTML entry point</h1>','text/html');
  doc.querySelectorAll('base').forEach(n=>n.remove());
  const csp=doc.createElement('meta');csp.httpEquiv='Content-Security-Policy';csp.content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' data: blob: https:; style-src 'unsafe-inline' blob: https:; img-src data: blob: https:; font-src data: https:; connect-src https:; media-src data: blob: https:; frame-src 'none'; form-action 'none';";
  doc.head.insertBefore(csp,doc.head.firstChild);
- const cache=new Map<string,string>(); const visiting=new Set<string>();
- function moduleUrl(path:string):string {if(cache.has(path))return cache.get(path)!;if(visiting.has(path))throw new Error('Circular local module imports need a local build tool. Export this project to run it.');visiting.add(path);let code=files[path];if(code===undefined)throw new Error('Missing module '+path);code=code.replace(/((?:from\s*|import\s*\(?\s*)["'])(\.{1,2}\/[^"']+)(["'])/g,(_,a,p,b)=>a+moduleUrl(resolveFile(path,p))+b);const url=make(code,'text/javascript');cache.set(path,url);visiting.delete(path);return url;}
+ const modules:Files={};const visiting=new Set<string>();
+ const localImport=/((?:from\s*|import\s*\(?\s*)["'])((?:\.{1,2}\/|\/)[^"']+)(["'])/g;
+ function collectModule(path:string,source=files[path]):void {
+  if(visiting.has(path))throw new Error('Circular local module imports need a local build tool. Export this project to run it.');
+  if(path in modules)return;if(source===undefined)throw new Error('Missing module '+path);
+  visiting.add(path);source.replace(localImport,(_match,_a,p)=>{collectModule(resolveFile(path,p));return _match});visiting.delete(path);modules[path]=source;
+ }
+ const runtimeKey='mico-preview-modules-'+token;
+ const deferred:HTMLScriptElement[]=[];
  for(const link of doc.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')) {const p=resolveFile(entry,link.getAttribute('href')||'');if(files[p]!==undefined){const s=doc.createElement('style');s.textContent=files[p];link.replaceWith(s)}}
- for(const script of doc.querySelectorAll<HTMLScriptElement>('script[src]')) {const p=resolveFile(entry,script.getAttribute('src')||'');if(files[p]!==undefined)script.src=script.type==='module'?moduleUrl(p):make(files[p],'text/javascript');}
- const capture=doc.createElement('script');capture.textContent=`(()=>{const token=${JSON.stringify(token)};const send=(level,args)=>{try{parent.postMessage({mico:token,level,text:args.map(v=>typeof v==='string'?v:JSON.stringify(v)).join(' ').slice(0,3000)},'*')}catch{}};for(const level of ['log','warn','error','info']){const original=console[level];console[level]=(...args)=>{original.apply(console,args);send(level,args)}}window.addEventListener('error',e=>send('error',[e.message]));window.addEventListener('unhandledrejection',e=>send('error',[String(e.reason)]));})();`;
+ for(const [index,script] of [...doc.querySelectorAll<HTMLScriptElement>('script')].entries()) {
+  const src=script.getAttribute('src');const path=src?resolveFile(entry,src):resolveFile(entry,`.mico-inline-${index}.js`);
+  const source=src?files[path]:script.textContent||'';
+  if(source===undefined)continue;
+  if(script.type==='module') {
+   collectModule(path,source);script.removeAttribute('src');script.removeAttribute('integrity');
+   script.textContent=scriptText(`await import(globalThis[${JSON.stringify(runtimeKey)}](${JSON.stringify(path)}));`);
+  }else if(src) {
+   script.removeAttribute('src');script.removeAttribute('integrity');script.textContent=scriptText(source);
+   if(script.hasAttribute('defer')&&!script.hasAttribute('async')){script.removeAttribute('defer');deferred.push(script)}
+  }
+ }
+ // Local deferred classic scripts run after the document has been parsed.
+ for(const script of deferred)doc.body.append(script);
+ const capture=doc.createElement('script');capture.textContent=scriptText(`(()=>{const token=${JSON.stringify(token)};const send=(level,args)=>{try{parent.postMessage({mico:token,level,text:args.map(v=>typeof v==='string'?v:JSON.stringify(v)).join(' ').slice(0,3000)},'*')}catch{}};for(const level of ['log','warn','error','info']){const original=console[level];console[level]=(...args)=>{original.apply(console,args);send(level,args)}}window.addEventListener('error',e=>send('error',[e.message]));window.addEventListener('unhandledrejection',e=>send('error',[String(e.reason)]));})();`);
  doc.head.insertBefore(capture,csp.nextSibling);
+ if(Object.keys(modules).length) {
+  // Blob URLs must belong to the sandboxed frame's opaque origin. Creating
+  // them in the parent would make module imports fail the CORS check.
+  const runtime=doc.createElement('script');
+  runtime.textContent=scriptText(`(()=>{const sources=${JSON.stringify(modules)};const cache=new Map();const urls=[];const resolve=${resolveFile.toString()};const imports=${localImport.toString()};const make=path=>{if(cache.has(path))return cache.get(path);const code=sources[path].replace(imports,(_match,a,p,b)=>a+make(resolve(path,p))+b);const url=URL.createObjectURL(new Blob([code],{type:'text/javascript'}));urls.push(url);cache.set(path,url);return url};globalThis[${JSON.stringify(runtimeKey)}]=make;window.addEventListener('pagehide',()=>urls.forEach(url=>URL.revokeObjectURL(url)));})();`);
+  doc.head.insertBefore(runtime,capture.nextSibling);
+ }
  return {html:'<!DOCTYPE html>\n'+doc.documentElement.outerHTML,urls};
 }
 export default function Preview({files,onLog,revision,pending}:{files:Files;onLog:(s:string)=>void;revision:number;pending:boolean}) {

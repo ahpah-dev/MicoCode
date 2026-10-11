@@ -13,7 +13,7 @@ if(smoke&&testData)app.setPath('userData',path.resolve(testData));
 app.setAppUserModelId('app.micocode.desktop');
 let window,manager,server,quitting=false;const dashboards=new Set();
 const backgrounds={forest:'#111815',graphite:'#151515',midnight:'#101624',violet:'#191322',paper:'#f8f6ef'};
-const allowedHosts=new Set(['micocode.vercel.app','github.com','openrouter.ai','docs.litellm.ai','ollama.com','docs.ollama.com','oai.aihorde.net','aihorde.net','nodejs.org']);
+const allowedHosts=new Set(['micocode.vercel.app','github.com','openrouter.ai','opencode.ai','models.dev','docs.litellm.ai','ollama.com','docs.ollama.com','oai.aihorde.net','aihorde.net','nodejs.org']);
 function safeExternal(url){try{const u=new URL(url);return u.protocol==='https:'&&allowedHosts.has(u.hostname)&&!u.username&&!u.password}catch{return false}}
 async function createVault(dir){
  await mkdir(dir,{recursive:true});const file=path.join(dir,'credentials.bin');let values={};
@@ -41,6 +41,7 @@ async function start(){
  ipcMain.handle('mico:setup',async(event,provider,engine)=>{validateSender(event);return managedClientConnection(await manager.setup(assertProvider(provider),engine),server.origin)});
  ipcMain.handle('mico:cancel',event=>{validateSender(event);manager.cancel()});
  ipcMain.handle('mico:status',event=>{validateSender(event);return manager.statuses()});
+ ipcMain.handle('mico:refresh-models',async event=>{validateSender(event);return managedClientConnection(await manager.refreshNineCatalogue(),server.origin)});
  let restoration;
  ipcMain.handle('mico:restore',event=>{validateSender(event);return restoration||(restoration=manager.restore().then(result=>managedClientConnection(result,server.origin)))});
  ipcMain.handle('mico:stop',(event,provider)=>{validateSender(event);return manager.stop(assertProvider(provider))});
@@ -74,17 +75,19 @@ async function start(){
     const initial=!!document.querySelector('.connection-status.success')&&!!document.querySelector('.managed-route');
     const cards=()=>Array.from(document.querySelectorAll('.provider-grid button'));
     cards().find(b=>b.textContent.includes('Ollama')).click();await new Promise(r=>setTimeout(r,100));
-    cards().find(b=>b.textContent.includes('Free proxies')).click();await new Promise(r=>setTimeout(r,100));
+    cards().find(b=>b.textContent.includes('Your routers')).click();await new Promise(r=>setTimeout(r,100));
     const restored=!!document.querySelector('.managed-route');
     await click('Connect & verify');
-    await wait(()=>!document.querySelector('.connection-actions button')?.disabled&&document.querySelector('.connection-status')?.textContent.includes('connected'));
+    await wait(()=>!document.querySelector('.connection-actions button')?.disabled&&/connected/i.test(document.querySelector('.connection-status')?.textContent||''));
     return {initial,restored,success:!!document.querySelector('.connection-status.success'),managed:!!document.querySelector('.managed-route'),status:document.querySelector('.connection-status')?.textContent};
    })()`);
    if(!ui.initial||!ui.restored||!ui.success||!ui.managed)throw Error('Managed connection UI failed: '+JSON.stringify(ui));
   }
   const result=ui?managedClientConnection(manager.connections.get(smokeProvider),server.origin):await window.webContents.executeJavaScript(`window.micoDesktop.setup(${JSON.stringify(smokeProvider)},'local')`);
   const response=await fetch(result.config.proxyUrl+'/models',{headers:{Authorization:'Bearer '+result.key}});
-  managedSetup={provider:smokeProvider,model:result.config.model,status:response.status,...(ui?{ui}:{})};
+  const catalogue=await response.json();
+  managedSetup={provider:smokeProvider,model:result.config.model,status:response.status,models:(catalogue.data||[]).map(m=>m.id),publicOpenCode:(catalogue.data||[]).filter(m=>m.catalogueSource==='opencode-live'&&m.id.startsWith('oc/')).map(m=>m.id),...(ui?{ui}:{})};
+  if(process.argv.includes('--smoke-opencode')&&(!managedSetup.publicOpenCode.length||!managedSetup.models.includes(result.config.model)))throw Error('Managed OpenCode Free catalogue supplement is missing.');
   if(process.argv.includes('--smoke-generation')){
    managedSetup.generation=await window.webContents.executeJavaScript(`(async()=>{const start=Date.now();try{const r=await fetch(${JSON.stringify(result.config.proxyUrl+'/chat/completions')},{method:'POST',redirect:'error',headers:{'Content-Type':'application/json',Authorization:${JSON.stringify('Bearer '+result.key)}},body:JSON.stringify({model:${JSON.stringify(result.config.model)},messages:[{role:'user',content:'Reply with a short JSON object containing a greeting.'}],stream:false,max_tokens:512}),signal:AbortSignal.timeout(130000)});const d=await r.json();return {status:r.status,hasContent:!!d.choices?.[0]?.message?.content,milliseconds:Date.now()-start,...(!r.ok?{error:d.error}:{})}}catch(e){return {name:e.name,error:e.message,milliseconds:Date.now()-start}}})()`);
   }
@@ -100,10 +103,40 @@ async function start(){
     return {assistant:document.querySelectorAll('.message.assistant').length>before.assistant,error:Array.from(document.querySelectorAll('.message.error .message-text')).slice(before.error).map(e=>e.textContent).join(' | ')||null,activity:Array.from(document.querySelectorAll('.message.activity')).slice(before.activity).map(e=>e.textContent),milliseconds:Date.now()-start};
    })()`);
   }
+  if(process.argv.includes('--smoke-edit')){
+   managedSetup.edit=await window.webContents.executeJavaScript(`(async()=>{
+    const wait=async check=>{const end=Date.now()+650000;while(Date.now()<end){const value=check();if(value)return value;await new Promise(r=>setTimeout(r,100))}throw Error('Agent edit UI timed out')};
+    document.querySelector('[aria-label="Close dialog"]')?.click();await new Promise(r=>setTimeout(r,100));
+    const mode=document.querySelector('.mode-toggle');if(mode.textContent.includes('Plan'))mode.click();
+    const beforeErrors=document.querySelectorAll('.message.error').length;
+    document.querySelector('.view-toggle button[title="Preview"]').click();
+    await wait(()=>document.querySelector('iframe[title="Project preview"]')?.getAttribute('srcdoc'));
+    const savedProject=()=>new Promise((resolve,reject)=>{const open=indexedDB.open('micocode-workspace',1);open.onerror=()=>reject(open.error);open.onsuccess=()=>{const db=open.result,tx=db.transaction('state'),request=tx.objectStore('state').get('projects');request.onerror=()=>reject(request.error);request.onsuccess=()=>resolve(request.result.find(p=>p.id===localStorage.getItem('mico-project'))||request.result[0]);tx.oncomplete=()=>db.close()}});
+    const originalProject=await savedProject();
+    const input=document.querySelector('[aria-label="Message Mico"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(input,'Read index.html, then change only its title element to MicoCode Reliability Check with one exact edit_file patch. Keep all other content. Run check_project then finish.');input.dispatchEvent(new Event('input',{bubbles:true}));await new Promise(r=>setTimeout(r,100));
+    const start=Date.now();document.querySelector('[aria-label="Send message"]').click();await wait(()=>document.querySelector('[aria-label="Stop agent"]'));
+    await wait(()=>document.querySelector('[aria-label="Send message"]'));
+    const error=Array.from(document.querySelectorAll('.message.error .message-text')).slice(beforeErrors).map(e=>e.textContent).join(' | ')||null;
+    const staged=Array.from(document.querySelectorAll('.diff-file')).some(e=>e.querySelector('.diff-heading strong')?.textContent==='index.html'&&e.textContent.includes('MicoCode Reliability Check'));
+    const apply=Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='Apply all');
+    if(staged&&apply)apply.click();
+    const applied=staged?await wait(()=>document.querySelector('iframe[title="Project preview"]')?.getAttribute('srcdoc')?.includes('<title>MicoCode Reliability Check</title>')):false;
+    await new Promise(r=>setTimeout(r,750));
+    const updatedProject=await savedProject(),originalTitle=originalProject.files['index.html'].match(/<title>[^<]*/)?.[0];
+    const expectedFiles={...originalProject.files,'index.html':originalProject.files['index.html'].replace(originalTitle,'<title>MicoCode Reliability Check')};
+    const preserved=applied&&originalTitle&&Object.keys(updatedProject.files).length===Object.keys(expectedFiles).length&&Object.entries(expectedFiles).every(([path,content])=>updatedProject.files[path]===content)&&Object.keys(updatedProject.changes).length===0;
+    return {staged,applied,preserved:!!preserved,checkpoint:document.body.textContent.includes('Changes applied'),error,milliseconds:Date.now()-start};
+   })()`);
+   if(managedSetup.edit.applied){
+    await new Promise(resolve=>setTimeout(resolve,250));
+    const previewFrame=window.webContents.mainFrame.frames.find(frame=>frame.url==='about:srcdoc');
+    managedSetup.edit.preview=!!previewFrame&&await previewFrame.executeJavaScript(`(()=>{const button=document.querySelector('#start'),note=document.querySelector('#note');if(!button||!note)return false;button.click();return note.textContent==='Make a little space for your biggest idea.'})()`);
+   }
+  }
  }
  const api=await fetch(server.origin+'/api/models');
  const report={version:app.getVersion(),...state,invalidProviderRejected:invalid,statusCount,...(managedSetup?{managedSetup}:{}),apiStatus:api.status,errors};
- report.passed=state.workspace&&state.bridge&&state.node==='undefined'&&invalid&&statusCount===4&&(!managedSetup||managedSetup.status===200)&&(!managedSetup?.generation||managedSetup.generation.status===200&&managedSetup.generation.hasContent)&&(!managedSetup?.agent||managedSetup.agent.assistant&&!managedSetup.agent.error)&&api.ok&&errors.length===0;
+ report.passed=state.workspace&&state.bridge&&state.node==='undefined'&&invalid&&statusCount===4&&(!managedSetup||managedSetup.status===200)&&(!managedSetup?.generation||managedSetup.generation.status===200&&managedSetup.generation.hasContent)&&(!managedSetup?.agent||managedSetup.agent.assistant&&!managedSetup.agent.error)&&(!managedSetup?.edit||managedSetup.edit.staged&&managedSetup.edit.applied&&managedSetup.edit.preserved&&managedSetup.edit.preview&&!managedSetup.edit.error)&&api.ok&&errors.length===0;
  const screenshot=process.argv.find(x=>x.startsWith('--smoke-screenshot='))?.slice('--smoke-screenshot='.length);if(screenshot)await writeFile(screenshot,(await window.webContents.capturePage()).toPNG());
  if(smokePath)await writeFile(smokePath,JSON.stringify(report,null,2));await manager.close();await server.close();app.exit(report.passed?0:1);
 }

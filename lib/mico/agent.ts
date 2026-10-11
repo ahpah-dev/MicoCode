@@ -1,13 +1,15 @@
 import {checkProject,exactEdit,isPrivatePath,mergeFiles,qualityReview,validateReply} from './core.mjs';
 import {listProxyModels,normalizeEndpoint} from './providers.mjs';
 import {resilientRequest} from './resilience.mjs';
+import {readModelText} from './response-reader.mjs';
+import {actionSchema} from './action-schema.mjs';
+export {actionSchema} from './action-schema.mjs';
 import type {AgentReply,Changes,Config,Files,Project} from './types';
 type Chat = {role:'system'|'user'|'assistant';content:string};
-export const actionSchema = {type:'object',properties:{message:{type:'string'},actions:{type:'array',items:{type:'object',properties:{type:{type:'string',enum:['read_file','write_file','edit_file','delete_file','list_files','search','check_project','review_quality']},path:{type:'string'},content:{type:'string'},query:{type:'string'},find:{type:'string'},replace:{type:'string'},startLine:{type:'integer'},endLine:{type:'integer'}},required:['type']}},done:{type:'boolean'}},required:['message','actions','done']};
 export const systemPrompt = `You are Mico, the coding agent in MicoCode. Help create polished, accessible HTML/CSS/JavaScript websites. This workspace previews browser files only, with no Node, npm, shell, backend or deployment tools. Use relative files and vanilla JS. Do not claim you ran a command or test you did not run. Never fetch secrets or instruct quota bypasses.
 Respond ONLY with a JSON object: {"message":"a concise progress note or answer","actions":[...],"done":false}.
 Available actions: {"type":"list_files"}, {"type":"read_file","path":"index.html"}, {"type":"read_file","path":"index.html","startLine":1,"endLine":80}, {"type":"search","query":"text"}, {"type":"edit_file","path":"index.html","find":"exact unique text that was read","replace":"replacement text"}, {"type":"write_file","path":"styles.css","content":"complete file contents"}, {"type":"delete_file","path":"file.txt"}, {"type":"check_project"}, {"type":"review_quality"}.
-Read before changing. Prefer exact edit_file patches for existing files: match once, include surrounding text. Large files can be read by line ranges; do not rewrite a partially read file. Write complete files, never placeholders or ellipses. Prefer one file per reply. check_project checks JSON and local HTML resources. review_quality checks basic HTML accessibility and mobile metadata. Neither runs JavaScript or tests runtime. Changes are staged for review. Check work before setting done:true. Be concise.`;
+Read before changing. Use edit_file for existing content. Never delete and recreate a file to modify it. Preserve everything outside the requested change. For example, after reading <title>Old</title>, change its text with {"type":"edit_file","path":"index.html","find":"<title>Old</title>","replace":"<title>New</title>"}. Replacement text is literal file content: never include JSON punctuation in it. Match once and include surrounding text. Large files can be read by line ranges; do not rewrite a partially read file. Write complete files, never placeholders or ellipses. Use at most one action per reply. check_project checks JSON and local HTML resources. review_quality checks basic HTML accessibility and mobile metadata. Neither runs JavaScript or tests runtime. Changes are staged for review. Check work before setting done:true. Be concise.`;
 const polishPrompt='\nPOLISHED MODE: Make focused, maintainable changes. Preserve working features and match the existing design. For new interfaces use cohesive spacing, readable type, responsive layouts, semantic HTML, accessible labels, visible keyboard focus, and useful loading, error and empty states where relevant. Wire up every control you add. Avoid placeholder links and fake data claims. Run check_project and review_quality before finishing; report any runtime checks still needed.';
 let engine:import('@mlc-ai/web-llm').MLCEngineInterface|undefined;
 let loadedModel='';
@@ -41,28 +43,30 @@ export async function complete(messages:Chat[],config:Config,key:string,signal:A
  }
  const local=config.provider==='ollama';
  const horde=config.provider==='proxy'&&config.proxyPreset==='horde';
- const custom=config.provider==='proxy'&&!horde;
+ const opencode=config.provider==='proxy'&&config.proxyPreset==='opencode';
+ const custom=config.provider==='proxy'&&!horde&&!opencode;
   const managedLocal=config.managed&&config.routerEngine==='local'&&(local||config.freeModels.includes(config.model));
  if(managedLocal)onStatus('Generating with your local model. The first prompt may take longer while it loads; Stop cancels the request.');
- const url=local?config.ollamaUrl.replace(/\/$/,'')+'/api/chat':horde?'/api/horde':custom?normalizeEndpoint(config.proxyUrl)+'/chat/completions':'/api/ai';
- const body=local?{model:config.model,messages,stream:false,format:actionSchema,options:{temperature:config.temperature,num_predict:managedLocal?1800:4096}}:horde?{action:'complete',model:config.model,messages,temperature:config.temperature}:custom?{model:config.model,messages,temperature:config.temperature,max_tokens:managedLocal?1800:4096,stream:false}:{model:config.model,messages,temperature:config.temperature,freeFallback:config.freeFallback};
+ if(opencode&&!key)throw new Error('Add your own OpenCode Zen key in Models before sending a prompt.');
+ const url=local?config.ollamaUrl.replace(/\/$/,'')+'/api/chat':horde?'/api/horde':opencode?'/api/opencode':custom?normalizeEndpoint(config.proxyUrl)+'/chat/completions':'/api/ai';
+ const body=local?{model:config.model,messages,stream:false,think:false,format:actionSchema,options:{temperature:config.temperature,num_predict:managedLocal?1800:4096}}:horde||opencode?{action:'complete',model:config.model,messages,temperature:config.temperature}:custom?{model:config.model,messages,temperature:config.temperature,max_tokens:managedLocal?1800:4096,stream:false}:{model:config.model,messages,temperature:config.temperature,freeFallback:config.freeFallback};
  const operation=()=>fetch(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json',...(!local&&!horde&&key?{Authorization:`Bearer ${key}`}:{})},body:JSON.stringify(body),signal:AbortSignal.any([signal,AbortSignal.timeout(managedLocal?620000:130000)])});
  // Cooldowns belong to the connection, never to a model: switching models cannot reset quotas.
- const response=await resilientRequest(operation,{scope:config.provider+':'+(custom?normalizeEndpoint(config.proxyUrl):local?config.ollamaUrl:''),signal,enabled:config.resilience,paceMs:local?0:config.provider==='openrouter'?3200:1500,onStatus});
- const data=await response.json().catch(()=>({})) as {error?:{message?:string}|string;message?:{content?:string};choices?:{message?:{content?:string}}[]};
- const content=local?data.message?.content:data.choices?.[0]?.message?.content;
- if(typeof content!=='string'||!content.trim())throw new Error('The model returned no text. Try another free model.');
+ const response=await resilientRequest(operation,{scope:config.provider+':'+(opencode?'opencode':horde?'horde':custom?normalizeEndpoint(config.proxyUrl):local?config.ollamaUrl:''),signal,enabled:config.resilience,paceMs:local?0:config.provider==='openrouter'?3200:1500,onStatus});
+ const content=await readModelText(response,{local,signal});
  onToken(content);return content;
 }
 export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|'plan';config:Config;key:string;signal:AbortSignal;onMessage:(text:string,role:'assistant'|'activity')=>void;onChanges:(c:Changes)=>void;onToken:(t:string)=>void}) {
  const {project,prompt,mode,config,key,signal,onMessage,onChanges,onToken}=args;
  let changes:Changes={...project.changes};
+ const initialFiles=mergeFiles(project.files,changes) as Files;
+ const initialIssues=new Set([...checkProject(initialFiles),...(config.quality==='polished'?qualityReview(initialFiles):[])]);
  let discoveredContext:number|undefined;
    if(config.provider==='proxy') {
     onMessage('Verifying the selected route…','activity');
     let available:{id:string;contextLength?:number}[]=[];
     try{available=await listProxyModels(config,key,AbortSignal.any([signal,AbortSignal.timeout(20000)]))}
-    catch(e){if(!/returned an empty model list|returned no models/i.test((e as Error).message))throw e;onMessage('The router has no public model catalogue. Trying the model ID you entered; the router will enforce its own access rules.','activity')}
+    catch(e){if(signal.aborted)throw e;onMessage('Model discovery is unavailable: '+(e as Error).message+' Trying the selected model directly; your router will enforce its access rules.','activity')}
     const selected=available.find((m:{id:string})=>m.id===config.model);
     if(!selected&&available.length)onMessage('This model ID is not in the catalogue. Trying it directly; your router may reject unavailable or unauthorized models.','activity');
     discoveredContext=selected?.contextLength;
@@ -116,7 +120,8 @@ export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|
    observation=results.join('\n\n');if(observation.length>contextLimit){for(const path of delivered){fullyRead.delete(path);fragments.delete(path)}failed=true;observation='Tool results exceeded the context budget. File reads were withheld. Read one smaller range per step; use exact edits and preserve unread content.'}
    if(reply.done&&!failed){
     if(mode==='agent'&&Object.keys(changes).length){const merged=mergeFiles(project.files,changes) as Files;const issues=[...checkProject(merged),...(config.quality==='polished'?qualityReview(merged):[])];
-     if(issues.length&&config.quality==='polished'&&!polishPass&&step+1<config.maxSteps){polishPass=true;observation+='\nFinal static review:\n'+issues.join('\n')+'\nFix relevant issues with focused edits before finishing.';onMessage('Polish pass · checking accessibility, mobile metadata and local resources.','activity');continue}
+     const introduced=issues.filter(issue=>!initialIssues.has(issue));
+     if(introduced.length&&config.quality==='polished'&&!polishPass&&step+1<config.maxSteps){polishPass=true;observation+='\nNew issues introduced by this run:\n'+introduced.join('\n')+'\nFix only these new issues with focused edits before finishing. Preserve unrelated files and preexisting warnings.';onMessage('Polish pass · checking issues introduced by this run.','activity');continue}
      onMessage(issues.length?'Static review needs attention:\n'+issues.join('\n'):'Static review passed. Check layout and interaction in Preview before applying.','activity');
     }onToken('');return changes
    }

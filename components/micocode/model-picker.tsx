@@ -67,7 +67,7 @@ export function ModelPicker({models,value,onChange,onRefresh,refreshing=false,al
     {allowCustom&&query.trim()&&!exact&&<button type="button" className="model-option model-custom" onClick={()=>commit(query.trim())}>
     <div><strong>Use “{query.trim()}”</strong><small>custom model ID, not in the discovered list</small></div>
    </button>}
-   {flat.length===0&&<div className="model-empty">{favoritesOnly?'No saved models match. Turn off Saved or star a model to keep it here.':query.trim()?'No matching model. You can still use the exact ID you typed.':'No discovered routes yet. Connect to list them, or type a model ID.'}</div>}
+   {flat.length===0&&<div className="model-empty">{favoritesOnly?'No saved models match. Turn off Saved or star a model to keep it here.':query.trim()?(allowCustom?'No matching model. You can still use the exact ID you typed.':'No matching model. Clear the search or refresh the catalogue.'):(allowCustom?'No discovered routes yet. Connect to list them, or type a model ID.':'No discovered routes yet. Connect or refresh the catalogue.')}</div>}
   </div>}
  </div>;
 }

@@ -5,15 +5,33 @@ import {POST as horde} from '../api/horde.ts';
 import {POST as ai} from '../api/ai.ts';
 import {POST as connection} from '../api/connection.ts';
 import {GET as models} from '../api/models.ts';
+import {POST as opencode} from '../api/opencode.ts';
+import {actionSchema} from '../lib/mico/action-schema.mjs';
 
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.zip':'application/zip','.wasm':'application/wasm','.woff2':'font/woff2'};
 const json=(error,status=400)=>Response.json({error},{status});
+async function routerBody(response){
+ if(!response.body)return null;
+ const reader=response.body.getReader(),chunks=[];let bytes=0,complete=false;
+ try{
+  while(true){const {value,done}=await reader.read();if(done){complete=true;break}bytes+=value.byteLength;if(bytes>16*1024*1024){const error=new Error('Router response exceeded its size limit.');error.code='MICO_RESPONSE_LIMIT';throw error}chunks.push(value)}
+  return Buffer.concat(chunks,bytes);
+ }finally{if(!complete)await reader.cancel().catch(()=>{});reader.releaseLock()}
+}
 export function isLocalRequest(request,origin){return new URL(request.url).origin===origin&&(!request.headers.get('origin')||request.headers.get('origin')===origin)&&request.headers.get('sec-fetch-site')!=='cross-site'}
 export function managedClientConnection(connection,origin){
  if(!connection||connection.config.provider!=='proxy')return connection;
  const id=connection.config.proxyPreset;
  if(!['9router','cliproxy','litellm'].includes(id))throw new Error('Unsupported managed router.');
  return {...connection,config:{...connection.config,proxyUrl:origin+'/providers/'+id+'/v1'}};
+}
+export function managedRouterCatalogue(data,connection){
+ if(connection?.config?.proxyPreset!=='9router'||!Array.isArray(connection.openCodeFreeModels))return data;
+ const field=Array.isArray(data?.data)?'data':Array.isArray(data?.models)?'models':null;
+ if(!field)return data;
+ const existing=new Set(data[field].map(m=>m?.id));
+ const extra=connection.openCodeFreeModels.filter(m=>m&&typeof m.id==='string'&&m.id.startsWith('oc/')&&m.catalogueSource==='opencode-live'&&m.pricing?.prompt==='0'&&m.pricing?.completion==='0'&&!existing.has(m.id));
+ return {...data,[field]:[...data[field],...extra]};
 }
 export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaUpstream=()=>null,getOllamaModel=()=>null,getOllamaModels=()=>null,getManagedConnection=()=>null,fetchImpl=fetch}){
  let origin='http://127.0.0.1:'+port;
@@ -43,8 +61,13 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
     const r=await fetchImpl(target.href.replace(/\/$/,'')+'/'+action,{method:expected,redirect:'error',headers:{Authorization:'Bearer '+connection.key,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(action==='models'?20000:610000)])});
     const headers={'Content-Type':r.headers.get('content-type')||'application/json','Cache-Control':'no-store'};
     for(const name of ['retry-after','x-ratelimit-remaining','x-ratelimit-reset']){const value=r.headers.get(name);if(value)headers[name]=value}
-    return new Response(r.body,{status:r.status,headers});
-   }catch(e){if(request.signal.aborted)throw e;return json(e.name==='TimeoutError'?'The coding model took too long. Try a smaller local model or a shorter task.':'Your managed router stopped responding. Open Models and click Set up & connect.',e.name==='TimeoutError'?504:503)}
+    // Do not commit successful headers until the non-streaming router response
+    // finishes. A router process can exit after sending headers; forwarding that
+    // partial body hides the connection error behind an invalid model reply.
+    const data=await routerBody(r);
+    if(id==='9router'&&action==='models'&&r.ok){const catalogue=JSON.parse(data.toString('utf8'));return Response.json(managedRouterCatalogue(catalogue,connection),{status:r.status,headers})}
+    return new Response(data,{status:r.status,headers});
+   }catch(e){if(request.signal.aborted)throw e;if(e.code==='MICO_RESPONSE_LIMIT')return json('The router response was too large. Try a smaller task or reduce the router model catalogue.',502);return json(e.name==='TimeoutError'?'The coding model took too long. Try a smaller local model or a shorter task.':'Your managed router stopped responding. Open Models and click Set up & connect.',e.name==='TimeoutError'?504:503)}
   }
   const managed=route.match(/^\/managed\/(local|community)\/v1\/(models|chat\/completions)$/);
   if(managed||route.startsWith('/managed/v1/')){
@@ -60,7 +83,7 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
       if(!Array.isArray(body.messages)||body.messages.length>80||!body.messages.every(m=>m&&['system','user','assistant'].includes(m.role)&&typeof m.content==='string'))return json('Invalid coding messages.');
       const requested=Number(body.max_tokens);const outputLimit=Number.isFinite(requested)&&requested>0?Math.min(4096,Math.max(1,Math.floor(requested))):1800;
       try{
-       const r=await fetchImpl(upstream+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:entry.name,messages:body.messages,format:'json',stream:false,options:{temperature:Math.max(0,Math.min(1,Number(body.temperature)||.2)),num_predict:outputLimit}}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(600000)])});
+       const r=await fetchImpl(upstream+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:entry.name,messages:body.messages,format:actionSchema,stream:false,think:false,options:{temperature:Math.max(0,Math.min(1,Number.isFinite(Number(body.temperature))?Number(body.temperature):.2)),num_predict:outputLimit}}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(600000)])});
        const d=await r.json();if(!r.ok)return json('The local model could not finish this request.',r.status);
        return Response.json({id:'mico-'+Date.now(),object:'chat.completion',model:body.model,choices:[{index:0,message:{role:'assistant',content:d.message?.content||''},finish_reason:d.done_reason==='length'?'length':'stop'}],usage:{prompt_tokens:d.prompt_eval_count||0,completion_tokens:d.eval_count||0}});
       }catch(e){if(request.signal.aborted)throw e;return json(e.name==='TimeoutError'?'The local coding model took too long. Try a smaller model or a shorter task.':'The local coding engine stopped responding. Reconnect it in Models.',e.name==='TimeoutError'?504:503)}
@@ -84,10 +107,13 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
    const upstream=getOllamaUpstream();if(!upstream)return json('Set up Ollama in Connections first.',503);
    const suffix=route.slice('/managed/ollama'.length);
    if(!(request.method==='GET'&&suffix==='/api/tags')&&!(request.method==='POST'&&suffix==='/api/chat'))return json('Unsupported local model route.',404);
-   const response=await fetch(upstream+suffix,{method:request.method,headers:{'Content-Type':'application/json'},...(request.method==='POST'?{body:await request.text()}:{}),signal:request.signal});
-   return new Response(response.body,{status:response.status,headers:{'Content-Type':'application/json'}});
+   try{
+    const response=await fetchImpl(upstream+suffix,{method:request.method,headers:{'Content-Type':'application/json'},...(request.method==='POST'?{body:await request.text()}:{}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(request.method==='POST'?600000:20000)])});
+    const data=await routerBody(response);
+    return new Response(data,{status:response.status,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
+   }catch(e){if(request.signal.aborted)throw e;if(e.code==='MICO_RESPONSE_LIMIT')return json('The local model response was too large. Try a smaller task.',502);return json(e.name==='TimeoutError'?'The local coding model took too long. Try a smaller model or a shorter task.':'The local coding engine stopped responding. Reconnect it in Models.',e.name==='TimeoutError'?504:503)}
   }
-  const api=route==='/api/horde'?horde:route==='/api/ai'?ai:route==='/api/connection'?connection:route==='/api/models'?models:null;
+  const api=route==='/api/horde'?horde:route==='/api/ai'?ai:route==='/api/connection'?connection:route==='/api/models'?models:route==='/api/opencode'?opencode:null;
   if(api)return request.method===(route==='/api/models'?'GET':'POST')?api(request):json('Method not allowed.',405);
   if(request.method!=='GET')return json('Method not allowed.',405);
   if(route==='/app')return new Response(null,{status:302,headers:{Location:'/app/'}});

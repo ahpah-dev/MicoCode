@@ -8,6 +8,7 @@ import {archivePath,extractVerifiedZip,downloadVerified} from '../desktop/instal
 import {assertProvider,assertEngine,cliProxyConfig,liteLLMConfig,ProviderManager} from '../desktop/provider-manager.mjs';
 import {isLocalRequest,createLocalServer,managedClientConnection} from '../desktop/server.mjs';
 import {applyManagedConnection,discoverProxy,listProxyModels} from '../lib/mico/providers.mjs';
+import {actionSchema} from '../lib/mico/action-schema.mjs';
 
 test('provider automation only accepts supported installer IDs',()=>{for(const id of ['9router','cliproxy','litellm','ollama'])assert.equal(assertProvider(id),id);for(const id of ['../ollama','custom','powershell','9router;whoami',null])assert.throws(()=>assertProvider(id))});
 test('managed engines cannot be changed to paid or arbitrary destinations',()=>{assert.equal(assertEngine('local'),'local');assert.equal(assertEngine('community'),'community');for(const value of ['paid','https://other.example','custom',null])assert.throws(()=>assertEngine(value))});
@@ -125,12 +126,14 @@ test('managed 9Router discovery, restore, refresh, and chat include all connecte
 test('local managed generation serves every installed model',async()=>{
  const limits=[];const bodies=[];
  const inventory=[{name:'test-coder',route:'test-coder'},{name:'test-chat',route:'test-chat'}];
- const server=await createLocalServer({webDir:os.tmpdir(),port:0,gatewayKey:'private',getOllamaUpstream:()=> 'http://127.0.0.1:11434',getOllamaModels:()=> inventory,fetchImpl:async(url,options)=>{assert.equal(url,'http://127.0.0.1:11434/api/chat');const parsed=JSON.parse(options.body);bodies.push(parsed.model);limits.push(parsed.options.num_predict);return Response.json({message:{content:'{"message":"Hello"}'}})}});
+ const messages=[{role:'system',content:'Return one complete coding action object.'},{role:'user',content:'Hello'}];
+ const reply={message:'Hello',actions:[],done:true};
+ const server=await createLocalServer({webDir:os.tmpdir(),port:0,gatewayKey:'private',getOllamaUpstream:()=> 'http://127.0.0.1:11434',getOllamaModels:()=> inventory,fetchImpl:async(url,options)=>{assert.equal(url,'http://127.0.0.1:11434/api/chat');const parsed=JSON.parse(options.body);assert.deepEqual(parsed.format,actionSchema);assert.equal(parsed.think,false);assert.equal(parsed.stream,false);assert.deepEqual(parsed.messages,messages);bodies.push(parsed.model);limits.push(parsed.options.num_predict);return Response.json({message:{content:JSON.stringify(reply)}})}});
  try{
   const catalogue=await (await fetch(server.origin+'/managed/local/v1/models',{headers:{Authorization:'Bearer private'}})).json();
   assert.deepEqual(catalogue.data.map(m=>m.id),['test-coder','test-chat']);
-  for(const max_tokens of [20,9000,undefined]){const r=await fetch(server.origin+'/managed/local/v1/chat/completions',{method:'POST',headers:{Authorization:'Bearer private','Content-Type':'application/json'},body:JSON.stringify({model:'test-chat',messages:[{role:'user',content:'Hello'}],max_tokens})});assert.equal(r.status,200);assert.ok((await r.json()).choices[0].message.content)}
-  assert.deepEqual(limits,[20,4096,1800]);assert.deepEqual(bodies,['test-chat','test-chat','test-chat']);
+  for(const request of [{model:'test-coder',max_tokens:20},{model:'test-chat',max_tokens:9000},{model:'test-chat'},{model:'test-coder',max_tokens:1.9}]){const r=await fetch(server.origin+'/managed/local/v1/chat/completions',{method:'POST',headers:{Authorization:'Bearer private','Content-Type':'application/json'},body:JSON.stringify({...request,messages})});assert.equal(r.status,200);assert.deepEqual(JSON.parse((await r.json()).choices[0].message.content),reply)}
+  assert.deepEqual(limits,[20,4096,1800,1]);assert.deepEqual(bodies,['test-coder','test-chat','test-chat','test-coder']);
   const unknown=await fetch(server.origin+'/managed/local/v1/chat/completions',{method:'POST',headers:{Authorization:'Bearer private','Content-Type':'application/json'},body:JSON.stringify({model:'removed-model',messages:[{role:'user',content:'Hello'}]})});
   assert.equal(unknown.status,400);
  }finally{await server.close()}
