@@ -1,0 +1,73 @@
+/* Semantic status, elevation, and focus tokens.
+   Status colors were previously hardcoded dark values (#392c22, #3a3424,
+   #e8a9a2). On the Paper theme those render as inverted dark alerts, and
+   console error text fell to 1.58:1 against the light panel. Every status
+   surface below is defined per theme so it stays legible in all five. */
+
+/* Dark themes: tinted dark surfaces with light ink. */
+:root,
+:root[data-theme="forest"],
+:root[data-theme="graphite"],
+:root[data-theme="midnight"],
+:root[data-theme="violet"] {
+  --danger-surface: #3a2320;
+  --danger-surface-strong: #462a26;
+  --danger-line: #6d4038;
+  --danger-ink: #f0b4aa;
+  --danger-ink-strong: #f7c9c1;
+
+  --warn-surface: #372c1c;
+  --warn-surface-strong: #40331f;
+  --warn-line: #6a5730;
+  --warn-ink: #e8cb96;
+  --warn-ink-strong: #f0d9ae;
+
+  --success-surface: #1e3229;
+  --success-line: #3c6350;
+  --success-ink: #a8dcc0;
+
+  --diff-add-surface: #1c3226;
+  --diff-add-line: #3d6b52;
+  --diff-add-ink: #a9dfc0;
+  --diff-remove-surface: #3b2320;
+  --diff-remove-line: #6d4038;
+  --diff-remove-ink: #efb0a5;
+
+  /* Elevation: dark themes use deep, soft shadows. */
+  --shadow-sm: 0 1px 2px #0006;
+  --shadow-md: 0 6px 18px -4px #0007, 0 1px 3px #0005;
+  --shadow-lg: 0 24px 60px -12px #000a, 0 4px 12px #0006;
+  --shadow-focus: 0 0 0 3px color-mix(in srgb, var(--mint) 30%, transparent);
+}
+
+/* Paper is the only light theme: surfaces invert and ink darkens. */
+:root[data-theme="paper"] {
+  --danger-surface: #fbeae7;
+  --danger-surface-strong: #f7ded9;
+  --danger-line: #e0b3a9;
+  --danger-ink: #8c3223;
+  --danger-ink-strong: #6f2618;
+
+  --warn-surface: #fbf1dc;
+  --warn-surface-strong: #f7e9cd;
+  --warn-line: #dfc491;
+  --warn-ink: #77540f;
+  --warn-ink-strong: #5d4009;
+
+  --success-surface: #e6f1ea;
+  --success-line: #a9cdb9;
+  --success-ink: #1f5c42;
+
+  --diff-add-surface: #e4f1e8;
+  --diff-add-line: #a7cdb6;
+  --diff-add-ink: #1f5c42;
+  --diff-remove-surface: #fbe9e6;
+  --diff-remove-line: #e2b0a6;
+  --diff-remove-ink: #8c3223;
+
+  /* Light surfaces need softer, warmer shadows than a black wash. */
+  --shadow-sm: 0 1px 2px #2a262014;
+  --shadow-md: 0 6px 18px -6px #2a262026, 0 1px 3px #2a262014;
+  --shadow-lg: 0 24px 56px -16px #2a262033, 0 4px 12px #2a26201a;
+  --shadow-focus: 0 0 0 3px color-mix(in srgb, var(--mint) 26%, transparent);
+}
