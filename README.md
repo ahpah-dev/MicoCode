@@ -19,6 +19,8 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.6.1 fixes 9Router/OpenCode reasoning-model follow-up errors by echoing reasoning as protocol metadata without mistaking it for an agent action.
+
 Version 0.6.0 is a major visual refresh: frosted-glass top bar, luminous accents, pill navigation, glass cards, animated hero, refined composer and dialogs, and thin themed scrollbars across all five themes.
 
 Version 0.5.0 gives the explorer a visual refresh: the Open folder and Import buttons hug their content with icon chips instead of stretching to the sidebar edge, so they stay crisp at any width. The customization dropdowns keep their polished micro labels, softer corners, and tactile hover.
