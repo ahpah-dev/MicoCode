@@ -283,10 +283,10 @@ export class ProviderManager{
    const installed=(d.models||[]).map(m=>m?.name).filter(n=>typeof n==='string'&&n);
    let model=installed.find(n=>n.toLowerCase().includes('coder'))||installed[0];
   if(!model){
-   this.emit(id,'download','Downloading Qwen Coder 1.5B (about 1 GB). This model runs free on your computer…');
+   this.emit(id,'download','Downloading Qwen 2.5 Coder 7B (about 4.7 GB). This powerful coding model runs free on your computer…');
    const pull=await this.fetch(base+'/api/pull',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:versions.model,stream:true}),signal});if(!pull.ok||!pull.body)throw new Error('Ollama could not download the coding model. Check available disk space and retry.');
    const reader=pull.body.getReader(),decoder=new TextDecoder();let pending='';
-   while(true){const {value,done}=await reader.read();if(done)break;pending+=decoder.decode(value,{stream:true});let lineEnd;while((lineEnd=pending.indexOf('\n'))!==-1){const part=pending.slice(0,lineEnd);pending=pending.slice(lineEnd+1);if(!part.trim())continue;const state=JSON.parse(part);if(state.error)throw new Error('Ollama model download failed. Check your connection and disk space.');this.emit(id,'download',state.status?.startsWith('pulling')?'Downloading Qwen Coder to your computer…':state.status||'Preparing coding model…',state.total?Math.round(state.completed/state.total*100):undefined)}}
+   while(true){const {value,done}=await reader.read();if(done)break;pending+=decoder.decode(value,{stream:true});let lineEnd;while((lineEnd=pending.indexOf('\n'))!==-1){const part=pending.slice(0,lineEnd);pending=pending.slice(lineEnd+1);if(!part.trim())continue;const state=JSON.parse(part);if(state.error)throw new Error('Ollama model download failed. Check your connection and disk space.');this.emit(id,'download',state.status?.startsWith('pulling')?'Downloading Qwen 2.5 Coder 7B to your computer…':state.status||'Preparing coding model…',state.total?Math.round(state.completed/state.total*100):undefined)}}
     model=versions.model;installed.push(model);
    }
    // Every installed model becomes a selectable managed route; the coder pick stays the default.

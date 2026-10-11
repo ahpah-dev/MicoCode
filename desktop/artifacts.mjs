@@ -4,4 +4,4 @@ export const artifacts={
  uv:{version:'0.13.0',url:'https://github.com/astral-sh/uv/releases/download/0.13.0/uv-x86_64-pc-windows-msvc.zip',sha256:'088962f9e7b7bd9ea740c04c650b2a21c8928c345bd99ac24350dc924dba656c',maxBytes:25000000},
  ollama:{version:'0.40.2',url:'https://github.com/ollama/ollama/releases/download/v0.40.2/ollama-windows-amd64.zip',sha256:'e29ad1d5063dd4b54b2492d9b00adab2cff9621bfa654b6c92aa8d6f1fdfe7fc',maxBytes:1800000000},
 };
-export const versions={nine:'0.5.99',litellm:'1.104.2',python:'3.12',node:'24.21.0',model:'qwen2.5-coder:1.5b'};
+export const versions={nine:'0.5.99',litellm:'1.104.2',python:'3.12',node:'24.21.0',model:'qwen2.5-coder:7b'};

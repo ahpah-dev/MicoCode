@@ -85,7 +85,7 @@ export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|
    const files=mergeFiles(project.files,changes) as Files;
    const manifest=Object.keys(files).filter(p=>!isPrivatePath(p));
    const request=`Project: ${project.name}\nFiles: ${manifest.join(', ')}\nRecent chat: ${prior}\nUser request: ${prompt}\nMode: ${mode}. Step ${step+1}. Already staged: ${Object.keys(changes).join(', ')||'none'}.\nLatest tool results:\n${observation.slice(-contextLimit)}\nReturn the next JSON action object.`;
-   onToken('');onMessage(`Step ${step+1} · Thinking with ${config.provider==='browser'?'Qwen Coder '+config.browserSize:config.model}`,'activity');
+   onToken('');onMessage(`Step ${step+1} · Thinking with ${config.provider==='browser'?'Qwen 2.5 Coder '+config.browserSize:config.model}`,'activity');
    if(step===0)conversation.push({role:'user',content:request});
    else conversation.push({role:'user',content:'Tool execution results (already completed):\n'+observation.slice(-contextLimit)+'\nContinue toward the original task. If a file was just read, use its content above to write the edit now; do not read it again. Return the next JSON action object.'});
    const budget=contextLimit+(config.provider==='browser'?4000:8000);
