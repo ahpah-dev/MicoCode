@@ -58,7 +58,7 @@ Download the x64 installer or portable executable. The workspace, Electron, and 
 
 Open **Models → Your routers**. Choose **Use existing** on 9Router to browse models from your connected providers, or choose **Set up** to install MicoCode's private local route. Managed setup downloads and verifies providers, configures routes for installed Ollama models, and shows progress with cancellation. No global npm installation or administrator access is required.
 
-The default **local engine** uses Ollama. MicoCode reuses an existing installation and model, or downloads the official portable runtime and Qwen 2.5 Coder 7B automatically. A fresh setup may download a large runtime plus about 4.7 GB for the model. Local inference has no service quota or per-message fee; hardware, memory, context, and speed still matter.
+The default **local engine** uses Ollama. MicoCode reuses an existing installation and model, or downloads the official portable runtime and DeepSeek R1 8B automatically. A fresh setup may download a large runtime plus about 4.9 GB for the model. Local inference has no service quota or per-message fee; hardware, memory, context, and speed still matter.
 
 The optional **community engine** uses AI Horde's documented anonymous access and sends prompts and requested files to volunteer workers. It is experimental: availability, queues, and model quality vary. The public service returned generation errors during the latest release probe, so it is not the default. Additional upstream accounts require your own authorized sign-in or key. MicoCode does not create accounts, bypass provider restrictions, or enable paid fallback.
 
@@ -80,7 +80,7 @@ The console exposes named workspace commands, not an OS shell. npm builds, backe
 
 ## Other free connections
 
-The browser edition includes WebLLM (Qwen 2.5 Coder 7B) on compatible WebGPU hardware, existing local Ollama (7B–70B models), OpenRouter's zero-price router (DeepSeek, Llama 70B, Qwen 32B), OpenCode Zen's verified free text models, anonymous AI Horde, and custom OpenAI-compatible endpoints. Automatic provider installation is exclusive to Windows.
+The browser edition includes WebLLM (DeepSeek R1 8B) on compatible WebGPU hardware, existing local Ollama (DeepSeek R1 8B–70B, Llama 3.3 70B), OpenRouter's zero-price router (DeepSeek R1, DeepSeek V3, Llama 3.3 70B, Gemini Flash), OpenCode Zen's verified free text models, anonymous AI Horde, and custom OpenAI-compatible endpoints. Automatic provider installation is exclusive to Windows.
 
 For manually configured routers, set the exact URL and its own key. Remote endpoints must use HTTPS; allow the exact MicoCode origin in CORS. Browser keys are isolated by endpoint and remain in the tab's session. The picker lists exposed models and marks prices when supplied by the router. Names containing “free” are not price proof. Downstream billing in manually configured routers remains the owner's responsibility. The dedicated Zen and OpenRouter relays enforce their free model policies independently.
 

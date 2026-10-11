@@ -22,7 +22,7 @@ test('provider archives cannot escape, create links, or overwrite a destination'
  }finally{await rm(root,{recursive:true,force:true})}
 });
 test('private router configs expose every managed route on loopback',()=>{
- const routes=['qwen2-5-coder-3b','llama3-1-8b'];
+ const routes=['deepseek-r1-8b','llama3-1-8b'];
  const cli=cliProxyConfig(30001,'sk-client','http://127.0.0.1:19286/managed/v1','sk-internal','C:\\Mico\\auth',routes);
  const lite=liteLLMConfig(30002,'sk-client','http://127.0.0.1:19286/managed/v1','sk-internal',routes);
  assert.match(cli,/host: 127\.0\.0\.1/);assert.match(cli,/allow-remote: false/);assert.match(cli,/disable-control-panel: true/);
@@ -72,7 +72,7 @@ test('stopped and invalid managed routers return readable errors without arbitra
 });
 
 test('managed renderer transport accepts any configured free model',async()=>{
- const connection={config:{provider:'proxy',proxyPreset:'cliproxy',proxyUrl:'http://127.0.0.1:55002/v1',model:'qwen2-5-coder-3b',freeModels:['qwen2-5-coder-3b','llama3-1-8b']},key:'private-client'};
+ const connection={config:{provider:'proxy',proxyPreset:'cliproxy',proxyUrl:'http://127.0.0.1:55002/v1',model:'deepseek-r1-8b',freeModels:['deepseek-r1-8b','llama3-1-8b']},key:'private-client'};
  const server=await createLocalServer({webDir:os.tmpdir(),port:0,gatewayKey:'internal',getManagedConnection:()=>connection,fetchImpl:async()=>Response.json({choices:[{message:{content:'{}'}}]})});
  try{
   const endpoint=server.origin+'/providers/cliproxy/v1/chat/completions';const headers={Authorization:'Bearer private-client','Content-Type':'application/json',Origin:server.origin};

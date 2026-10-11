@@ -11,9 +11,9 @@ import {build} from 'esbuild';
 import {applyManagedConnection,catalogueError,credentialSlot,discoverProxy,fullCatalogue,listProxyModels,selectCatalogueModel,supplementOpenCodeModels} from '../lib/mico/providers.mjs';
 
 test('native Ollama setup accepts its intentionally keyless loopback connection',()=>{
- const result={config:{provider:'ollama',ollamaUrl:'http://127.0.0.1:19286/managed/ollama',model:'qwen2.5-coder:1.5b'},key:''};
+ const result={config:{provider:'ollama',ollamaUrl:'http://127.0.0.1:19286/managed/ollama',model:'deepseek-r1:8b'},key:''};
  const connected=applyManagedConnection({temperature:0.2},result);
- assert.equal(connected.managed,true);assert.equal(connected.model,'qwen2.5-coder:1.5b');assert.equal(connected.temperature,0.2);
+ assert.equal(connected.managed,true);assert.equal(connected.model,'deepseek-r1:8b');assert.equal(connected.temperature,0.2);
  assert.throws(()=>applyManagedConnection({}, {...result,config:{...result.config,ollamaUrl:'https://remote.example'}}),/local connection/);
  assert.throws(()=>applyManagedConnection({}, {...result,key:undefined}),/incomplete connection/);
  assert.throws(()=>applyManagedConnection({}, {config:{provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:55000/v1',model:'mico-free/free-code',freeModels:['mico-free/free-code']},key:''}),/incomplete connection/);

@@ -19,7 +19,7 @@ export async function loadBrowserModel(size:Config['browserSize'],progress:(s:st
  const adapter=await gpu.requestAdapter();if(!adapter)throw new Error('No compatible GPU was found. Connect Ollama or OpenRouter instead.');
  const mod=await import('@mlc-ai/web-llm');
  const precision=adapter.features.has('shader-f16')?'q4f16_1':'q4f32_1';
- const model=`Qwen2.5-Coder-${size}-Instruct-${precision}-MLC`;
+ const model=`DeepSeek-R1-Distill-Llama-8B-${precision}-MLC`;
  if(!mod.prebuiltAppConfig.model_list.some(m=>m.model_id===model))throw new Error('This model is not supported by the installed WebLLM version.');
  if(engine&&loadedModel===model)return;
  if(engine)await engine.unload();
@@ -27,7 +27,7 @@ export async function loadBrowserModel(size:Config['browserSize'],progress:(s:st
  const worker=new Worker(new URL('./llm.worker.ts',import.meta.url),{type:'module'});
  try{engine=await mod.CreateWebWorkerMLCEngine(worker,model,{initProgressCallback:p=>progress(p.text)},{context_window_size:8192});loadedModel=model;}catch(e){worker.terminate();throw e}
 }
-export function browserReady(size:Config['browserSize']) { return !!engine && loadedModel.includes(`-${size}-`); }
+export function browserReady(size:Config['browserSize']) { return !!engine && (loadedModel.includes('DeepSeek-R1') || loadedModel.includes(`-${size}-`)); }
 // Context metadata from the selected router model is in tokens; the agent
 // budgets character slices conservatively and leaves room for prompt overhead.
 export function modelContextBudget(contextLength:number|undefined,fallback:number) {
@@ -85,7 +85,7 @@ export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|
    const files=mergeFiles(project.files,changes) as Files;
    const manifest=Object.keys(files).filter(p=>!isPrivatePath(p));
    const request=`Project: ${project.name}\nFiles: ${manifest.join(', ')}\nRecent chat: ${prior}\nUser request: ${prompt}\nMode: ${mode}. Step ${step+1}. Already staged: ${Object.keys(changes).join(', ')||'none'}.\nLatest tool results:\n${observation.slice(-contextLimit)}\nReturn the next JSON action object.`;
-   onToken('');onMessage(`Step ${step+1} · Thinking with ${config.provider==='browser'?'Qwen 2.5 Coder '+config.browserSize:config.model}`,'activity');
+   onToken('');onMessage(`Step ${step+1} · Thinking with ${config.provider==='browser'?'DeepSeek R1 8B':config.model}`,'activity');
    if(step===0)conversation.push({role:'user',content:request});
    else conversation.push({role:'user',content:'Tool execution results (already completed):\n'+observation.slice(-contextLimit)+'\nContinue toward the original task. If a file was just read, use its content above to write the edit now; do not read it again. Return the next JSON action object.'});
    const budget=contextLimit+(config.provider==='browser'?4000:8000);

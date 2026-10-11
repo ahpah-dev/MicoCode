@@ -53,23 +53,23 @@ test('credentials never follow a switch to another endpoint or anonymous provide
  writeCredential(first,'',storage);assert.equal(readCredential(first,storage),'');
 });
 test('native setup accepts the managed route allowlist and keeps a still-offered selection',()=>{
- const result={config:{provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:55000/v1',model:'mico-free/qwen2-5-coder-3b',freeModels:['mico-free/qwen2-5-coder-3b','mico-free/llama3-1-8b'],routerEngine:'local'},key:'private'};
+ const result={config:{provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:55000/v1',model:'mico-free/deepseek-r1-8b',freeModels:['mico-free/deepseek-r1-8b','mico-free/llama3-1-8b'],routerEngine:'local'},key:'private'};
  const config=applyManagedConnection({freeModels:[],routerFreeOnly:false,temperature:.2},result);
- assert.deepEqual(config.freeModels,['mico-free/qwen2-5-coder-3b','mico-free/llama3-1-8b']);assert.equal(config.routerFreeOnly,false);assert.equal(config.managed,true);assert.equal(config.temperature,.2);assert.equal(config.model,'mico-free/qwen2-5-coder-3b');
+ assert.deepEqual(config.freeModels,['mico-free/deepseek-r1-8b','mico-free/llama3-1-8b']);assert.equal(config.routerFreeOnly,false);assert.equal(config.managed,true);assert.equal(config.temperature,.2);assert.equal(config.model,'mico-free/deepseek-r1-8b');
  assert.equal(applyManagedConnection({model:'mico-free/llama3-1-8b'},result).model,'mico-free/llama3-1-8b');
- assert.equal(applyManagedConnection({model:'stale-route'},result).model,'mico-free/qwen2-5-coder-3b');
- const data={data:[{id:'mico-free/qwen2-5-coder-3b'},{id:'unknown'},{id:'paid',pricing:{prompt:1,completion:1}}]};
+ assert.equal(applyManagedConnection({model:'stale-route'},result).model,'mico-free/deepseek-r1-8b');
+ const data={data:[{id:'mico-free/deepseek-r1-8b'},{id:'unknown'},{id:'paid',pricing:{prompt:1,completion:1}}]};
  assert.deepEqual(freeCatalogue(data,config.freeModels,config.routerFreeOnly).map(m=>m.id),[]);
- assert.deepEqual(freeCatalogue(data,config.freeModels,true).map(m=>m.id),['mico-free/qwen2-5-coder-3b']);
+ assert.deepEqual(freeCatalogue(data,config.freeModels,true).map(m=>m.id),['mico-free/deepseek-r1-8b']);
  assert.deepEqual(freeCatalogue(data).map(m=>m.id),[]);
  for(const patch of [{proxyUrl:'https://remote.example/v1'},{model:'paid'},{proxyPreset:'custom'},{freeModels:[]},{freeModels:['other']}])assert.throws(()=>applyManagedConnection({}, {...result,config:{...result.config,...patch}}));
  assert.throws(()=>applyManagedConnection({},{config:{provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:55000/v1',model:'mico-free/free-code'},key:''}));
 });
 test('managed route slugs stay readable, bounded, and unique',()=>{
  const taken=new Set();
- assert.equal(routeSlug('Qwen2.5-Coder:3b',taken),'qwen2-5-coder-3b');
- assert.equal(routeSlug('hf.co/unsloth/Qwen3-8B-GGUF:Q4_K_M',taken),'hf-co-unsloth-qwen3-8b-gguf-q4-k-m');
- assert.equal(routeSlug('Qwen2.5-Coder:3b',taken),'qwen2-5-coder-3b-2');
+ assert.equal(routeSlug('DeepSeek-R1:8b',taken),'deepseek-r1-8b');
+ assert.equal(routeSlug('hf.co/unsloth/DeepSeek-R1-Distill-Llama-8B-GGUF',taken),'hf-co-unsloth-deepseek-r1-distill-llama-8b-gguf');
+ assert.equal(routeSlug('DeepSeek-R1:8b',taken),'deepseek-r1-8b-2');
  assert.equal(routeSlug('!!!',taken),'model');
  assert.equal(routeSlug('',taken),'model-2');
 });
