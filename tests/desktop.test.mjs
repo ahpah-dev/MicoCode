@@ -7,6 +7,7 @@ import JSZip from 'jszip';
 import {archivePath,extractVerifiedZip,downloadVerified} from '../desktop/install.mjs';
 import {assertProvider,assertEngine,cliProxyConfig,liteLLMConfig,ProviderManager} from '../desktop/provider-manager.mjs';
 import {isLocalRequest,createLocalServer,managedClientConnection} from '../desktop/server.mjs';
+import {applyManagedConnection,discoverProxy,listProxyModels} from '../lib/mico/providers.mjs';
 
 test('provider automation only accepts supported installer IDs',()=>{for(const id of ['9router','cliproxy','litellm','ollama'])assert.equal(assertProvider(id),id);for(const id of ['../ollama','custom','powershell','9router;whoami',null])assert.throws(()=>assertProvider(id))});
 test('managed engines cannot be changed to paid or arbitrary destinations',()=>{assert.equal(assertEngine('local'),'local');assert.equal(assertEngine('community'),'community');for(const value of ['paid','https://other.example','custom',null])assert.throws(()=>assertEngine(value))});
@@ -43,7 +44,7 @@ test('cancelled setup does not begin a download',async()=>{const abort=new Abort
 
 test('managed renderer transport reaches its real router without requiring upstream CORS',async()=>{
  const connection={config:{provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:55001/v1',model:'mico-free/free-code'},key:'private-client'};let sent;let calls=0;
- const server=await createLocalServer({webDir:os.tmpdir(),port:0,gatewayKey:'internal',getManagedConnection:id=>id==='9router'?connection:null,fetchImpl:async(url,options)=>{calls++;sent={url,options};return Response.json({error:{message:'Daily free quota exhausted'}},{status:429,headers:{'Retry-After':'120'}})}});
+  const server=await createLocalServer({webDir:os.tmpdir(),port:0,gatewayKey:'internal',getManagedConnection:id=>id==='9router'?connection:null,fetchImpl:async(url,options)=>{calls++;sent={url,options};if(JSON.parse(options.body).model==='paid-model')return Response.json({error:'Model not found by router'},{status:400});return Response.json({error:{message:'Daily free quota exhausted'}},{status:429,headers:{'Retry-After':'120'}})}});
  try{
   const exposed=managedClientConnection(connection,server.origin);assert.equal(exposed.config.proxyUrl,server.origin+'/providers/9router/v1');assert.equal(connection.config.proxyUrl,'http://127.0.0.1:55001/v1');
   const endpoint=exposed.config.proxyUrl+'/chat/completions';const headers={Authorization:'Bearer private-client','Content-Type':'application/json',Origin:server.origin};
@@ -53,7 +54,7 @@ test('managed renderer transport reaches its real router without requiring upstr
   assert.equal((await fetch(endpoint,{method:'POST',headers,body:JSON.stringify({...body,model:'paid-model'})})).status,400);
   assert.equal((await fetch(endpoint,{method:'POST',headers:{...headers,Origin:'https://other.example'},body:JSON.stringify(body)})).status,403);
   assert.equal((await fetch(endpoint,{method:'POST',headers:{...headers,Authorization:'Bearer other'},body:JSON.stringify(body)})).status,401);
-  assert.equal((await fetch(endpoint)).status,401);assert.equal(calls,1);
+   assert.equal((await fetch(endpoint)).status,401);assert.equal(calls,2);
  }finally{await server.close()}
 });
 
@@ -77,6 +78,47 @@ test('managed renderer transport accepts any configured free model',async()=>{
   const body={model:'llama3-1-8b',messages:[{role:'user',content:'Hi'}]};
   assert.equal((await fetch(endpoint,{method:'POST',headers,body:JSON.stringify(body)})).status,200);
   assert.equal((await fetch(endpoint,{method:'POST',headers,body:JSON.stringify({...body,model:'paid-model'})})).status,400);
+ }finally{await server.close()}
+});
+
+test('managed 9Router discovery, restore, refresh, and chat include all connected providers',async()=>{
+ const connection={config:{provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:55001/v1',model:'mico-free/free-code',freeModels:['mico-free/free-code'],routerFreeOnly:true,managed:true,routerEngine:'local'},key:'private-client'};
+ let catalogue=[
+  {id:'mico-free/free-code',owned_by:'mico-free'},
+  {id:'cc/claude-sonnet',owned_by:'cc'},
+  {id:'cx/gpt-codex',owned_by:'cx',pricing:{prompt:'2',completion:'8'}},
+  {id:'my-coding-combo',owned_by:'combo'},
+ ];
+ const chats=[];
+ const upstream=async(url,options)=>{
+  assert.equal(options.headers.Authorization,'Bearer private-client');
+  if(url.endsWith('/models'))return Response.json({data:catalogue});
+  const body=JSON.parse(options.body);chats.push(body);
+  if(body.model==='denied-model')return Response.json({error:{message:'Not permitted by 9Router'}},{status:403});
+  return Response.json({choices:[{message:{content:'Response from '+body.model}}]});
+ };
+ const server=await createLocalServer({webDir:os.tmpdir(),port:0,getManagedConnection:()=>connection,fetchImpl:upstream});
+ try{
+  const manager=new ProviderManager({dataDir:os.tmpdir(),runtimeDir:os.tmpdir(),gatewayBase:server.origin+'/managed/v1',gatewayKey:'internal',vault:{},fetchImpl:upstream});
+  await manager.verify(connection,new AbortController().signal);
+  assert.deepEqual(connection.config.routerModels,catalogue.map(m=>m.id));
+  const restored=applyManagedConnection({model:'cx/gpt-codex'},managedClientConnection(connection,server.origin));
+  assert.equal(restored.model,'cx/gpt-codex');
+  assert.equal(restored.managed,true);assert.equal(restored.routerFreeOnly,false);
+  assert.deepEqual(restored.freeModels,['mico-free/free-code']);
+  // Use the actual desktop HTTP relay and the same discovery function native setup uses.
+  const discovered=await discoverProxy(restored,connection.key,AbortSignal.timeout(5000));
+  assert.deepEqual(discovered.map(m=>m.id),catalogue.map(m=>m.id));
+  assert.equal(discovered.find(m=>m.id==='cx/gpt-codex').paid,true);
+  for(const model of ['cc/claude-sonnet','cx/gpt-codex','my-coding-combo']){
+   const r=await fetch(restored.proxyUrl+'/chat/completions',{method:'POST',headers:{Authorization:'Bearer '+connection.key,'Content-Type':'application/json'},body:JSON.stringify({model,messages:[{role:'user',content:'Build a portfolio'}],url:'https://wrong.example',stream:true})});
+   assert.equal(r.status,200);assert.equal((await r.json()).choices[0].message.content,'Response from '+model);
+   assert.equal(chats.at(-1).model,model);assert.equal(chats.at(-1).url,undefined);assert.equal(chats.at(-1).stream,false);
+  }
+  catalogue=[...catalogue,{id:'ag/gemini-pro',owned_by:'ag'}];
+  assert.equal((await listProxyModels(restored,connection.key,AbortSignal.timeout(5000))).length,5);
+  const denied=await fetch(restored.proxyUrl+'/chat/completions',{method:'POST',headers:{Authorization:'Bearer '+connection.key,'Content-Type':'application/json'},body:JSON.stringify({model:'denied-model',messages:[{role:'user',content:'Hi'}]})});
+  assert.equal(denied.status,403);assert.equal((await denied.json()).error.message,'Not permitted by 9Router');
  }finally{await server.close()}
 });
 

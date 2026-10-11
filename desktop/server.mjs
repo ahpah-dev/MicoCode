@@ -31,9 +31,11 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
     let body;
     if(expected==='POST'){
      body=await request.json();
-     // The router may offer several managed routes; the allowlist travels with the connection.
-     const allowed=new Set([connection.config.model,...(Array.isArray(connection.config.freeModels)?connection.config.freeModels:[])]);
-     if(!allowed.has(body.model))return json('This managed router supports only its configured free models.');
+      if(typeof body.model!=='string'||!body.model.trim()||body.model.length>=200)return json('Select a valid router model.');
+      // 9Router owns its provider catalogue and enforces API-key access itself.
+      // Its connected provider models are not limited to MicoCode's local engine.
+      const allowed=new Set([connection.config.model,...(Array.isArray(connection.config.freeModels)?connection.config.freeModels:[])]);
+      if(id!=='9router'&&!allowed.has(body.model))return json('This managed router supports only its configured free models.');
      if(!Array.isArray(body.messages)||!body.messages.length||body.messages.length>80||!body.messages.every(m=>m&&['system','user','assistant'].includes(m.role)&&typeof m.content==='string'))return json('Invalid coding messages.');
      body={model:body.model,messages:body.messages,temperature:body.temperature,max_tokens:body.max_tokens,stream:false};
     }

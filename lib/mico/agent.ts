@@ -42,7 +42,7 @@ export async function complete(messages:Chat[],config:Config,key:string,signal:A
  const local=config.provider==='ollama';
  const horde=config.provider==='proxy'&&config.proxyPreset==='horde';
  const custom=config.provider==='proxy'&&!horde;
- const managedLocal=config.managed&&config.routerEngine==='local';
+  const managedLocal=config.managed&&config.routerEngine==='local'&&(local||config.freeModels.includes(config.model));
  if(managedLocal)onStatus('Generating with your local model. The first prompt may take longer while it loads; Stop cancels the request.');
  const url=local?config.ollamaUrl.replace(/\/$/,'')+'/api/chat':horde?'/api/horde':custom?normalizeEndpoint(config.proxyUrl)+'/chat/completions':'/api/ai';
  const body=local?{model:config.model,messages,stream:false,format:actionSchema,options:{temperature:config.temperature,num_predict:managedLocal?1800:4096}}:horde?{action:'complete',model:config.model,messages,temperature:config.temperature}:custom?{model:config.model,messages,temperature:config.temperature,max_tokens:managedLocal?1800:4096,stream:false}:{model:config.model,messages,temperature:config.temperature,freeFallback:config.freeFallback};

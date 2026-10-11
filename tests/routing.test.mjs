@@ -55,11 +55,12 @@ test('credentials never follow a switch to another endpoint or anonymous provide
 test('native setup accepts the managed route allowlist and keeps a still-offered selection',()=>{
  const result={config:{provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:55000/v1',model:'mico-free/qwen2-5-coder-3b',freeModels:['mico-free/qwen2-5-coder-3b','mico-free/llama3-1-8b'],routerEngine:'local'},key:'private'};
  const config=applyManagedConnection({freeModels:[],routerFreeOnly:false,temperature:.2},result);
- assert.deepEqual(config.freeModels,['mico-free/qwen2-5-coder-3b','mico-free/llama3-1-8b']);assert.equal(config.routerFreeOnly,true);assert.equal(config.managed,true);assert.equal(config.temperature,.2);assert.equal(config.model,'mico-free/qwen2-5-coder-3b');
+ assert.deepEqual(config.freeModels,['mico-free/qwen2-5-coder-3b','mico-free/llama3-1-8b']);assert.equal(config.routerFreeOnly,false);assert.equal(config.managed,true);assert.equal(config.temperature,.2);assert.equal(config.model,'mico-free/qwen2-5-coder-3b');
  assert.equal(applyManagedConnection({model:'mico-free/llama3-1-8b'},result).model,'mico-free/llama3-1-8b');
  assert.equal(applyManagedConnection({model:'stale-route'},result).model,'mico-free/qwen2-5-coder-3b');
  const data={data:[{id:'mico-free/qwen2-5-coder-3b'},{id:'unknown'},{id:'paid',pricing:{prompt:1,completion:1}}]};
- assert.deepEqual(freeCatalogue(data,config.freeModels,config.routerFreeOnly).map(m=>m.id),['mico-free/qwen2-5-coder-3b']);
+ assert.deepEqual(freeCatalogue(data,config.freeModels,config.routerFreeOnly).map(m=>m.id),[]);
+ assert.deepEqual(freeCatalogue(data,config.freeModels,true).map(m=>m.id),['mico-free/qwen2-5-coder-3b']);
  assert.deepEqual(freeCatalogue(data).map(m=>m.id),[]);
  for(const patch of [{proxyUrl:'https://remote.example/v1'},{model:'paid'},{proxyPreset:'custom'},{freeModels:[]},{freeModels:['other']}])assert.throws(()=>applyManagedConnection({}, {...result,config:{...result.config,...patch}}));
  assert.throws(()=>applyManagedConnection({},{config:{provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:55000/v1',model:'mico-free/free-code'},key:''}));
@@ -83,7 +84,7 @@ test('switching provider profiles preserves native ownership, engine, and free d
  const native=applyManagedConnection({}, {config:{provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:55000/v1',model:'mico-free/free-code',freeModels:['mico-free/free-code'],routerEngine:'community'},key:'private'});
  rememberProfile(native,storage);
  const restored=recallProfile({provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:20128/v1',freeModels:[],routerFreeOnly:false,managed:false},storage);
- assert.equal(restored.managed,true);assert.equal(restored.routerEngine,'community');assert.equal(restored.proxyUrl,native.proxyUrl);assert.deepEqual(restored.freeModels,native.freeModels);assert.equal(restored.routerFreeOnly,true);
+ assert.equal(restored.managed,true);assert.equal(restored.routerEngine,'community');assert.equal(restored.proxyUrl,native.proxyUrl);assert.deepEqual(restored.freeModels,native.freeModels);assert.equal(restored.routerFreeOnly,false);
 });
 test('legacy manual profiles are never promoted to managed or declared-free routes',()=>{
  const storage={getItem:()=>JSON.stringify({'proxy:9router':{model:'unknown',proxyUrl:'http://127.0.0.1:20128/v1'}})};

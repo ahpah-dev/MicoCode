@@ -6,6 +6,8 @@ Little ideas. Real things. A free agentic coding workspace for Windows and the b
 
 ## Windows app
 
+Version 0.4.1 fixes the remaining one-model restriction in managed 9Router connections. The picker now loads the full `/v1/models` catalogue, including providers and combos connected through **Open 9Router dashboard**. The desktop chat relay forwards those model IDs to 9Router instead of restricting requests to the MicoCode/Ollama routes. Model discovery runs when you open Models, and refresh reloads the catalogue without restarting the router. Provider selections survive managed restore and reconnect. Install 0.4.1, open Models, then refresh the model catalogue on the same 9Router where you connected your providers.
+
 Version 0.4.0 makes your own 9Router a first-class connection in the Windows app. Choose **Use existing** to connect to your running router and browse every model and combo it exposes, grouped by provider. Refresh the catalogue, save favorite models, and see reported pricing and context windows. Model choice is retained, the agent budgets from model context metadata, and restart no longer replaces your own router with MicoCode's private managed instance. If models are missing, check the key's permissions, enabled models per connection, and disabled list in the router dashboard. Provider quotas and billing remain controlled by those providers.
 
 The 0.4.0 Windows downloads include the refreshed workspace design and searchable model picker. Install over the previous version. For your own 9Router, open **Models → Your routers → Use existing**, enter its API key, then connect. MicoCode reads `/v1/models`; an unrestricted 9Router API key shows all enabled provider models and combos.
