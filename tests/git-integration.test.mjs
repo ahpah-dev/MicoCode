@@ -71,7 +71,7 @@ test('validateReply supports native git actions', () => {
   })), /Unsupported git command/);
 });
 
-test('readModelText extracts reasoning_content when content is empty', async () => {
+test('readModelText never treats reasoning_content as an agent action', async () => {
   const reasoningObj = {
     choices: [{
       message: {
@@ -80,8 +80,9 @@ test('readModelText extracts reasoning_content when content is empty', async () 
       }
     }]
   };
-  const text = await readModelText(Response.json(reasoningObj));
-  assert.equal(text, '{"message":"Thinking done","actions":[],"done":true}');
+  let reasoning = '';
+  await assert.rejects(readModelText(Response.json(reasoningObj), {onReasoning: value => { reasoning = value; }}), /no assistant text/);
+  assert.equal(reasoning, '{"message":"Thinking done","actions":[],"done":true}');
 });
 
 test('desktop git functions work on temporary repositories', async () => {

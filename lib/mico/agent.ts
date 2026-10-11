@@ -6,7 +6,7 @@ import {actionSchema} from './action-schema.mjs';
 export {actionSchema} from './action-schema.mjs';
 import {executePublish} from './plugins.ts';
 import type {AgentReply,Changes,Config,Files,Project} from './types';
-type Chat = {role:'system'|'user'|'assistant';content:string};
+type Chat = {role:'system'|'user'|'assistant';content:string;reasoning_content?:string};
 export const systemPrompt = `You are Mico, the coding agent in MicoCode. Help create polished, accessible HTML/CSS/JavaScript websites. This workspace previews browser files only, with no Node, npm, shell, or backend. Use relative files and vanilla JS. Do not claim you ran a command or test you did not run. Never fetch secrets or instruct quota bypasses.
 Respond ONLY with a JSON object: {"message":"a concise progress note or answer","actions":[...],"done":false}.
 Available actions: {"type":"list_files"}, {"type":"read_file","path":"index.html"}, {"type":"read_file","path":"index.html","startLine":1,"endLine":80}, {"type":"search","query":"text"}, {"type":"edit_file","path":"index.html","find":"exact unique text that was read","replace":"replacement text"}, {"type":"write_file","path":"styles.css","content":"complete file contents"}, {"type":"delete_file","path":"file.txt"}, {"type":"check_project"}, {"type":"review_quality"}, {"type":"publish","target":"github"|"vercel"|"netlify"|"custom","repo":"repo-name","message":"commit message"}, {"type":"git","command":"status"|"commit"|"push"|"pull"|"init"|"log"|"branch"|"diff","message":"commit message"}.
@@ -36,7 +36,7 @@ export function modelContextBudget(contextLength:number|undefined,fallback:numbe
  return Math.min(240000,Math.max(12000,Math.floor(contextLength*1.6)));
 }
 export function stopBrowser() {engine?.interruptGenerate();}
-export async function complete(messages:Chat[],config:Config,key:string,signal:AbortSignal,onToken:(t:string)=>void,onStatus:(t:string)=>void=()=>{}) {
+export async function complete(messages:Chat[],config:Config,key:string,signal:AbortSignal,onToken:(t:string)=>void,onStatus:(t:string)=>void=()=>{},onReasoning:(t:string)=>void=()=>{}) {
  if(config.provider==='browser') {
    if(!browserReady(config.browserSize)||!engine)throw new Error('Load a browser model in Connections first.');
    const stream=await engine.chat.completions.create({messages,stream:true,temperature:config.temperature,max_tokens:1800,response_format:{type:'json_object',schema:JSON.stringify(actionSchema)}});
@@ -58,7 +58,7 @@ export async function complete(messages:Chat[],config:Config,key:string,signal:A
   const operation=()=>fetch(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json',...(!local&&!horde&&effectiveKey?{Authorization:`Bearer ${effectiveKey}`}:{})},body:JSON.stringify(body),signal:AbortSignal.any([signal,AbortSignal.timeout(managedLocal?620000:130000)])});
  // Cooldowns belong to the connection, never to a model: switching models cannot reset quotas.
  const response=await resilientRequest(operation,{scope:config.provider+':'+(opencode?'opencode':horde?'horde':custom?normalizeEndpoint(config.proxyUrl):local?config.ollamaUrl:''),signal,enabled:config.resilience,paceMs:local?0:config.provider==='openrouter'?3200:1500,onStatus});
- const content=await readModelText(response,{local,signal});
+  const content=await readModelText(response,{local,signal,onReasoning});
  onToken(content);return content;
 }
 export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|'plan';config:Config;key:string;signal:AbortSignal;onMessage:(text:string,role:'assistant'|'activity')=>void;onChanges:(c:Changes)=>void;onToken:(t:string)=>void}) {
@@ -92,9 +92,10 @@ export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|
    if(step===0)conversation.push({role:'user',content:request});
    else conversation.push({role:'user',content:'Tool execution results (already completed):\n'+observation.slice(-contextLimit)+'\nContinue toward the original task. If a file was just read, use its content above to write the edit now; do not read it again. Return the next JSON action object.'});
    const budget=contextLimit+(config.provider==='browser'?4000:8000);
-   if((config.compactContext||config.provider==='browser')&&conversation.length>4&&conversation.reduce((n,m)=>n+m.content.length,0)>budget){const before=conversation.reduce((n,m)=>n+m.content.length,0);conversation.splice(2,conversation.length-4);onMessage(`Context optimized · removed ${Math.round((before-conversation.reduce((n,m)=>n+m.content.length,0))/4).toLocaleString()} estimated tokens of older tool results; keeping your task and latest read.`,'activity')}
-   let raw:string;
-    try{raw=await complete(conversation,config,key,signal,onToken,text=>onMessage(text,'activity'))}
+    const conversationSize=()=>conversation.reduce((n,m)=>n+m.content.length+(m.reasoning_content?.length||0),0);
+    if((config.compactContext||config.provider==='browser')&&conversation.length>4&&conversationSize()>budget){const before=conversationSize();conversation.splice(2,conversation.length-4);onMessage(`Context optimized · removed ${Math.round((before-conversationSize())/4).toLocaleString()} estimated tokens of older tool results; keeping your task and latest read.`,'activity')}
+    let raw:string,reasoningContent='';
+    try{raw=await complete(conversation,config,key,signal,onToken,text=>onMessage(text,'activity'),text=>{reasoningContent=text})}
     catch(e){
      if(signal.aborted)throw e;
      // A truncated reply is never applied, but it is repairable: ask the model
@@ -105,7 +106,9 @@ export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|
      observation='Your last reply was cut off at the output limit before its JSON closed, so it was discarded. Reply again with one short JSON object: keep the message to one sentence and stage the smallest complete file or edit that fits. Do not repeat work that is already staged.';
      continue
     }
-   conversation.push({role:'assistant',content:raw});
+    // Echo OpenCode reasoning in the protocol field required by some upstreams;
+    // never merge it into the visible JSON action or expose it as generated text.
+    conversation.push({role:'assistant',content:raw,...(config.provider==='proxy'&&config.proxyPreset==='9router'&&reasoningContent?{reasoning_content:reasoningContent}:{})});
    if(signal.aborted)throw new DOMException('Stopped','AbortError');
    let reply:AgentReply;
    try{reply=validateReply(raw);invalid=0}catch(e){if(++invalid>2)throw new Error('This model could not follow the action format after two repairs. Select another free model; staged work is preserved.');onMessage('The response was incomplete or invalid. Asking the model to repair it.','activity');observation=`Your last output could not be parsed: ${String(e)}. Use the exact JSON schema. Prefer one small exact edit per response, keeping output short.`;continue}

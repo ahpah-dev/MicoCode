@@ -10,6 +10,17 @@ test('compatible chat responses support text blocks and preserve code verbatim',
  assert.equal(await readModelText(Response.json({choices:[{message:{content:[{type:'reasoning',text:'do not execute'},{type:'text',text:code}]}}]})),code);
  assert.equal(await readModelText(Response.json({message:{content:code}}),{local:true}),code);
 });
+test('9Router reasoning is carried as assistant metadata without replacing the visible answer',async()=>{
+ const answer='{"message":"Reading","actions":[{"type":"read_file","path":"index.html"}],"done":false}';
+ let reasoning='';
+ assert.equal(await readModelText(Response.json({choices:[{message:{content:answer,reasoning_content:'private model reasoning'}}]}),{onReasoning:value=>{reasoning=value}}),answer);
+ assert.equal(reasoning,'private model reasoning');
+ const streamed='data: '+JSON.stringify({choices:[{delta:{reasoning_content:'private '}}]})+'\n\n'+'data: '+JSON.stringify({choices:[{delta:{reasoning_content:'reasoning',content:answer},finish_reason:'stop'}]})+'\n\n'+'data: [DONE]\n\n';
+ reasoning='';
+ assert.equal(await readModelText(new Response(streamed,{headers:{'content-type':'text/event-stream'}}),{onReasoning:value=>{reasoning=value}}),answer);
+ assert.equal(reasoning,'private reasoning');
+ await assert.rejects(()=>readModelText(Response.json({choices:[{message:{content:'',reasoning_content:'not an agent answer'}}]})),/no assistant text/);
+});
 test('router SSE text is decoded when nonstreaming requests still return streams',async()=>{
  const parts=['{"message":"ok",','"actions":[],"done":true}'];
  const raw=parts.map(content=>'data: '+JSON.stringify({choices:[{delta:{content}}]})+'\r\n\r\n').join('')+'data: [DONE]\r\n\r\n';
@@ -80,5 +91,24 @@ test('a unavailable catalogue does not prevent a configured model from completin
   const project={id:'edit',name:'edit',files:{'index.html':'<h1>Hello</h1>'},active:'index.html',messages:[],checkpoints:[],changes:{},updated:0};
   const result=await runAgent({project,prompt:'Change the heading',mode:'agent',config:{...defaultConfig,provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:9999/v1',model:'oc/free-model',quality:'focused',maxSteps:3,resilience:false},key:'test-key',signal:new AbortController().signal,onMessage:text=>notes.push(text),onChanges:()=>{},onToken:()=>{}});
   assert.equal(result['index.html'],'<h1>Welcome</h1>');assert.equal(project.files['index.html'],'<h1>Hello</h1>');assert.equal(calls,2);assert.ok(notes.some(text=>text.includes('Catalogue temporarily unavailable')));
+ }finally{globalThis.fetch=prior}
+});
+test('9Router OpenCode reasoning is echoed on the next agent turn',async()=>{
+ const prior=globalThis.fetch;const requests=[];
+ globalThis.fetch=async(url,init={})=>{
+  if(String(url).endsWith('/models'))return Response.json({data:[{id:'oc/deepseek-free',owned_by:'oc'}]});
+  const body=JSON.parse(init.body);requests.push(body);
+  const content=requests.length===1
+   ?JSON.stringify({message:'Reading the file.',actions:[{type:'read_file',path:'index.html'}],done:false})
+   :JSON.stringify({message:'Updating the heading.',actions:[{type:'edit_file',path:'index.html',find:'Hello',replace:'Welcome'}],done:true});
+  return Response.json({choices:[{message:{content,reasoning_content:'preserve this reasoning for the OpenCode follow-up'}}]});
+ };
+ try{
+  const project={id:'reasoning',name:'reasoning',files:{'index.html':'<h1>Hello</h1>'},active:'index.html',messages:[],checkpoints:[],changes:{},updated:0};
+  const result=await runAgent({project,prompt:'Change the heading',mode:'agent',config:{...defaultConfig,provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:9999/v1',model:'oc/deepseek-free',managed:true,quality:'focused',maxSteps:2,resilience:false},key:'test-key',signal:new AbortController().signal,onMessage:()=>{},onChanges:()=>{},onToken:()=>{}});
+  assert.equal(result['index.html'],'<h1>Welcome</h1>');
+  const followup=requests[1].messages.find(message=>message.role==='assistant');
+  assert.equal(followup.content,JSON.stringify({message:'Reading the file.',actions:[{type:'read_file',path:'index.html'}],done:false}));
+  assert.equal(followup.reasoning_content,'preserve this reasoning for the OpenCode follow-up');
  }finally{globalThis.fetch=prior}
 });
