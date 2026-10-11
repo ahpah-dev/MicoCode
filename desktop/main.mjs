@@ -1,9 +1,10 @@
 import {app,BrowserWindow,ipcMain,nativeTheme,safeStorage,shell,session,dialog} from 'electron';
-import {readFile,writeFile,mkdir,rename} from 'node:fs/promises';
+import {readFile,writeFile,mkdir,rename,realpath} from 'node:fs/promises';
 import {randomBytes} from 'node:crypto';
 import path from 'node:path';
 import {ProviderManager,assertProvider} from './provider-manager.mjs';
 import {createLocalServer,managedClientConnection} from './server.mjs';
+import {applyFolderChanges,scanFolder} from './folders.mjs';
 
 const smoke=process.argv.includes('--smoke-test');
 const smokePath=process.argv.find(x=>x.startsWith('--smoke-output='))?.slice('--smoke-output='.length);
@@ -11,7 +12,7 @@ const smokeProvider=process.argv.find(x=>x.startsWith('--smoke-provider='))?.sli
 const testData=process.argv.find(x=>x.startsWith('--test-data='))?.slice('--test-data='.length);
 if(smoke&&testData)app.setPath('userData',path.resolve(testData));
 app.setAppUserModelId('app.micocode.desktop');
-let window,manager,server,quitting=false;const dashboards=new Set();
+let window,manager,server,quitting=false;const dashboards=new Set(),authorizedFolders=new Set();
 const backgrounds={forest:'#111815',graphite:'#151515',midnight:'#101624',violet:'#191322',paper:'#f8f6ef'};
 const allowedHosts=new Set(['micocode.vercel.app','github.com','openrouter.ai','opencode.ai','models.dev','docs.litellm.ai','ollama.com','docs.ollama.com','oai.aihorde.net','aihorde.net','nodejs.org']);
 function safeExternal(url){try{const u=new URL(url);return u.protocol==='https:'&&allowedHosts.has(u.hostname)&&!u.username&&!u.password}catch{return false}}
@@ -45,7 +46,23 @@ async function start(){
  let restoration;
  ipcMain.handle('mico:restore',event=>{validateSender(event);return restoration||(restoration=manager.restore().then(result=>managedClientConnection(result,server.origin)))});
  ipcMain.handle('mico:stop',(event,provider)=>{validateSender(event);return manager.stop(assertProvider(provider))});
- ipcMain.handle('mico:appearance',(event,theme)=>{validateSender(event);if(!Object.hasOwn(backgrounds,theme))throw new Error('Unknown theme.');window.setBackgroundColor(backgrounds[theme]);nativeTheme.themeSource=theme==='paper'?'light':'dark'});
+  ipcMain.handle('mico:appearance',(event,theme)=>{validateSender(event);if(!Object.hasOwn(backgrounds,theme))throw new Error('Unknown theme.');window.setBackgroundColor(backgrounds[theme]);nativeTheme.themeSource=theme==='paper'?'light':'dark'});
+  ipcMain.handle('mico:open-folder',async event=>{
+   validateSender(event);
+   const result=await dialog.showOpenDialog(window,{title:'Open a project folder',buttonLabel:'Open folder',properties:['openDirectory']});
+   if(result.canceled||!result.filePaths[0])return null;
+   const folder=await scanFolder(result.filePaths[0]);
+   if(!Object.keys(folder.files).length)throw new Error('No supported text files found. Choose a folder with HTML, CSS, JavaScript, JSON, Markdown, text, SVG, or CSV files.');
+   authorizedFolders.add(folder.root);
+   return folder;
+  });
+  ipcMain.handle('mico:apply-folder',async(event,folder,changes)=>{
+   validateSender(event);
+   if(typeof folder!=='string'||!changes||typeof changes!=='object'||Array.isArray(changes))throw new Error('Invalid folder changes.');
+   const root=await realpath(folder);
+   if(!authorizedFolders.has(root))throw new Error('Reopen this folder in MicoCode before writing changes to it.');
+   return applyFolderChanges(root,changes);
+  });
  ipcMain.handle('mico:dashboard',async(event,provider)=>{
   validateSender(event);assertProvider(provider);const connection=manager.connections.get(provider);if(!connection?.dashboard)throw new Error('Set up 9Router before opening its dashboard.');
   const url=new URL(connection.dashboard);const dashboardSession=session.fromPartition('persist:micocode-9router');

@@ -180,6 +180,23 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .check-toggle.on{background:color-mix(in srgb,var(--mint) 35%,var(--tone-20));border-color:color-mix(in srgb,var(--mint) 55%,var(--tone-35))}
 .check-toggle.on>span{left:18px;background:var(--mint)}
 
+/* Open-folder workflow: make the live link visible and distinguish it from a copy. */
+.explorer-actions{display:grid;gap:5px;padding:8px 10px 4px}
+.explorer-actions .import-link{width:100%;justify-content:flex-start;min-height:34px;padding:7px 9px;border:1px solid transparent;border-radius:8px;color:var(--tone-65)}
+.explorer-actions .import-link:first-child{color:var(--mint);background:color-mix(in srgb,var(--mint) 8%,var(--tone-10));border-color:color-mix(in srgb,var(--mint) 18%,var(--tone-25))}
+.explorer-actions .import-link:hover{background:var(--tone-20);border-color:var(--tone-35);color:var(--tone-90)}
+.folder-link-banner{min-height:46px;display:flex;align-items:center;gap:10px;padding:7px 16px;border-bottom:1px solid var(--tone-25);background:color-mix(in srgb,var(--warn-surface) 68%,var(--tone-10));color:var(--warn-ink)}
+.folder-link-banner>svg{flex:none;color:var(--mint)}
+.folder-link-banner>span{display:flex;flex:1;min-width:0;flex-direction:column;gap:2px}
+.folder-link-banner strong{font-size:10px;color:var(--tone-90);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.folder-link-banner small{font-size:9px;color:var(--tone-65);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.folder-link-banner .secondary{min-height:29px;padding:5px 9px;font-size:9px}
+.folder-link-banner.connected{background:color-mix(in srgb,var(--success-surface) 74%,var(--tone-10));border-bottom-color:var(--success-line)}
+.folder-link-banner.connected>svg{color:var(--success-ink)}
+.folder-apply-note{display:flex;align-items:center;gap:8px;margin:-8px 0 17px;padding:9px 12px;border:1px solid var(--success-line);border-radius:9px;background:var(--success-surface);color:var(--success-ink);font-size:10px}
+.folder-apply-note strong{font-weight:650}
+@media(max-width:600px){.folder-link-banner{gap:7px;padding:7px 9px}.folder-link-banner small{max-width:45vw}.folder-link-banner .secondary{padding:5px 7px}}
+
 /* Dropdowns: native selects, dressed to match the workspace. The chevron is
    drawn from theme tokens so it follows every theme, and the popup list
    inherits the root color scheme instead of forcing dark. */

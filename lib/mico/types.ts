@@ -3,7 +3,7 @@ export type Files = Record<string, string>;
 export type Changes = Record<string, string | null>;
 export type Message = { id:string; role:'user'|'assistant'|'activity'|'error'; text:string; time:number };
 export type Checkpoint = { id:string; name:string; time:number; files:Files };
-export type Project = { id:string; name:string; files:Files; active:string; messages:Message[]; checkpoints:Checkpoint[]; changes:Changes; updated:number };
+export type Project = { id:string; name:string; files:Files; active:string; messages:Message[]; checkpoints:Checkpoint[]; changes:Changes; updated:number; sourceFolder?:string };
 export type ProxyPreset = '9router'|'litellm'|'cliproxy'|'horde'|'opencode'|'custom';
 export type Config = {
  managed?:boolean;
