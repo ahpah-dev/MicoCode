@@ -4,6 +4,19 @@ Little ideas. Real things. A free agentic coding workspace for Windows and the b
 
 [Website & downloads](https://micocode.vercel.app) · [Browser workspace](https://micocode.vercel.app/app/) · [Windows releases](https://github.com/ahpah-dev/MicoCode/releases)
 
+## Screenshots
+
+![MicoCode workspace](docs/screenshots/welcome.png)
+
+![Code editor with live preview](docs/screenshots/editor-preview.png)
+
+Five themes, one workspace:
+
+| Midnight | Violet |
+| --- | --- |
+| ![Midnight](docs/screenshots/theme-midnight.png) | ![Violet](docs/screenshots/theme-violet.png) |
+| **Graphite** | **Paper** |
+| ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
 Version 0.6.0 is a major visual refresh: frosted-glass top bar, luminous accents, pill navigation, glass cards, animated hero, refined composer and dialogs, and thin themed scrollbars across all five themes.
