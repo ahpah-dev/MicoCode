@@ -11,5 +11,16 @@ if(process.isMainFrame)contextBridge.exposeInMainWorld('micoDesktop',Object.free
  appearance:theme=>ipcRenderer.invoke('mico:appearance',theme),
  openFolder:()=>ipcRenderer.invoke('mico:open-folder'),
  applyFolderChanges:(folder,changes)=>ipcRenderer.invoke('mico:apply-folder',folder,changes),
+ git:{
+  isAvailable:()=>ipcRenderer.invoke('mico:git-available'),
+  status:folder=>ipcRenderer.invoke('mico:git-status',folder),
+  init:folder=>ipcRenderer.invoke('mico:git-init',folder),
+  commit:(folder,message,files)=>ipcRenderer.invoke('mico:git-commit',folder,message,files),
+  log:(folder,max)=>ipcRenderer.invoke('mico:git-log',folder,max),
+  push:(folder,remote,branch)=>ipcRenderer.invoke('mico:git-push',folder,remote,branch),
+  pull:(folder,remote,branch)=>ipcRenderer.invoke('mico:git-pull',folder,remote,branch),
+  diff:(folder,file)=>ipcRenderer.invoke('mico:git-diff',folder,file),
+  branch:folder=>ipcRenderer.invoke('mico:git-branch',folder),
+ },
  onProgress:callback=>{const listener=(_event,progress)=>callback(progress);ipcRenderer.on('mico:progress',listener);return()=>ipcRenderer.removeListener('mico:progress',listener)},
 }));

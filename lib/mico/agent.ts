@@ -1,5 +1,5 @@
 import {checkProject,exactEdit,isPrivatePath,mergeFiles,qualityReview,validateReply} from './core.mjs';
-import {listProxyModels,normalizeEndpoint} from './providers.mjs';
+import {listProxyModels,normalizeEndpoint,readCredential} from './providers.mjs';
 import {resilientRequest} from './resilience.mjs';
 import {readModelText} from './response-reader.mjs';
 import {actionSchema} from './action-schema.mjs';
@@ -9,8 +9,8 @@ import type {AgentReply,Changes,Config,Files,Project} from './types';
 type Chat = {role:'system'|'user'|'assistant';content:string};
 export const systemPrompt = `You are Mico, the coding agent in MicoCode. Help create polished, accessible HTML/CSS/JavaScript websites. This workspace previews browser files only, with no Node, npm, shell, or backend. Use relative files and vanilla JS. Do not claim you ran a command or test you did not run. Never fetch secrets or instruct quota bypasses.
 Respond ONLY with a JSON object: {"message":"a concise progress note or answer","actions":[...],"done":false}.
-Available actions: {"type":"list_files"}, {"type":"read_file","path":"index.html"}, {"type":"read_file","path":"index.html","startLine":1,"endLine":80}, {"type":"search","query":"text"}, {"type":"edit_file","path":"index.html","find":"exact unique text that was read","replace":"replacement text"}, {"type":"write_file","path":"styles.css","content":"complete file contents"}, {"type":"delete_file","path":"file.txt"}, {"type":"check_project"}, {"type":"review_quality"}, {"type":"publish","target":"github"|"vercel"|"netlify"|"custom","repo":"repo-name","message":"commit message"}.
-Read before changing. Use edit_file for existing content. Never delete and recreate a file to modify it. Preserve everything outside the requested change. For example, after reading <title>Old</title>, change its text with {"type":"edit_file","path":"index.html","find":"<title>Old</title>","replace":"<title>New</title>"}. Replacement text is literal file content: never include JSON punctuation in it. Match once and include surrounding text. Large files can be read by line ranges; do not rewrite a partially read file. Write complete files, never placeholders or ellipses. Use at most one action per reply. check_project checks JSON and local HTML resources. review_quality checks basic HTML accessibility and mobile metadata. Use publish when asked to publish, deploy, or push the project to GitHub, Vercel, Netlify, or another site. Changes are staged for review. Check work before setting done:true. Be concise.`;
+Available actions: {"type":"list_files"}, {"type":"read_file","path":"index.html"}, {"type":"read_file","path":"index.html","startLine":1,"endLine":80}, {"type":"search","query":"text"}, {"type":"edit_file","path":"index.html","find":"exact unique text that was read","replace":"replacement text"}, {"type":"write_file","path":"styles.css","content":"complete file contents"}, {"type":"delete_file","path":"file.txt"}, {"type":"check_project"}, {"type":"review_quality"}, {"type":"publish","target":"github"|"vercel"|"netlify"|"custom","repo":"repo-name","message":"commit message"}, {"type":"git","command":"status"|"commit"|"push"|"pull"|"init"|"log"|"branch"|"diff","message":"commit message"}.
+Read before changing. Use edit_file for existing content. Never delete and recreate a file to modify it. Preserve everything outside the requested change. For example, after reading <title>Old</title>, change its text with {"type":"edit_file","path":"index.html","find":"<title>Old</title>","replace":"<title>New</title>"}. Replacement text is literal file content: never include JSON punctuation in it. Match once and include surrounding text. Large files can be read by line ranges; do not rewrite a partially read file. Write complete files, never placeholders or ellipses. Use at most one action per reply. check_project checks JSON and local HTML resources. review_quality checks basic HTML accessibility and mobile metadata. Use publish when asked to deploy or push to GitHub/Vercel/Netlify. Use git for native Git operations (status, commit, push, pull, log, init) in local folders. Changes are staged for review. Check work before setting done:true. Be concise.`;
 const polishPrompt='\nPOLISHED MODE: Make focused, maintainable changes. Preserve working features and match the existing design. For new interfaces use cohesive spacing, readable type, responsive layouts, semantic HTML, accessible labels, visible keyboard focus, and useful loading, error and empty states where relevant. Wire up every control you add. Avoid placeholder links and fake data claims. Run check_project and review_quality before finishing; report any runtime checks still needed.';
 let engine:import('@mlc-ai/web-llm').MLCEngineInterface|undefined;
 let loadedModel='';
@@ -54,7 +54,8 @@ export async function complete(messages:Chat[],config:Config,key:string,signal:A
   // truncated any write_file carrying a complete page and reported an output
   // limit instead of an edit.
   const body=local?{model:config.model,messages,stream:false,think:false,format:actionSchema,options:{temperature:config.temperature,num_predict:4096}}:horde||opencode?{action:'complete',model:config.model,messages,temperature:config.temperature}:custom?{model:config.model,messages,temperature:config.temperature,max_tokens:4096,stream:false}:{model:config.model,messages,temperature:config.temperature,freeFallback:config.freeFallback};
- const operation=()=>fetch(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json',...(!local&&!horde&&key?{Authorization:`Bearer ${key}`}:{})},body:JSON.stringify(body),signal:AbortSignal.any([signal,AbortSignal.timeout(managedLocal?620000:130000)])});
+  const effectiveKey=key||(!local&&!horde&&config.provider==='proxy'?readCredential(config):'');
+  const operation=()=>fetch(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json',...(!local&&!horde&&effectiveKey?{Authorization:`Bearer ${effectiveKey}`}:{})},body:JSON.stringify(body),signal:AbortSignal.any([signal,AbortSignal.timeout(managedLocal?620000:130000)])});
  // Cooldowns belong to the connection, never to a model: switching models cannot reset quotas.
  const response=await resilientRequest(operation,{scope:config.provider+':'+(opencode?'opencode':horde?'horde':custom?normalizeEndpoint(config.proxyUrl):local?config.ollamaUrl:''),signal,enabled:config.resilience,paceMs:local?0:config.provider==='openrouter'?3200:1500,onStatus});
  const content=await readModelText(response,{local,signal});
@@ -138,7 +139,46 @@ export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|
       if(pubRes.success){results.push(`Successfully published to ${target}! URL: ${pubRes.url}`);onMessage(`Published to ${target}! ${pubRes.url}`,'activity')}
       else{failed=true;results.push(`Publish to ${target} failed: ${pubRes.message}`);onMessage(pubRes.message,'activity')}
      }
-     onMessage(`${action.type.replaceAll('_',' ')}${path?' · '+path:action.query?' · '+action.query:action.target?' · '+action.target:''}`,'activity');
+     if(action.type==='git'){
+      const cmd=action.command||'status';
+      onMessage(`Running git ${cmd}…`,'activity');
+      const desktop=typeof window!=='undefined'?window.micoDesktop:undefined;
+      if(desktop?.git&&project.sourceFolder){
+       try{
+        if(cmd==='status'){
+         const res=await desktop.git.status(project.sourceFolder);
+         const summary=res.isRepo?`Branch: ${res.branch}. ${res.clean?'Working tree clean.':`Modified: ${res.modified.length}, Staged: ${res.staged.length}, Untracked: ${res.untracked.length}`}`:'Not a git repository.';
+         results.push(`Git status:\n${summary}`);onMessage(`Git status: ${summary}`,'activity');
+        }else if(cmd==='commit'){
+         const res=await desktop.git.commit(project.sourceFolder,action.message||'Update from MicoCode');
+         results.push(`Git commit successful:\n${res.output}`);onMessage(`Git commit: ${action.message||'Update from MicoCode'}`,'activity');
+        }else if(cmd==='push'){
+         const res=await desktop.git.push(project.sourceFolder);
+         results.push(`Git push output:\n${res.output}`);onMessage('Git push complete.','activity');
+        }else if(cmd==='pull'){
+         const res=await desktop.git.pull(project.sourceFolder);
+         results.push(`Git pull output:\n${res.output}`);onMessage('Git pull complete.','activity');
+        }else if(cmd==='init'){
+         await desktop.git.init(project.sourceFolder);
+         results.push('Git repository initialized.');onMessage('Git repository initialized.','activity');
+        }else if(cmd==='log'){
+         const logs=await desktop.git.log(project.sourceFolder,5);
+         const list=logs.map(l=>`${l.shortHash} - ${l.message} (${l.author})`).join('\n');
+         results.push(`Recent git commits:\n${list||'No commits yet.'}`);onMessage('Loaded git log.','activity');
+        }else if(cmd==='diff'){
+         const diff=await desktop.git.diff(project.sourceFolder);
+         results.push(`Git diff:\n${diff||'No changes.'}`);onMessage('Checked git diff.','activity');
+        }else if(cmd==='branch'){
+         const b=await desktop.git.branch(project.sourceFolder);
+         results.push(`Git branches:\nCurrent: ${b.current}\nAll: ${b.branches.join(', ')}`);onMessage(`Current branch: ${b.current}`,'activity');
+        }
+       }catch(e){failed=true;results.push(`Git ${cmd} failed: ${(e as Error).message}`);onMessage(`Git ${cmd} failed: ${(e as Error).message}`,'activity')}
+      }else{
+       results.push(`Native Git commands require an opened folder in the MicoCode desktop app. In the browser, you can publish directly to GitHub using the Plugins dialog or publish action.`);
+       onMessage(`Git ${cmd} requires desktop folder mode.`,'activity');
+      }
+     }
+     onMessage(`${action.type.replaceAll('_',' ')}${path?' · '+path:action.query?' · '+action.query:action.target?' · '+action.target:action.command?' · '+action.command:''}`,'activity');
    }
    observation=results.join('\n\n');if(observation.length>contextLimit){for(const path of delivered){fullyRead.delete(path);fragments.delete(path)}failed=true;observation='Tool results exceeded the context budget. File reads were withheld. Read one smaller range per step; use exact edits and preserve unread content.'}
    if(reply.done&&!failed){

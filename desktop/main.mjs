@@ -5,6 +5,7 @@ import path from 'node:path';
 import {ProviderManager,assertProvider} from './provider-manager.mjs';
 import {createLocalServer,managedClientConnection} from './server.mjs';
 import {applyFolderChanges,scanFolder} from './folders.mjs';
+import {gitStatus,gitInit,gitCommit,gitLog,gitBranch,gitPush,gitPull,gitDiff,isGitAvailable} from './git.mjs';
 
 const smoke=process.argv.includes('--smoke-test');
 const smokePath=process.argv.find(x=>x.startsWith('--smoke-output='))?.slice('--smoke-output='.length);
@@ -62,6 +63,47 @@ async function start(){
    const root=await realpath(folder);
    if(!authorizedFolders.has(root))throw new Error('Reopen this folder in MicoCode before writing changes to it.');
    return applyFolderChanges(root,changes);
+  });
+  ipcMain.handle('mico:git-available',()=>isGitAvailable());
+  ipcMain.handle('mico:git-status',async(event,folder)=>{
+   validateSender(event);const root=await realpath(folder);
+   if(!authorizedFolders.has(root))throw new Error('Unauthorized folder.');
+   return gitStatus(root);
+  });
+  ipcMain.handle('mico:git-init',async(event,folder)=>{
+   validateSender(event);const root=await realpath(folder);
+   if(!authorizedFolders.has(root))throw new Error('Unauthorized folder.');
+   return gitInit(root);
+  });
+  ipcMain.handle('mico:git-commit',async(event,folder,message,files)=>{
+   validateSender(event);const root=await realpath(folder);
+   if(!authorizedFolders.has(root))throw new Error('Unauthorized folder.');
+   return gitCommit(root,message,files);
+  });
+  ipcMain.handle('mico:git-log',async(event,folder,max)=>{
+   validateSender(event);const root=await realpath(folder);
+   if(!authorizedFolders.has(root))throw new Error('Unauthorized folder.');
+   return gitLog(root,max);
+  });
+  ipcMain.handle('mico:git-push',async(event,folder,remote,branch)=>{
+   validateSender(event);const root=await realpath(folder);
+   if(!authorizedFolders.has(root))throw new Error('Unauthorized folder.');
+   return gitPush(root,remote,branch);
+  });
+  ipcMain.handle('mico:git-pull',async(event,folder,remote,branch)=>{
+   validateSender(event);const root=await realpath(folder);
+   if(!authorizedFolders.has(root))throw new Error('Unauthorized folder.');
+   return gitPull(root,remote,branch);
+  });
+  ipcMain.handle('mico:git-diff',async(event,folder,file)=>{
+   validateSender(event);const root=await realpath(folder);
+   if(!authorizedFolders.has(root))throw new Error('Unauthorized folder.');
+   return gitDiff(root,file);
+  });
+  ipcMain.handle('mico:git-branch',async(event,folder)=>{
+   validateSender(event);const root=await realpath(folder);
+   if(!authorizedFolders.has(root))throw new Error('Unauthorized folder.');
+   return gitBranch(root);
   });
  ipcMain.handle('mico:dashboard',async(event,provider)=>{
   validateSender(event);assertProvider(provider);const connection=manager.connections.get(provider);if(!connection?.dashboard)throw new Error('Set up 9Router before opening its dashboard.');
