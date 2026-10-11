@@ -244,6 +244,13 @@ input:focus,textarea:focus,select:focus{border-color:color-mix(in srgb,var(--min
 .info-box{border-radius:12px}
 .modal-actions{position:sticky;bottom:-28px;padding:14px 0 0;margin-top:22px;background:linear-gradient(0deg,var(--surface-panel) 65%,transparent)}
 
+/* Customization dropdowns: micro labels above a soft, tactile select. */
+.modal label{font-size:11px;font-weight:650;letter-spacing:.3px}
+.modal select{font-weight:600;border-radius:12px;border-color:var(--stroke-strong);background-color:color-mix(in srgb,var(--surface-raised) 55%,var(--surface-panel));box-shadow:inset 0 1px 0 rgb(255 255 255/.06),0 1px 2px rgb(0 0 0/.25);padding:10px 34px 10px 12px}
+.modal select:hover{border-color:color-mix(in srgb,var(--mint) 45%,var(--stroke-strong));background-color:color-mix(in srgb,var(--surface-raised) 85%,var(--surface-panel))}
+.modal select:focus{border-color:color-mix(in srgb,var(--mint) 60%,var(--stroke-strong))}
+.modal select option{font-weight:500}
+
 /* Changes and preview should read as review tools, not raw debug panes. */
 .changes-view{padding:clamp(18px,3vw,34px)}
 .changes-heading{padding-bottom:17px;border-bottom:1px solid var(--stroke-subtle)}

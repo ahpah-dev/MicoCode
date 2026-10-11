@@ -6,6 +6,8 @@ Little ideas. Real things. A free agentic coding workspace for Windows and the b
 
 ## Windows app
 
+Version 0.4.9 lets the explorer Open folder and Import buttons stretch with the sidebar when you resize it, and gives the customization dropdowns a polished look with micro labels, softer corners, and a tactile hover and focus treatment.
+
 Version 0.4.8 makes the console draggable like the side panels: drag its top edge, use the arrow keys, or double-click to reset the height — it persists across restarts. The Open folder and Import buttons in the explorer keep a tidy fixed size instead of stretching with the sidebar, and the chat box no longer frames every click with a green ring.
 
 Version 0.4.6 gives the whole workspace a cohesive visual system: clearer navigation, more deliberate surfaces, calmer spacing, a redesigned first-run Welcome, richer chat and review states, and an editor that follows the active theme instead of showing CodeMirror’s stock slate. All five themes and mobile layout were checked in the running app.
