@@ -15,7 +15,7 @@ export type Config = {
  resilience:boolean; compactContext:boolean; freeFallback:boolean; quality:'polished'|'focused';
   uiDensity:UiDensity; uiTextSize:UiTextSize; editorFont:number; reduceMotion:boolean; agentSide:AgentSide; showTips:boolean;
 };
-export type AgentAction = { type:'read_file'|'write_file'|'edit_file'|'delete_file'|'search'|'list_files'|'check_project'|'review_quality'; path?:string; content?:string; query?:string; find?:string; replace?:string; startLine?:number; endLine?:number };
+export type AgentAction = { type:'read_file'|'write_file'|'edit_file'|'delete_file'|'search'|'list_files'|'check_project'|'review_quality'|'publish'; path?:string; content?:string; query?:string; find?:string; replace?:string; startLine?:number; endLine?:number; target?:'github'|'vercel'|'netlify'|'custom'; repo?:string; message?:string };
 export type AgentReply = { message:string; actions:AgentAction[]; done:boolean };
 export const defaultConfig:Config = {provider:'openrouter',model:'openrouter/free',ollamaUrl:'http://localhost:11434',browserSize:'9B',temperature:0.2,maxSteps:12,proxyPreset:'9router',proxyUrl:'http://127.0.0.1:20128/v1',freeModels:[],routerFreeOnly:false,resilience:true,compactContext:true,freeFallback:true,quality:'polished',uiDensity:'comfortable',uiTextSize:'standard',editorFont:13,reduceMotion:false,agentSide:'right',showTips:true};
 export const uid = () => crypto.randomUUID();
