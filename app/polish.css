@@ -1,0 +1,139 @@
+/* MicoCode 0.6 — visual polish layer. Loaded last; uses theme tokens so every theme inherits it. */
+:root{
+  --glow:color-mix(in srgb,var(--mint) 22%,transparent);
+  --glass:color-mix(in srgb,var(--surface-panel) 78%,transparent);
+  --shadow-lift:0 10px 30px -10px #0009,0 2px 6px -2px #0006;
+  --shadow-pop:0 24px 60px -16px #000c,0 0 0 1px var(--stroke-subtle);
+  --ease:cubic-bezier(.22,.8,.3,1);
+}
+:root[data-theme="paper"]{--shadow-lift:0 10px 28px -12px #2a26203a,0 2px 6px -2px #2a262020;--shadow-pop:0 24px 60px -18px #2a26203f,0 0 0 1px var(--stroke-subtle)}
+
+html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+::selection{background:color-mix(in srgb,var(--mint) 32%,transparent)}
+:focus-visible{outline:2px solid color-mix(in srgb,var(--mint) 70%,transparent);outline-offset:2px;border-radius:8px}
+
+/* Scrollbars */
+*{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--tone-40) 55%,transparent) transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--tone-40) 50%,transparent);border-radius:99px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--tone-50) 70%,transparent);background-clip:content-box}
+
+/* Ambient backdrop */
+body,.app-shell{background:
+  radial-gradient(1100px 520px at 12% -10%,color-mix(in srgb,var(--mint) 9%,transparent),transparent 60%),
+  radial-gradient(900px 480px at 100% 110%,color-mix(in srgb,var(--mint) 6%,transparent),transparent 60%),
+  var(--surface-canvas)}
+
+/* Top bar: frosted glass with a luminous hairline */
+.topbar{position:relative;background:var(--glass);backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);border-bottom:1px solid var(--stroke-subtle)}
+.topbar:after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--mint) 55%,transparent),transparent);opacity:.55;pointer-events:none}
+.brand{letter-spacing:-.4px}
+.top-nav button,.top-nav a{border-radius:10px;transition:background var(--motion-fast),color var(--motion-fast),box-shadow var(--motion-fast)}
+.top-nav button.active{background:linear-gradient(180deg,color-mix(in srgb,var(--mint) 18%,var(--surface-raised)),color-mix(in srgb,var(--mint) 8%,var(--surface-raised)));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mint) 30%,transparent),0 6px 18px -8px var(--glow)}
+
+/* Buttons */
+button{transition:background var(--motion-fast) var(--ease),border-color var(--motion-fast),transform var(--motion-fast) var(--ease),box-shadow var(--motion-normal) var(--ease),color var(--motion-fast)}
+button:active:not(:disabled){transform:translateY(0) scale(.98)}
+.primary{background:linear-gradient(180deg,color-mix(in srgb,var(--mint) 100%,#fff 14%),var(--mint));color:#06201a;border:1px solid color-mix(in srgb,var(--mint) 70%,#fff);box-shadow:0 8px 24px -8px var(--glow),inset 0 1px 0 #fff6}
+.primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 14px 32px -10px color-mix(in srgb,var(--mint) 45%,transparent),inset 0 1px 0 #fff7;filter:brightness(1.04)}
+.secondary{border:1px solid var(--stroke-subtle);background:linear-gradient(180deg,color-mix(in srgb,var(--surface-raised) 100%,#fff 3%),var(--surface-raised))}
+.secondary:hover:not(:disabled){border-color:var(--stroke-strong);background:var(--surface-hover);transform:translateY(-1px)}
+
+/* Sidebar & rail */
+.activity-rail{background:linear-gradient(180deg,var(--surface-panel),color-mix(in srgb,var(--surface-panel) 70%,var(--surface-canvas)))}
+.rail-button.active{background:linear-gradient(145deg,color-mix(in srgb,var(--mint) 20%,var(--surface-raised)),var(--surface-selected));box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mint) 32%,transparent),0 8px 20px -8px var(--glow)}
+.file-row{position:relative}
+.file-row.active:before{content:"";position:absolute;left:0;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--mint);box-shadow:0 0 10px var(--glow)}
+.local-card{position:relative;overflow:hidden;box-shadow:var(--shadow-lift)}
+.local-card:before{content:"";position:absolute;inset:0;background:radial-gradient(220px 90px at 0 0,color-mix(in srgb,var(--mint) 14%,transparent),transparent 70%);pointer-events:none}
+
+/* Tabs / toolbar */
+.workspace-tabs>button.active{box-shadow:0 -6px 20px -12px var(--glow);background:linear-gradient(180deg,color-mix(in srgb,var(--mint) 5%,var(--surface-canvas)),var(--surface-canvas))}
+.view-toggle{box-shadow:inset 0 1px 2px #0003}
+.view-toggle button.active{background:linear-gradient(180deg,color-mix(in srgb,var(--mint) 18%,var(--surface-raised)),var(--surface-selected))}
+
+/* Welcome */
+.welcome h1{background:linear-gradient(180deg,var(--ink-primary) 30%,color-mix(in srgb,var(--ink-primary) 62%,transparent));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.welcome h1 em{background:linear-gradient(100deg,var(--mint),color-mix(in srgb,var(--mint) 55%,#7fd6ff));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-style:normal;filter:drop-shadow(0 6px 22px var(--glow))}
+.hero-mark{animation:mico-float 6s ease-in-out infinite}
+@keyframes mico-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.orbit{animation:mico-spin 40s linear infinite}
+@keyframes mico-spin{to{transform:rotate(360deg)}}
+.welcome>*{animation:mico-rise .6s var(--ease) both}
+.welcome>*:nth-child(2){animation-delay:.04s}.welcome>*:nth-child(3){animation-delay:.08s}.welcome>*:nth-child(4){animation-delay:.12s}
+.welcome>*:nth-child(5){animation-delay:.16s}.welcome>*:nth-child(6){animation-delay:.2s}.welcome>*:nth-child(7){animation-delay:.24s}
+@keyframes mico-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.onboarding,.onboarding-step{backdrop-filter:blur(8px)}
+.onboarding-step{transition:transform var(--motion-normal) var(--ease),border-color var(--motion-normal),box-shadow var(--motion-normal)}
+.onboarding-step:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--mint) 40%,var(--stroke-subtle));box-shadow:var(--shadow-lift)}
+.template-grid>button{position:relative;overflow:hidden}
+.template-grid>button:before{content:"";position:absolute;inset:0;background:radial-gradient(260px 120px at 100% 0,color-mix(in srgb,var(--mint) 16%,transparent),transparent 70%);opacity:0;transition:opacity var(--motion-normal)}
+.template-grid>button:hover{transform:translateY(-4px);border-color:color-mix(in srgb,var(--mint) 45%,var(--stroke-subtle));box-shadow:var(--shadow-lift),0 0 0 1px color-mix(in srgb,var(--mint) 12%,transparent)}
+.template-grid>button:hover:before{opacity:1}
+
+/* Assistant panel */
+.messages{scroll-behavior:smooth}
+.message-text{line-height:1.65}
+.composer-wrap :has(>textarea){border-radius:18px;border:1px solid var(--stroke-subtle);background:linear-gradient(180deg,var(--surface-raised),color-mix(in srgb,var(--surface-raised) 78%,var(--surface-canvas)));box-shadow:var(--shadow-lift);transition:border-color var(--motion-normal),box-shadow var(--motion-normal)}
+.composer-wrap :has(>textarea):focus-within{border-color:color-mix(in srgb,var(--mint) 55%,transparent);box-shadow:var(--shadow-lift),0 0 0 4px color-mix(in srgb,var(--mint) 12%,transparent)}
+.composer-wrap textarea{background:transparent}
+
+/* Status bar & console */
+.statusbar{background:var(--glass);backdrop-filter:blur(12px)}
+.console-heading{background:var(--surface-panel)}
+
+/* Dialogs & menus */
+.modal-backdrop,.overlay,.modal-overlay{background:color-mix(in srgb,var(--surface-canvas) 55%,#000 20%);backdrop-filter:blur(8px) saturate(120%);animation:mico-fade .18s ease-out}
+.modal{border:1px solid var(--stroke-strong);border-radius:var(--r-xl);box-shadow:var(--shadow-pop);animation:mico-pop .26s var(--ease)}
+@keyframes mico-fade{from{opacity:0}to{opacity:1}}
+@keyframes mico-pop{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
+[role="menu"],[role="listbox"],.dropdown,.popover,.menu{border:1px solid var(--stroke-strong);box-shadow:var(--shadow-pop);backdrop-filter:blur(14px);animation:mico-pop .18s var(--ease)}
+input,textarea,select{transition:border-color var(--motion-fast),box-shadow var(--motion-fast),background var(--motion-fast)}
+input:focus,textarea:focus,select:focus{border-color:color-mix(in srgb,var(--mint) 55%,transparent);box-shadow:0 0 0 3px color-mix(in srgb,var(--mint) 14%,transparent);outline:none}
+
+@media (prefers-reduced-motion:reduce){*,*:before,*:after{animation:none!important;transition:none!important}}
+
+/* ---- Round 2: bolder structure ---- */
+body,.app-shell{background:
+  radial-gradient(900px 480px at 8% -8%,color-mix(in srgb,var(--mint) 16%,transparent),transparent 62%),
+  radial-gradient(800px 460px at 96% 4%,color-mix(in srgb,#7aa8ff 9%,transparent),transparent 60%),
+  radial-gradient(900px 520px at 100% 112%,color-mix(in srgb,var(--mint) 9%,transparent),transparent 60%),
+  var(--surface-canvas)}
+.topbar{min-height:60px}
+.top-nav{align-items:center}
+.top-nav button,.top-nav a{height:auto;align-self:center;padding:8px 14px;border-radius:999px}
+.top-nav button.active{color:var(--mint)}
+.connection-chip,.command-trigger,.theme-trigger,.avatar{border-radius:999px}
+.secondary.export{border-radius:999px;padding-inline:16px}
+.brand-light,.brand svg{filter:drop-shadow(0 4px 14px var(--glow))}
+
+/* Explorer actions as clean full-width rows */
+.explorer-actions{align-items:stretch!important;gap:7px!important;padding:10px 12px 6px!important}
+.explorer-actions .import-link{width:100%!important;justify-content:flex-start;border:1px solid var(--stroke-subtle)!important;background:var(--surface-raised);border-radius:12px!important}
+.explorer-actions .import-link:first-child{border-color:color-mix(in srgb,var(--mint) 36%,transparent)!important;background:linear-gradient(135deg,color-mix(in srgb,var(--mint) 16%,var(--surface-raised)),var(--surface-raised))}
+.explorer-actions .import-link:hover{transform:translateY(-1px);box-shadow:var(--shadow-lift)}
+
+/* Welcome: glass cards, left-aligned content */
+.onboarding{border-radius:20px;border:1px solid var(--stroke-subtle);background:linear-gradient(160deg,color-mix(in srgb,var(--surface-raised) 70%,transparent),color-mix(in srgb,var(--surface-panel) 55%,transparent));backdrop-filter:blur(14px);box-shadow:var(--shadow-lift)}
+.onboarding>div,.onboarding [class*=step]{border-radius:14px}
+.template-grid>button{border-radius:18px;min-height:128px;background:linear-gradient(160deg,color-mix(in srgb,var(--surface-raised) 85%,transparent),color-mix(in srgb,var(--surface-panel) 70%,transparent));backdrop-filter:blur(10px)}
+.template-grid>button strong,.template-grid>button b{letter-spacing:-.2px}
+.welcome-actions .primary{border-radius:999px;padding:12px 24px;font-size:13px}
+.welcome-actions .secondary{border-radius:999px;padding:12px 22px;font-size:13px}
+.welcome-eyebrow{padding:6px 14px;border-radius:999px;border:1px solid color-mix(in srgb,var(--mint) 22%,transparent);background:color-mix(in srgb,var(--mint) 7%,transparent);width:max-content;margin-inline:auto}
+.hero-mark{filter:drop-shadow(0 0 40px var(--glow)) drop-shadow(0 10px 30px #0008)}
+.orbit-one{border-color:color-mix(in srgb,var(--mint) 28%,transparent)}
+
+/* Assistant panel */
+.agent-panel{background:linear-gradient(180deg,var(--surface-panel),color-mix(in srgb,var(--surface-panel) 80%,var(--surface-canvas)))}
+.agent-starters>button{border-radius:14px;background:linear-gradient(135deg,var(--surface-raised),color-mix(in srgb,var(--surface-panel) 70%,transparent));transition:transform var(--motion-normal) var(--ease),border-color var(--motion-normal),box-shadow var(--motion-normal)}
+.agent-starters>button:hover{transform:translateX(3px);border-color:color-mix(in srgb,var(--mint) 40%,var(--stroke-subtle));box-shadow:var(--shadow-lift)}
+.agent-symbol{box-shadow:0 10px 30px -8px var(--glow),inset 0 0 0 1px color-mix(in srgb,var(--mint) 30%,transparent);border-radius:16px}
+.agent-welcome h2,.agent-heading h2{background:linear-gradient(180deg,var(--ink-primary),color-mix(in srgb,var(--ink-primary) 65%,transparent));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.composer-wrap{background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--surface-panel) 85%,transparent) 30%)}
+
+/* Status bar */
+.statusbar{border-top:1px solid var(--stroke-subtle)}
+
+.explorer-actions .import-link{margin:0!important;box-sizing:border-box;max-width:100%!important}
+.explorer-actions{box-sizing:border-box;width:100%}

@@ -6,3 +6,4 @@ import '../../app/product.css';
 import '../../app/visual.css';
 
 createRoot(document.getElementById('root')!).render(<Workspace/>);
+import '../../app/polish.css';
