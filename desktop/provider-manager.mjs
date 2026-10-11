@@ -281,12 +281,12 @@ export class ProviderManager{
   }
    this.ollamaUpstream=base;const r=await this.fetch(base+'/api/tags',{signal});const d=await r.json();
    const installed=(d.models||[]).map(m=>m?.name).filter(n=>typeof n==='string'&&n);
-   let model=installed.find(n=>/deepseek|coder/i.test(n))||installed[0];
+   let model=installed.find(n=>/qwen3|deepseek|devstral|coder|gemma4/i.test(n))||installed[0];
   if(!model){
-   this.emit(id,'download','Downloading DeepSeek R1 8B (about 4.9 GB). This frontier reasoning and coding model runs free on your computer…');
+   this.emit(id,'download','Downloading Qwen 3.5 9B (about 6.4 GB). This frontier reasoning and coding model runs free on your computer…');
    const pull=await this.fetch(base+'/api/pull',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:versions.model,stream:true}),signal});if(!pull.ok||!pull.body)throw new Error('Ollama could not download the coding model. Check available disk space and retry.');
    const reader=pull.body.getReader(),decoder=new TextDecoder();let pending='';
-   while(true){const {value,done}=await reader.read();if(done)break;pending+=decoder.decode(value,{stream:true});let lineEnd;while((lineEnd=pending.indexOf('\n'))!==-1){const part=pending.slice(0,lineEnd);pending=pending.slice(lineEnd+1);if(!part.trim())continue;const state=JSON.parse(part);if(state.error)throw new Error('Ollama model download failed. Check your connection and disk space.');this.emit(id,'download',state.status?.startsWith('pulling')?'Downloading DeepSeek R1 8B to your computer…':state.status||'Preparing coding model…',state.total?Math.round(state.completed/state.total*100):undefined)}}
+   while(true){const {value,done}=await reader.read();if(done)break;pending+=decoder.decode(value,{stream:true});let lineEnd;while((lineEnd=pending.indexOf('\n'))!==-1){const part=pending.slice(0,lineEnd);pending=pending.slice(lineEnd+1);if(!part.trim())continue;const state=JSON.parse(part);if(state.error)throw new Error('Ollama model download failed. Check your connection and disk space.');this.emit(id,'download',state.status?.startsWith('pulling')?'Downloading Qwen 3.5 9B to your computer…':state.status||'Preparing coding model…',state.total?Math.round(state.completed/state.total*100):undefined)}}
     model=versions.model;installed.push(model);
    }
    // Every installed model becomes a selectable managed route; the coder pick stays the default.
