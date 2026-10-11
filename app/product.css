@@ -182,10 +182,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 .check-toggle.on>span{left:18px;background:var(--mint)}
 
 /* Open-folder workflow: make the live link visible and distinguish it from a copy. */
-.explorer-actions{display:flex;flex-direction:column;align-items:stretch;gap:5px;padding:8px 10px 4px}
-.explorer-actions .import-link{width:100%;justify-content:flex-start;min-height:34px;padding:7px 10px;border:1px solid transparent;border-radius:8px;color:var(--tone-65);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.explorer-actions .import-link:first-child{color:var(--mint);background:color-mix(in srgb,var(--mint) 8%,var(--tone-10));border-color:color-mix(in srgb,var(--mint) 18%,var(--tone-25))}
+.explorer-actions{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:10px 10px 6px}
+.explorer-actions .import-link{display:inline-flex;align-items:center;gap:9px;width:auto;max-width:100%;min-height:36px;padding:5px 10px 5px 6px;border:1px solid transparent;border-radius:9px;color:var(--tone-70);font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.explorer-actions .import-link svg{flex-shrink:0;width:13px;height:13px;padding:5px;border-radius:7px;background:var(--tone-20);border:1px solid var(--tone-25);color:var(--tone-60);box-sizing:content-box}
+.explorer-actions .import-link:first-child{color:var(--mint);background:color-mix(in srgb,var(--mint) 10%,var(--tone-10));border-color:color-mix(in srgb,var(--mint) 24%,var(--tone-25))}
+.explorer-actions .import-link:first-child svg{background:color-mix(in srgb,var(--mint) 22%,var(--tone-20));border-color:color-mix(in srgb,var(--mint) 34%,var(--tone-30));color:var(--mint)}
 .explorer-actions .import-link:hover{background:var(--tone-20);border-color:var(--tone-35);color:var(--tone-90)}
+.explorer-actions .import-link:hover svg{background:var(--tone-25);border-color:var(--tone-35);color:var(--tone-80)}
 .folder-link-banner{min-height:46px;display:flex;align-items:center;gap:10px;padding:7px 16px;border-bottom:1px solid var(--tone-25);background:color-mix(in srgb,var(--warn-surface) 68%,var(--tone-10));color:var(--warn-ink)}
 .folder-link-banner>svg{flex:none;color:var(--mint)}
 .folder-link-banner>span{display:flex;flex:1;min-width:0;flex-direction:column;gap:2px}
