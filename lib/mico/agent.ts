@@ -81,12 +81,13 @@ export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|
  const instruction=systemPrompt+(config.quality==='polished'?polishPrompt:'')+(mode==='plan'?'\nPLAN MODE: Do not write, edit or delete files. Inspect files and explain your plan.':'');
  let observation='';let invalid=0;let polishPass=false;const fullyRead=new Set<string>();const fragments=new Map<string,string[]>();
  const conversation:Chat[]=[{role:'system',content:instruction}];
- for(let step=0;step<config.maxSteps;step++) {
+ const stepLimit = config.maxSteps && config.maxSteps > 0 ? config.maxSteps : 100;
+ for(let step=0;step<stepLimit;step++) {
    if(signal.aborted)throw new DOMException('Stopped','AbortError');
    const files=mergeFiles(project.files,changes) as Files;
    const manifest=Object.keys(files).filter(p=>!isPrivatePath(p));
-   const request=`Project: ${project.name}\nFiles: ${manifest.join(', ')}\nRecent chat: ${prior}\nUser request: ${prompt}\nMode: ${mode}. Step ${step+1}. Already staged: ${Object.keys(changes).join(', ')||'none'}.\nLatest tool results:\n${observation.slice(-contextLimit)}\nReturn the next JSON action object.`;
-   onToken('');onMessage(`Step ${step+1} · Thinking with ${config.provider==='browser'?(config.browserSize==='8B'?'Qwen 3 8B':'Qwen 3.5 9B'):config.model}`,'activity');
+   const request=`Project: ${project.name}\nFiles: ${manifest.join(', ')}\nRecent chat: ${prior}\nUser request: ${prompt}\nMode: ${mode}. Step ${step+1}${config.maxSteps > 0 ? ` of ${config.maxSteps}` : ''}. Already staged: ${Object.keys(changes).join(', ')||'none'}.\nLatest tool results:\n${observation.slice(-contextLimit)}\nReturn the next JSON action object.`;
+   onToken('');onMessage(`Step ${step+1}${config.maxSteps > 0 ? `/${config.maxSteps}` : ''} · Thinking with ${config.provider==='browser'?(config.browserSize==='8B'?'Qwen 3 8B':'Qwen 3.5 9B'):config.model}`,'activity');
    if(step===0)conversation.push({role:'user',content:request});
    else conversation.push({role:'user',content:'Tool execution results (already completed):\n'+observation.slice(-contextLimit)+'\nContinue toward the original task. If a file was just read, use its content above to write the edit now; do not read it again. Return the next JSON action object.'});
    const budget=contextLimit+(config.provider==='browser'?4000:8000);
@@ -143,10 +144,12 @@ export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|
    if(reply.done&&!failed){
     if(mode==='agent'&&Object.keys(changes).length){const merged=mergeFiles(project.files,changes) as Files;const issues=[...checkProject(merged),...(config.quality==='polished'?qualityReview(merged):[])];
      const introduced=issues.filter(issue=>!initialIssues.has(issue));
-     if(introduced.length&&config.quality==='polished'&&!polishPass&&step+1<config.maxSteps){polishPass=true;observation+='\nNew issues introduced by this run:\n'+introduced.join('\n')+'\nFix only these new issues with focused edits before finishing. Preserve unrelated files and preexisting warnings.';onMessage('Polish pass · checking issues introduced by this run.','activity');continue}
+     if(introduced.length&&config.quality==='polished'&&!polishPass&&step+1<stepLimit){polishPass=true;observation+='\nNew issues introduced by this run:\n'+introduced.join('\n')+'\nFix only these new issues with focused edits before finishing. Preserve unrelated files and preexisting warnings.';onMessage('Polish pass · checking issues introduced by this run.','activity');continue}
      onMessage(issues.length?'Static review needs attention:\n'+issues.join('\n'):'Static review passed. Check layout and interaction in Preview before applying.','activity');
     }onToken('');return changes
    }
  }
- onMessage('The step limit was reached. Review the staged work, then send a follow-up to continue.','assistant');onToken('');return changes;
+ onMessage(config.maxSteps > 0
+  ? `The step limit (${config.maxSteps} steps) was reached before the task finished. You can change this to "Until finished" in Settings, or reply to continue.`
+  : 'The maximum safety limit (100 steps) was reached. Review the staged work, then send a follow-up to continue.', 'assistant');onToken('');return changes;
 }

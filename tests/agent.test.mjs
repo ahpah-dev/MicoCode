@@ -129,3 +129,24 @@ test('a malformed staged title is repaired through a fresh read and exact patch 
  assert.equal(result.notes.filter(text=>text.startsWith('Polish pass')).length,1);
  assert.ok(result.notes.some(text=>text.startsWith('Static review passed.')));
 });
+
+test('default maxSteps runs until task is finished past legacy 12-step limit', async () => {
+ const replies = [];
+ for (let i = 0; i < 15; i++) {
+  if (i === 0) replies.push({message: 'read', actions: [{type: 'read_file', path: 'index.html'}], done: false});
+  else if (i === 14) replies.push({message: 'done', actions: [{type: 'edit_file', path: 'index.html', find: 'Hello', replace: 'Complete'}], done: true});
+  else replies.push({message: `step ${i}`, actions: [{type: 'check_project'}], done: false});
+ }
+ const previous = globalThis.fetch; let i = 0;
+ globalThis.fetch = async () => Response.json({message: {content: JSON.stringify(replies[i++])}});
+ try {
+  const project = {id: 'long', name: 'long', files: {'index.html': '<h1>Hello</h1>'}, active: 'index.html', messages: [], checkpoints: [], changes: {}, updated: 0};
+  const changes = await runAgent({
+   project, prompt: 'Do a 15-step task', mode: 'agent',
+   config: {...defaultConfig, provider: 'ollama', ollamaUrl: 'http://127.0.0.1:11434', model: 'test', quality: 'focused', resilience: false, maxSteps: 0},
+   key: '', signal: new AbortController().signal, onMessage: () => {}, onToken: () => {}, onChanges: () => {}
+  });
+  assert.equal(changes['index.html'], '<h1>Complete</h1>');
+  assert.equal(i, 15);
+ } finally { globalThis.fetch = previous; }
+});
