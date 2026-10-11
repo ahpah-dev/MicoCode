@@ -120,5 +120,62 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 ::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--tone-45) 80%,transparent);background-clip:padding-box}
 ::-webkit-scrollbar-track{background:transparent}
 
+:root{--editor-font-size:13px}
 @media(max-width:760px){.welcome{padding:82px 22px 20px}.welcome h1{font-size:clamp(38px,10vw,52px);letter-spacing:-2px}.welcome-first-use{top:10px;right:10px;left:10px;max-width:none}.provider-card{min-height:100px}.model-count{display:none}.managed-actions>div{flex-basis:100%}}
 @media(max-width:520px){.model-favorites-filter span{display:none}.model-favorites-filter{padding:8px}.model-option strong{max-width:200px}}
+
+/* Interface preferences: density, text size, motion, and panel side.
+   Keyed off data attributes set from the saved config, so every theme
+   inherits them without per-theme rules. */
+:root[data-ui-density="compact"] .topbar{height:56px}
+:root[data-ui-density="compact"] .file-sidebar{width:190px}
+:root[data-ui-density="compact"] .agent-panel{width:315px}
+:root[data-ui-density="compact"] .messages{padding:0 12px}
+:root[data-ui-density="compact"] .message{margin:12px 0}
+:root[data-ui-density="compact"] .welcome{padding:26px 30px 22px}
+:root[data-ui-density="compact"] .composer-wrap{padding:10px 10px 8px}
+:root[data-ui-density="compact"] .workspace-tabs>button:not(.icon-button){min-height:38px}
+:root[data-ui-density="compact"] .agent-starters button{padding:9px 10px}
+:root[data-ui-density="compact"] .pane-heading,.agent-heading{height:38px}
+:root[data-ui-text="large"] body{font-size:14px}
+:root[data-ui-text="large"] .message-text{font-size:13.5px;line-height:1.75}
+:root[data-ui-text="large"] .file-row>button:first-child{font-size:13px}
+:root[data-ui-text="large"] .agent-starters button{font-size:12px}
+:root[data-ui-text="large"] .composer textarea{font-size:13px}
+:root[data-ui-text="large"] .welcome-description{font-size:14px}
+:root[data-ui-text="large"] input,:root[data-ui-text="large"] textarea,:root[data-ui-text="large"] select{font-size:13px}
+:root[data-ui-motion="reduce"] *,:root[data-ui-motion="reduce"] *::before,:root[data-ui-motion="reduce"] *::after{animation-duration:.01ms!important;transition:none!important;scroll-behavior:auto!important}
+:root[data-agent-side="left"] .workspace-layout .activity-rail{order:0}
+:root[data-agent-side="left"] .workspace-layout .agent-panel{order:1;border-left:0;border-right:1px solid var(--line)}
+:root[data-agent-side="left"] .workspace-layout .file-sidebar{order:2}
+:root[data-agent-side="left"] .workspace-layout .main-workspace{order:3}
+@media(max-width:760px){:root[data-agent-side="left"] .agent-panel{left:0;right:auto;box-shadow:var(--shadow-lg)}}
+
+/* First-build checklist: three steps, each one click away from done. */
+.onboarding{margin:0 0 26px;border:1px solid var(--tone-25);border-radius:12px;background:color-mix(in srgb,var(--tone-10) 85%,transparent);box-shadow:var(--shadow-sm);padding:14px 16px;max-width:640px}
+.onboarding-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.onboarding-heading>span{font-size:9px;letter-spacing:1.4px;color:var(--tone-60)}
+.onboarding ol{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.onboarding li{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--tone-20);border-radius:9px;background:var(--tone-10)}
+.onboarding li.current{border-color:color-mix(in srgb,var(--mint) 40%,var(--tone-30))}
+.onboarding li.done{opacity:.78}
+.onboarding-step{width:24px;height:24px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;border:1px solid var(--tone-30);font-size:10px;color:var(--tone-60)}
+.onboarding li.done .onboarding-step{background:var(--mint);border-color:var(--mint);color:var(--accent-ink)}
+.onboarding li>div{flex:1;min-width:0}
+.onboarding strong{display:block;font-size:12px;color:var(--tone-90)}
+.onboarding small{display:block;font-size:10px;color:var(--tone-60);margin-top:2px}
+.onboarding .secondary{font-size:10px;padding:7px 10px;white-space:nowrap}
+
+/* Settings: interface controls read as plain choices, not jargon. */
+.interface-settings{padding:6px 0 20px;margin:20px 0 22px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.interface-settings h3{font-size:19px;margin:8px 0 4px}
+.interface-settings .section-label{margin-top:14px}
+.interface-settings>p{font-size:11px;color:var(--tone-60);margin:0 0 4px}
+.check-row{display:flex;align-items:center;gap:12px;padding:10px 0}
+.check-row>div{flex:1;min-width:0}
+.check-row strong{display:block;font-size:12px;color:var(--tone-85)}
+.check-row small{display:block;font-size:10px;color:var(--tone-60);margin-top:2px}
+.check-toggle{width:38px;height:22px;flex-shrink:0;border-radius:999px;border:1px solid var(--tone-35);background:var(--tone-20);position:relative;transition:background .15s,border-color .15s;padding:0}
+.check-toggle>span{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--tone-60);transition:left .15s,background .15s}
+.check-toggle.on{background:color-mix(in srgb,var(--mint) 35%,var(--tone-20));border-color:color-mix(in srgb,var(--mint) 55%,var(--tone-35))}
+.check-toggle.on>span{left:18px;background:var(--mint)}
