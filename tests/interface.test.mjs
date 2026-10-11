@@ -1,9 +1,17 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  AGENT_DEFAULT,
+  AGENT_MAX,
+  AGENT_MIN,
+  SIDEBAR_DEFAULT,
+  SIDEBAR_MAX,
+  SIDEBAR_MIN,
   applyInterfacePrefs,
+  clampPanelWidth,
   defaultInterfacePrefs,
   normalizeInterfacePrefs,
+  normalizePanelWidths,
   resolveInterface,
 } from '../lib/mico/interface.ts';
 
@@ -42,6 +50,19 @@ test('applying prefs without a document never throws', () => {
   assert.doesNotThrow(() => applyInterfacePrefs(defaultInterfacePrefs));
 });
 
+test('panel widths clamp into range and reject garbage', () => {
+  assert.equal(clampPanelWidth(200, SIDEBAR_MIN, SIDEBAR_MAX), 200);
+  assert.equal(clampPanelWidth(50, SIDEBAR_MIN, SIDEBAR_MAX), SIDEBAR_MIN);
+  assert.equal(clampPanelWidth(9999, SIDEBAR_MIN, SIDEBAR_MAX), SIDEBAR_MAX);
+  assert.equal(clampPanelWidth('oops', SIDEBAR_MIN, SIDEBAR_MAX), null);
+  assert.equal(clampPanelWidth(undefined, AGENT_MIN, AGENT_MAX), null);
+  assert.equal(clampPanelWidth(400.4, AGENT_MIN, AGENT_MAX), 400);
+  assert.deepEqual(normalizePanelWidths(undefined), {sidebarWidth: null, agentWidth: null});
+  assert.deepEqual(normalizePanelWidths({sidebarWidth: 240, agentWidth: 10}), {sidebarWidth: 240, agentWidth: AGENT_MIN});
+  assert.ok(SIDEBAR_DEFAULT >= SIDEBAR_MIN && SIDEBAR_DEFAULT <= SIDEBAR_MAX);
+  assert.ok(AGENT_DEFAULT >= AGENT_MIN && AGENT_DEFAULT <= AGENT_MAX);
+});
+
 test('the stylesheet honors every preference the settings UI offers', async () => {
   const {readFileSync} = await import('node:fs');
   const {fileURLToPath} = await import('node:url');
@@ -57,7 +78,20 @@ test('the stylesheet honors every preference the settings UI offers', async () =
     '.onboarding li.done .onboarding-step',
     '.check-toggle.on>span',
     '.interface-settings',
+    '.resize-handle',
+    '.resize-handle:focus-visible::after',
+    ':root[data-agent-side="left"] .agent-panel>.resize-handle',
+    'select{appearance:none',
+    'select option{background:var(--tone-15)',
   ]) {
     assert.ok(css.includes(selector), 'product.css is missing ' + selector);
   }
+});
+
+test('form controls inherit the theme color scheme instead of forcing dark', async () => {
+  const {readFileSync} = await import('node:fs');
+  const {fileURLToPath} = await import('node:url');
+  const globals = readFileSync(fileURLToPath(new URL('../app/globals.css', import.meta.url)), 'utf8');
+  assert.ok(globals.includes('select{color-scheme:inherit}'), 'select must inherit the per-theme color scheme');
+  assert.ok(!globals.replace(/\/\*[\s\S]*?\*\//g, '').includes('select{color-scheme:dark}'), 'hardcoded dark select scheme remains');
 });

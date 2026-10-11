@@ -78,6 +78,29 @@ export function interfacePrefsFromConfig(config: {
   });
 }
 
+export const SIDEBAR_MIN = 160;
+export const SIDEBAR_MAX = 360;
+export const SIDEBAR_DEFAULT = 215;
+export const AGENT_MIN = 280;
+export const AGENT_MAX = 560;
+export const AGENT_DEFAULT = 355;
+
+/** Clamp a saved width into range, or null when it was never set. */
+export function clampPanelWidth(value: unknown, min: number, max: number): number | null {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
+/** Saved panel widths survive only when they are usable numbers. */
+export function normalizePanelWidths(value: unknown): {sidebarWidth: number | null; agentWidth: number | null} {
+  const v = (value ?? {}) as {sidebarWidth?: unknown; agentWidth?: unknown};
+  return {
+    sidebarWidth: clampPanelWidth(v.sidebarWidth, SIDEBAR_MIN, SIDEBAR_MAX),
+    agentWidth: clampPanelWidth(v.agentWidth, AGENT_MIN, AGENT_MAX),
+  };
+}
+
 /** Pure mapping from prefs to DOM state, so it can be tested without a browser. */
 export function resolveInterface(prefs: InterfacePrefs): InterfacePresentation {
   return {
