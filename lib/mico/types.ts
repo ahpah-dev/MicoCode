@@ -10,7 +10,7 @@ export type Config = {
  routerModels?:string[];
  routerEngine?:'local'|'community';
  provider:'browser'|'ollama'|'openrouter'|'proxy'; model:string; ollamaUrl:string;
- browserSize:'9B'|'8B'|'7B'|'3B'|'1.5B'|'0.5B'; temperature:number; maxSteps:number;
+ browserSize:'9B'|'8B'; temperature:number; maxSteps:number;
  proxyPreset:ProxyPreset; proxyUrl:string; freeModels:string[]; routerFreeOnly:boolean;
  resilience:boolean; compactContext:boolean; freeFallback:boolean; quality:'polished'|'focused';
   uiDensity:UiDensity; uiTextSize:UiTextSize; editorFont:number; reduceMotion:boolean; agentSide:AgentSide; showTips:boolean;

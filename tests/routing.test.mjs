@@ -41,6 +41,8 @@ test('router catalogues group provider models with pricing flags',()=>{
 test('default coding recommendation includes current provider coding models',()=>{
  assert.equal(bestCodingModel([{id:'glm/glm-4-flash'},{id:'cc/claude-opus-4.6'},{id:'openai/gpt-5-codex'}]),'cc/claude-opus-4.6');
  assert.equal(bestCodingModel([{id:'openai/gpt-5-codex',contextLength:32000},{id:'cc/claude-sonnet-4.6',contextLength:128000}]),'cc/claude-sonnet-4.6');
+ assert.equal(bestCodingModel([{id:'glm-4.7-free',contextLength:200000},{id:'muse-spark-1.3-contributor-free',contextLength:1048576},{id:'qwen3.6-plus-free',contextLength:262144}]),'muse-spark-1.3-contributor-free');
+ assert.equal(bestCodingModel([{id:'llama-3.1-8b'},{id:'glm-5.3',contextLength:204800},{id:'google/gemma-4-31b-it:free',contextLength:262144}]),'google/gemma-4-31b-it:free');
 });
 test('credentials never follow a switch to another endpoint or anonymous provider',()=>{
  const map=new Map();const storage={getItem:key=>map.get(key),setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)};

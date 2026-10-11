@@ -98,7 +98,7 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
    if(action==='chat/completions'&&request.method==='POST'){
     const body=await request.json();if(body.model!=='free-code')return json('This managed route supports only its configured free model.');
     const r=await horde(new Request(origin+'/api/horde',{method:'POST',body:JSON.stringify({action:'models'})}));const d=await r.json();if(!r.ok)return json(d.error,r.status);
-    const available=d.models||[];const model=available.find(m=>/qwen3|deepseek|devstral|gemma-?4|glm-?5|kimi/i.test(m.id))?.id||available.find(m=>/coder|instruct/i.test(m.id))?.id||available[0]?.id;
+    const available=d.models||[];const model=available.find(m=>/muse-spark|glm-?5|gemma-?4|qwen3|deepseek-v4|kimi-k[23]|nemotron-3|laguna-s|minimax-m3|mimo-v2|devstral/i.test(m.id))?.id||available.find(m=>/coder|instruct/i.test(m.id))?.id||available[0]?.id;
     if(!model)return json('No free community workers are available. Try Ollama or retry later.',503);
     return horde(new Request(origin+'/api/horde',{method:'POST',body:JSON.stringify({action:'complete',model,messages:body.messages,temperature:body.temperature})}));
    }return json('Unsupported managed route.',404);

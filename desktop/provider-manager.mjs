@@ -281,7 +281,7 @@ export class ProviderManager{
   }
    this.ollamaUpstream=base;const r=await this.fetch(base+'/api/tags',{signal});const d=await r.json();
    const installed=(d.models||[]).map(m=>m?.name).filter(n=>typeof n==='string'&&n);
-   let model=installed.find(n=>/qwen3|deepseek|devstral|coder|gemma4/i.test(n))||installed[0];
+   let model=installed.find(n=>/gemma4|qwen3\.[5678]|qwen3-coder|glm-5|deepseek-v4|nemotron-3|devstral|qwen3|coder/i.test(n))||installed[0];
   if(!model){
    this.emit(id,'download','Downloading Qwen 3.5 9B (about 6.4 GB). This frontier reasoning and coding model runs free on your computer…');
    const pull=await this.fetch(base+'/api/pull',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:versions.model,stream:true}),signal});if(!pull.ok||!pull.body)throw new Error('Ollama could not download the coding model. Check available disk space and retry.');

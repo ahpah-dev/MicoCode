@@ -7,8 +7,8 @@ The MicoCode application opens in your browser.
 
 1. Install Node.js 22+ from https://nodejs.org/en/download
 2. Install and run Ollama from https://ollama.com/download
-3. Install a model, for example: ollama pull qwen2.5-coder:3b
-   The model download uses a few GB. Model quality and speed depend on your hardware.
+3. Install a coding model, for example: ollama pull qwen3.5:9b (or gemma4:26b, qwen3.8:27b, qwen3.6:27b-coding, devstral:24b)
+   The model download uses several GB. Model quality and speed depend on your hardware.
 4. Extract this ZIP to a folder.
 5. Windows: double-click Start-MicoCode.cmd. Keep its window open.
    macOS / Linux: open a terminal in the folder and run: node micocode-proxy.mjs
