@@ -2,6 +2,7 @@ const {contextBridge,ipcRenderer}=require('electron');
 if(process.isMainFrame)contextBridge.exposeInMainWorld('micoDesktop',Object.freeze({
  version:'0.6.0',
  setup:(provider,engine)=>ipcRenderer.invoke('mico:setup',provider,engine),
+ detectExistingNine:()=>ipcRenderer.invoke('mico:detect-existing-9router'),
  cancelSetup:()=>ipcRenderer.invoke('mico:cancel'),
  providerStatus:()=>ipcRenderer.invoke('mico:status'),
  refreshModels:()=>ipcRenderer.invoke('mico:refresh-models'),

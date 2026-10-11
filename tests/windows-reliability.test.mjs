@@ -11,6 +11,14 @@ import {listProxyModels} from '../lib/mico/providers.mjs';
 const connection=()=>({config:{provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:55001/v1',model:'mico-free/free-code',freeModels:['mico-free/free-code'],routerEngine:'community'},key:'test-client'});
 const brokenBody=()=>new ReadableStream({start(controller){controller.enqueue(new TextEncoder().encode('{"choices":['));queueMicrotask(()=>controller.error(new TypeError('Router disconnected while responding')))}});
 
+test('existing 9Router detection probes only the default loopback health endpoint',async()=>{
+ let requested;
+ const manager=new ProviderManager({dataDir:os.tmpdir(),runtimeDir:os.tmpdir(),gatewayBase:'http://127.0.0.1:19286/managed/v1',gatewayKey:'internal',vault:{},fetchImpl:async(url,options)=>{requested={url,options};return Response.json({ok:true})}});
+ assert.equal(await manager.detectExistingNine(),true);assert.equal(requested.url,'http://127.0.0.1:20128/api/health');assert.equal(requested.options.redirect,'error');assert.ok(requested.options.signal instanceof AbortSignal);
+ const offline=new ProviderManager({dataDir:os.tmpdir(),runtimeDir:os.tmpdir(),gatewayBase:'http://127.0.0.1:19286/managed/v1',gatewayKey:'internal',vault:{},fetchImpl:async()=>{throw new TypeError('Connection refused')}});
+ assert.equal(await offline.detectExistingNine(),false);
+});
+
 test('a router disconnect after response headers returns a usable connection error',async()=>{
  const server=await createLocalServer({webDir:os.tmpdir(),port:0,getManagedConnection:connection,fetchImpl:async()=>new Response(brokenBody(),{status:200,headers:{'Content-Type':'application/json'}})});
  try{

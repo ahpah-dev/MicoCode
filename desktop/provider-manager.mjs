@@ -31,9 +31,12 @@ export class ProviderManager{
  }
  folder(id){return path.join(this.root,assertProvider(id))}
  versionFolder(id){return path.join(this.folder(id),id==='9router'?versions.nine:id==='litellm'?versions.litellm:artifacts[id].version)}
- emit(provider,stage,message,percent){this.notify({provider,stage,message,...(Number.isFinite(percent)?{percent}: {})})}
- async secret(name){let key=await this.vault.get(name);if(!key){key='sk-mico-'+randomBytes(24).toString('hex');await this.vault.set(name,key)}return key}
- async statuses(){return Promise.all(managedProviders.map(async provider=>({provider,installed:await exists(path.join(this.folder(provider),'installed.json')),running:!!this.children.get(provider)&&this.children.get(provider).exitCode===null})))}
+  emit(provider,stage,message,percent){this.notify({provider,stage,message,...(Number.isFinite(percent)?{percent}: {})})}
+  async secret(name){let key=await this.vault.get(name);if(!key){key='sk-mico-'+randomBytes(24).toString('hex');await this.vault.set(name,key)}return key}
+  async detectExistingNine(){
+   try{return (await this.fetch('http://127.0.0.1:20128/api/health',{redirect:'error',signal:AbortSignal.timeout(1500)})).ok}catch{return false}
+  }
+  async statuses(){return Promise.all(managedProviders.map(async provider=>({provider,installed:await exists(path.join(this.folder(provider),'installed.json')),running:!!this.children.get(provider)&&this.children.get(provider).exitCode===null})))}
  async run(exe,args,{cwd,env={},signal,timeout=900000}={}){
   if(signal?.aborted)throw new Error('Setup cancelled.');
   // No shell, global installation, user-controlled command, or provider output in the UI.

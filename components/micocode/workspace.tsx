@@ -16,7 +16,7 @@ import {createProject} from '@/lib/mico/templates';
 import {loadProjects,saveProjects} from '@/lib/mico/storage';
 import {checkProject,diffLines,isPrivatePath,mergeFiles,safePath} from '@/lib/mico/core.mjs';
 import {browserReady,runAgent,stopBrowser} from '@/lib/mico/agent';
-import {applyManagedConnection,connectionIdentity,credentialSlot,proxyPresets,readCredential,rememberProfile,shouldRestoreManagedConnection,writeCredential} from '@/lib/mico/providers.mjs';
+import {applyManagedConnection,connectionIdentity,credentialSlot,listProxyModels,proxyPresets,readCredential,rememberProfile,selectCatalogueModel,shouldRestoreManagedConnection,writeCredential} from '@/lib/mico/providers.mjs';
 type View='welcome'|'code'|'preview'|'split'|'changes';
 type Dialog='connections'|'projects'|'new'|'file'|'commands'|'help'|'history'|'settings'|'plugins'|null;
 const FileIcon=({path}:{path:string})=>path.endsWith('.json')?<FileJson size={14} className="file-json"/>:path.endsWith('.md')?<FileText size={14} className="file-md"/>:<FileCode2 size={14} className={path.endsWith('.css')?'file-css':path.endsWith('.js')?'file-js':'file-html'}/>;
@@ -57,7 +57,52 @@ export default function Workspace(){
   useEffect(()=>{const key=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();setCommandQuery('');setDialog('commands')}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='o'){e.preventDefault();void openFolder()}if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='s'){e.preventDefault();saveProjects(projectsRef.current).then(()=>notify('Workspace saved locally')).catch(()=>notify('Save failed. Export a backup.'))}if(e.key==='/'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&dialog===null){const t=e.target as HTMLElement|null;const tag=t?.tagName;if(tag!=='INPUT'&&tag!=='TEXTAREA'&&tag!=='SELECT'&&!t?.isContentEditable){e.preventDefault();setAgentPanel(true);promptRef.current?.focus()}}if(e.key==='Escape'&&busy){controller.current?.abort();stopBrowser()}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[busy,notify,dialog]);
  useEffect(()=>{if(!loaded||window.micoDesktop)return;const saved=localStorage.getItem('mico-config');let previous:Config|null=null;try{previous=saved?JSON.parse(saved) as Config:null}catch{};if(previous&&previous.provider!=='ollama')return;let stopped=false;fetch((previous?.ollamaUrl||'http://127.0.0.1:11435').replace(/\/$/,'')+'/api/tags',{signal:AbortSignal.timeout(2500)}).then(r=>r.json() as Promise<{models:{name:string}[]}>).then(d=>{if(stopped||!d.models?.length)return;const local={...defaultConfig,...previous,provider:'ollama' as const,ollamaUrl:previous?.ollamaUrl||'http://127.0.0.1:11435',model:d.models.find(m=>/gemma4|qwen3\.[5678]|qwen3-coder|glm-5|deepseek-v4|nemotron-3|devstral|qwen3|coder/i.test(m.name))?.name||d.models[0].name};setConfig(local);setConnected('ollama');localStorage.setItem('mico-config',JSON.stringify(local));notify('Local model connected automatically: '+local.model)}).catch(()=>{});return()=>{stopped=true}},[loaded,notify]);
 
-  useEffect(()=>{if(!loaded||!window.micoDesktop)return;let saved:Config|undefined;try{saved=JSON.parse(localStorage.getItem('mico-config')||'null')||undefined}catch{}if(!shouldRestoreManagedConnection(saved)){setManagedRestoring(false);return}let active=true;void window.micoDesktop.restoreConnection().then(result=>{if(!active||!result)return;setConfig(previous=>{const next:Config=applyManagedConnection(previous,result);try{writeCredential(next,result.key);localStorage.setItem('mico-config',JSON.stringify(next));rememberProfile(next)}catch{}return next});setApiKey(result.key);setConnected(result.config.provider||'proxy');notify('Your managed connection is ready.');}).catch(()=>{if(active)notify('Reconnect your managed router in Models.')}).finally(()=>{if(active)setManagedRestoring(false)});return()=>{active=false}},[loaded,notify]);
+  useEffect(()=>{
+   if(!loaded||!window.micoDesktop)return;
+   let saved:Config|undefined;try{saved=JSON.parse(localStorage.getItem('mico-config')||'null')||undefined}catch{}
+   if(!shouldRestoreManagedConnection(saved)){
+    setManagedRestoring(false);
+    if(saved?.provider==='proxy'&&saved.proxyPreset==='9router'&&saved.managed!==true&&!readCredential(saved)&&window.micoDesktop.detectExistingNine){
+     let active=true;void window.micoDesktop.detectExistingNine().then(found=>{if(active&&found){setDialog('connections');notify('Your existing 9Router is running. Add its API key to load your provider models.')}}).catch(()=>{});
+     return()=>{active=false}
+    }
+    return
+   }
+   let active=true;const desktop=window.micoDesktop;
+   void(async()=>{
+    const preferExisting=!saved||saved.provider==='proxy'&&saved.proxyPreset==='9router'&&saved.managed===true;
+    let existing=false;try{existing=preferExisting&&!!await desktop.detectExistingNine?.()}catch{}
+    if(!active)return;
+    if(existing){
+     const endpoint=proxyPresets.find(p=>p.id==='9router')!.url;
+     const next:Config={...defaultConfig,...saved,provider:'proxy',proxyPreset:'9router',proxyUrl:endpoint,model:'',managed:false};
+     const hasKey=!!readCredential(next);setConfiguration(next);
+     if(!hasKey)setDialog('connections');
+     notify(hasKey?'Existing 9Router found. Loading its enabled provider models.':'Existing 9Router found. Add its API key to load your provider models.');
+     return;
+    }
+    const result=await desktop.restoreConnection();if(!active||!result)return;
+    setConfig(previous=>{const next:Config=applyManagedConnection(previous,result);try{writeCredential(next,result.key);localStorage.setItem('mico-config',JSON.stringify(next));rememberProfile(next)}catch{}return next});
+    setApiKey(result.key);setConnected(result.config.provider||'proxy');notify('Your managed connection is ready.');
+   })().catch(()=>{if(active)notify('Reconnect your managed router in Models.')}).finally(()=>{if(active)setManagedRestoring(false)});
+   return()=>{active=false}
+  },[loaded,notify]);
+  useEffect(()=>{
+   if(!loaded||managedRestoring||config.provider!=='proxy'||config.proxyPreset!=='9router'||config.managed||!apiKey)return;
+   const abort=new AbortController();let active=true;
+   void listProxyModels(config,apiKey,AbortSignal.any([abort.signal,AbortSignal.timeout(20000)])).then(available=>{
+    if(!active)return;
+    if(!config.model.trim()){
+     const model=selectCatalogueModel(available,'');
+     setConfig(current=>{
+      if(current.provider!=='proxy'||current.proxyPreset!=='9router'||current.managed||current.proxyUrl!==config.proxyUrl||current.model.trim())return current;
+      const next={...current,model};try{localStorage.setItem('mico-config',JSON.stringify(next));rememberProfile(next)}catch{}return next;
+     });
+    }
+    setConnected('proxy');
+   }).catch(error=>{if(active){setConnected(current=>current==='proxy'?'':current);notify('Could not load your saved 9Router catalogue. Check its API key, key model permissions, and enabled providers in Connections.') }});
+   return()=>{active=false;abort.abort()}
+  },[loaded,managedRestoring,config.provider,config.proxyPreset,config.proxyUrl,config.managed,apiKey]);
  useEffect(()=>{if(innerWidth<760){setAgentPanel(false);setSidebar(false)}},[]);
  const effectiveFiles=useMemo(()=>p?mergeFiles(p.files,p.changes) as Files:{},[p?.files,p?.changes]);
  const changePaths=p?Object.keys(p.changes):[];

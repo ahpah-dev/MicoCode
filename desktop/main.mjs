@@ -41,8 +41,9 @@ async function start(){
  window=new BrowserWindow({width:1440,height:950,minWidth:720,minHeight:540,title:'MicoCode',backgroundColor:backgrounds.forest,show:false,autoHideMenuBar:true,icon:path.join(appDir,'icon.ico'),webPreferences:{preload:path.join(appDir,'preload.cjs'),nodeIntegration:false,nodeIntegrationInWorker:false,contextIsolation:true,sandbox:true,webSecurity:true,partition:'persist:micocode'}});
  window.removeMenu();secureWindow(window,server.origin);
  ipcMain.handle('mico:setup',async(event,provider,engine)=>{validateSender(event);return managedClientConnection(await manager.setup(assertProvider(provider),engine),server.origin)});
- ipcMain.handle('mico:cancel',event=>{validateSender(event);manager.cancel()});
- ipcMain.handle('mico:status',event=>{validateSender(event);return manager.statuses()});
+  ipcMain.handle('mico:cancel',event=>{validateSender(event);manager.cancel()});
+  ipcMain.handle('mico:status',event=>{validateSender(event);return manager.statuses()});
+  ipcMain.handle('mico:detect-existing-9router',event=>{validateSender(event);return manager.detectExistingNine()});
  ipcMain.handle('mico:refresh-models',async event=>{validateSender(event);return managedClientConnection(await manager.refreshNineCatalogue(),server.origin)});
  let restoration;
  ipcMain.handle('mico:restore',event=>{validateSender(event);return restoration||(restoration=manager.restore().then(result=>managedClientConnection(result,server.origin)))});

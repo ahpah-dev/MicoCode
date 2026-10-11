@@ -19,6 +19,8 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.6.3 auto-detects a running local 9Router, loads its provider catalogue when your key is saved, and prompts for the key when needed. OpenCode quota cooldowns no longer block other 9Router providers; private and existing routers are clearly distinguished.
+
 Version 0.6.2 isolates 9Router provider quotas so exhausting one provider no longer cools down unrelated providers. It also distinguishes MicoCode’s private 9Router from your existing router, and only lists OpenCode routes in managed mode when an active OpenCode connection is configured.
 
 Version 0.6.1 fixes 9Router/OpenCode reasoning-model follow-up errors by echoing reasoning as protocol metadata without mistaking it for an agent action.

@@ -43,6 +43,7 @@ export type DesktopGitAPI={
 export type DesktopAPI={
  version:string;
  setup:(provider:ManagedProvider,engine?:'local'|'community')=>Promise<SetupResult>;
+ detectExistingNine?:()=>Promise<boolean>;
  cancelSetup:()=>Promise<void>;
  providerStatus:()=>Promise<ProviderStatus[]>;
  refreshModels:()=>Promise<SetupResult>;
