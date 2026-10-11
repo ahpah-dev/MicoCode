@@ -133,7 +133,7 @@ test('local managed generation serves every installed model',async()=>{
   const catalogue=await (await fetch(server.origin+'/managed/local/v1/models',{headers:{Authorization:'Bearer private'}})).json();
   assert.deepEqual(catalogue.data.map(m=>m.id),['test-coder','test-chat']);
   for(const request of [{model:'test-coder',max_tokens:20},{model:'test-chat',max_tokens:9000},{model:'test-chat'},{model:'test-coder',max_tokens:1.9}]){const r=await fetch(server.origin+'/managed/local/v1/chat/completions',{method:'POST',headers:{Authorization:'Bearer private','Content-Type':'application/json'},body:JSON.stringify({...request,messages})});assert.equal(r.status,200);assert.deepEqual(JSON.parse((await r.json()).choices[0].message.content),reply)}
-  assert.deepEqual(limits,[20,4096,1800,1]);assert.deepEqual(bodies,['test-coder','test-chat','test-chat','test-coder']);
+  assert.deepEqual(limits,[20,4096,4096,1]);assert.deepEqual(bodies,['test-coder','test-chat','test-chat','test-coder']);
   const unknown=await fetch(server.origin+'/managed/local/v1/chat/completions',{method:'POST',headers:{Authorization:'Bearer private','Content-Type':'application/json'},body:JSON.stringify({model:'removed-model',messages:[{role:'user',content:'Hello'}]})});
   assert.equal(unknown.status,400);
  }finally{await server.close()}

@@ -49,7 +49,10 @@ export async function complete(messages:Chat[],config:Config,key:string,signal:A
  if(managedLocal)onStatus('Generating with your local model. The first prompt may take longer while it loads; Stop cancels the request.');
  if(opencode&&!key)throw new Error('Add your own OpenCode Zen key in Models before sending a prompt.');
  const url=local?config.ollamaUrl.replace(/\/$/,'')+'/api/chat':horde?'/api/horde':opencode?'/api/opencode':custom?normalizeEndpoint(config.proxyUrl)+'/chat/completions':'/api/ai';
- const body=local?{model:config.model,messages,stream:false,think:false,format:actionSchema,options:{temperature:config.temperature,num_predict:managedLocal?1800:4096}}:horde||opencode?{action:'complete',model:config.model,messages,temperature:config.temperature}:custom?{model:config.model,messages,temperature:config.temperature,max_tokens:managedLocal?1800:4096,stream:false}:{model:config.model,messages,temperature:config.temperature,freeFallback:config.freeFallback};
+ // The managed local route shares the standard output window. A narrower one
+  // truncated any write_file carrying a complete page and reported an output
+  // limit instead of an edit.
+  const body=local?{model:config.model,messages,stream:false,think:false,format:actionSchema,options:{temperature:config.temperature,num_predict:4096}}:horde||opencode?{action:'complete',model:config.model,messages,temperature:config.temperature}:custom?{model:config.model,messages,temperature:config.temperature,max_tokens:4096,stream:false}:{model:config.model,messages,temperature:config.temperature,freeFallback:config.freeFallback};
  const operation=()=>fetch(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json',...(!local&&!horde&&key?{Authorization:`Bearer ${key}`}:{})},body:JSON.stringify(body),signal:AbortSignal.any([signal,AbortSignal.timeout(managedLocal?620000:130000)])});
  // Cooldowns belong to the connection, never to a model: switching models cannot reset quotas.
  const response=await resilientRequest(operation,{scope:config.provider+':'+(opencode?'opencode':horde?'horde':custom?normalizeEndpoint(config.proxyUrl):local?config.ollamaUrl:''),signal,enabled:config.resilience,paceMs:local?0:config.provider==='openrouter'?3200:1500,onStatus});
@@ -87,7 +90,18 @@ export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|
    else conversation.push({role:'user',content:'Tool execution results (already completed):\n'+observation.slice(-contextLimit)+'\nContinue toward the original task. If a file was just read, use its content above to write the edit now; do not read it again. Return the next JSON action object.'});
    const budget=contextLimit+(config.provider==='browser'?4000:8000);
    if((config.compactContext||config.provider==='browser')&&conversation.length>4&&conversation.reduce((n,m)=>n+m.content.length,0)>budget){const before=conversation.reduce((n,m)=>n+m.content.length,0);conversation.splice(2,conversation.length-4);onMessage(`Context optimized · removed ${Math.round((before-conversation.reduce((n,m)=>n+m.content.length,0))/4).toLocaleString()} estimated tokens of older tool results; keeping your task and latest read.`,'activity')}
-   const raw=await complete(conversation,config,key,signal,onToken,text=>onMessage(text,'activity'));
+   let raw:string;
+    try{raw=await complete(conversation,config,key,signal,onToken,text=>onMessage(text,'activity'))}
+    catch(e){
+     if(signal.aborted)throw e;
+     // A truncated reply is never applied, but it is repairable: ask the model
+     // for a smaller step instead of discarding the whole run.
+     if((e as {status?:number}).status!==422)throw e;
+     if(++invalid>2)throw new Error('The model repeatedly exceeded its output limit. Ask for one smaller edit, or select a model with a larger output window.');
+     onMessage('The reply hit the model output limit before it finished. Asking for a smaller step.','activity');
+     observation='Your last reply was cut off at the output limit before its JSON closed, so it was discarded. Reply again with one short JSON object: keep the message to one sentence and stage the smallest complete file or edit that fits. Do not repeat work that is already staged.';
+     continue
+    }
    conversation.push({role:'assistant',content:raw});
    if(signal.aborted)throw new DOMException('Stopped','AbortError');
    let reply:AgentReply;

@@ -81,7 +81,7 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
       const body=await request.json();const entry=inventory.find(m=>m&&m.route===body.model);
       if(!entry)return json('That local model is not installed. Re-run Set up & connect to refresh the list.',400);
       if(!Array.isArray(body.messages)||body.messages.length>80||!body.messages.every(m=>m&&['system','user','assistant'].includes(m.role)&&typeof m.content==='string'))return json('Invalid coding messages.');
-      const requested=Number(body.max_tokens);const outputLimit=Number.isFinite(requested)&&requested>0?Math.min(4096,Math.max(1,Math.floor(requested))):1800;
+      const requested=Number(body.max_tokens);const outputLimit=Number.isFinite(requested)&&requested>0?Math.min(4096,Math.max(1,Math.floor(requested))):4096;
       try{
        const r=await fetchImpl(upstream+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:entry.name,messages:body.messages,format:actionSchema,stream:false,think:false,options:{temperature:Math.max(0,Math.min(1,Number.isFinite(Number(body.temperature))?Number(body.temperature):.2)),num_predict:outputLimit}}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(600000)])});
        const d=await r.json();if(!r.ok)return json('The local model could not finish this request.',r.status);

@@ -36,12 +36,37 @@ test('output limits cannot promote a truncated reply into a complete agent actio
  const raw='data: '+JSON.stringify({choices:[{delta:{content},finish_reason:'length'}]})+'\n\ndata: [DONE]\n\n';
  await assert.rejects(()=>readModelText(new Response(raw,{headers:{'content-type':'text/event-stream'}})),/output limit/);
 });
+test('an output-limit reply is discarded and repaired instead of aborting the run',async()=>{
+  const prior=globalThis.fetch;let calls=0;const notes=[];
+  // The first reply is cut off mid-object; the retry reads, then completes the edit.
+  const replies=[
+   {message:{content:'{"message":"truncated","actions":[{"type":"edit_'},done_reason:'length'},
+   {message:{content:'{"message":"Reading","actions":[{"type":"read_file","path":"index.html"}],"done":false}'},done_reason:'stop'},
+   {message:{content:'{"message":"Fixed","actions":[{"type":"edit_file","path":"index.html","find":"Hello","replace":"Welcome"}],"done":true}'},done_reason:'stop'},
+  ];
+  globalThis.fetch=async()=>Response.json(replies[Math.min(calls++,replies.length-1)]);
+  try{
+   const project={id:'limit',name:'limit',files:{'index.html':'<h1>Hello</h1>'},active:'index.html',messages:[],checkpoints:[],changes:{},updated:0};
+   const result=await runAgent({project,prompt:'Change the heading',mode:'agent',config:{...defaultConfig,provider:'ollama',ollamaUrl:'http://127.0.0.1:11434',model:'test',quality:'focused',maxSteps:4,resilience:false},key:'',signal:new AbortController().signal,onMessage:text=>notes.push(text),onChanges:()=>{},onToken:()=>{}});
+   assert.equal(result['index.html'],'<h1>Welcome</h1>');assert.equal(calls,3);
+   assert.ok(notes.some(text=>text.includes('output limit')));
+  }finally{globalThis.fetch=prior}
+});
+test('repeated output-limit replies stop with actionable guidance and preserve staged work',async()=>{
+  const prior=globalThis.fetch;let calls=0;
+  globalThis.fetch=async()=>{calls++;return Response.json({message:{content:'{"message":"cut","actions":[]}'},done_reason:'length'})};
+  try{
+   const project={id:'stalled',name:'stalled',files:{'index.html':'<h1>Hello</h1>'},active:'index.html',messages:[],checkpoints:[],changes:{},updated:0};
+   await assert.rejects(()=>runAgent({project,prompt:'Change the heading',mode:'agent',config:{...defaultConfig,provider:'ollama',ollamaUrl:'http://127.0.0.1:11434',model:'test',quality:'focused',maxSteps:5,resilience:false},key:'',signal:new AbortController().signal,onMessage:()=>{},onChanges:()=>{},onToken:()=>{}}),/repeatedly exceeded its output limit/);
+   assert.equal(calls,3);assert.equal(project.files['index.html'],'<h1>Hello</h1>');
+  }finally{globalThis.fetch=prior}
+});
 test('local agent actions disable optional thinking per request to retain answer budget',async()=>{
  const prior=globalThis.fetch;let body;
  globalThis.fetch=async(_url,init)=>{body=JSON.parse(init.body);return Response.json({message:{content:'{"message":"ready","actions":[],"done":true}'},done_reason:'stop'})};
  try{
   const result=await complete([{role:'user',content:'Plan a page'}],{...defaultConfig,provider:'ollama',managed:true,routerEngine:'local',ollamaUrl:'http://127.0.0.1:11434',model:'gemma4:gpu',resilience:false},'',new AbortController().signal,()=>{});
-  assert.equal(body.think,false);assert.equal(body.options.num_predict,1800);assert.deepEqual(body.format,actionSchema);assert.match(result,/ready/);
+  assert.equal(body.think,false);assert.equal(body.options.num_predict,4096);assert.deepEqual(body.format,actionSchema);assert.match(result,/ready/);
  }finally{globalThis.fetch=prior}
 });
 test('a unavailable catalogue does not prevent a configured model from completing an edit',async()=>{
