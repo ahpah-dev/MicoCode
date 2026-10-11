@@ -18,6 +18,33 @@ test('existing 9Router detection probes only the default loopback health endpoin
  const offline=new ProviderManager({dataDir:os.tmpdir(),runtimeDir:os.tmpdir(),gatewayBase:'http://127.0.0.1:19286/managed/v1',gatewayKey:'internal',vault:{},fetchImpl:async()=>{throw new TypeError('Connection refused')}});
  assert.equal(await offline.detectExistingNine(),false);
 });
+test('managed FreeRide reuses the local gateway and selects its automatic failover route',async()=>{
+ const dir=await mkdtemp(path.join(os.tmpdir(),'mico-freeride-'));const urls=[],secrets=new Map();
+ const manager=new ProviderManager({dataDir:dir,runtimeDir:dir,gatewayBase:'http://127.0.0.1:19286/managed/v1',gatewayKey:'internal',vault:{get:async k=>secrets.get(k)||null,set:async(k,v)=>secrets.set(k,v)},fetchImpl:async(url,options={})=>{urls.push(String(url));if(String(url).endsWith('/health'))return Response.json({ok:true});if(String(url).endsWith('/api/version'))return Response.json({error:'Ollama is not installed'},{status:404});if(String(url).endsWith('/chat/completions'))return Response.json({choices:[{message:{content:'OK'}}]});return Response.json({object:'list',data:[{id:'nvidia_nim/deepseek-v4-flash',owned_by:'nvidia_nim'}]})}});
+ try{
+  const result=await manager.setup('freeride','local');
+  assert.equal(result.config.proxyPreset,'freeride');assert.equal(result.config.model,'freeride/auto');assert.equal(result.key,'any');assert.equal(result.config.routerEngine,'community');assert.equal(result.config.managed,true);
+  assert.ok(result.config.freeModels.includes('nvidia_nim/deepseek-v4-flash'));assert.deepEqual(urls,['http://127.0.0.1:11343/health','http://127.0.0.1:11434/api/version','http://127.0.0.1:11343/v1/models','http://127.0.0.1:11343/v1/chat/completions','http://127.0.0.1:11343/v1/models']);assert.equal(secrets.get('freeride-setup-verified'),'0.7.0');
+ }finally{await manager.close();await rm(dir,{recursive:true,force:true})}
+});
+test('FreeRide setup refuses a gateway with no working provider key',async()=>{
+ const dir=await mkdtemp(path.join(os.tmpdir(),'mico-freeride-invalid-'));const secrets=new Map();
+ const manager=new ProviderManager({dataDir:dir,runtimeDir:dir,gatewayBase:'http://127.0.0.1:19286/managed/v1',gatewayKey:'internal',vault:{get:async key=>secrets.get(key)||null,set:async(key,value)=>secrets.set(key,value)},fetchImpl:async url=>{if(String(url).endsWith('/health'))return Response.json({ok:true});if(String(url).endsWith('/chat/completions'))return Response.json({error:{message:'No usable provider keys'}},{status:503});return Response.json({object:'list',data:[{id:'nvidia_nim/nemotron',owned_by:'nvidia_nim'}]})}});
+ try{await assert.rejects(manager.setup('freeride','community'),/setup check could not complete a model request/);assert.equal(secrets.has('freeride-setup-verified'),false)}finally{await manager.close();await rm(dir,{recursive:true,force:true})}
+});
+
+test('FreeRide setup refuses to mark a configured gateway ready when its test generation fails',async()=>{
+ const dir=await mkdtemp(path.join(os.tmpdir(),'mico-freeride-fail-'));const secrets=new Map();
+ const manager=new ProviderManager({dataDir:dir,runtimeDir:dir,gatewayBase:'http://127.0.0.1:19286/managed/v1',gatewayKey:'internal',vault:{get:async key=>secrets.get(key)||null,set:async(key,value)=>secrets.set(key,value)},fetchImpl:async url=>{
+  if(String(url).endsWith('/health'))return Response.json({ok:true});
+  if(String(url).endsWith('/chat/completions'))return Response.json({error:{message:'No providers have usable keys'}},{status:503});
+  return Response.json({object:'list',data:[{id:'nvidia_nim/nemotron',owned_by:'nvidia_nim'}]});
+ }});
+ try{
+  await assert.rejects(manager.setup('freeride','community'),/setup check could not complete a model request/);
+  assert.equal(secrets.has('freeride-setup-verified'),false);
+ }finally{await manager.close();await rm(dir,{recursive:true,force:true})}
+});
 
 test('a router disconnect after response headers returns a usable connection error',async()=>{
  const server=await createLocalServer({webDir:os.tmpdir(),port:0,getManagedConnection:connection,fetchImpl:async()=>new Response(brokenBody(),{status:200,headers:{'Content-Type':'application/json'}})});

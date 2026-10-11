@@ -15,7 +15,7 @@ if(smoke&&testData)app.setPath('userData',path.resolve(testData));
 app.setAppUserModelId('app.micocode.desktop');
 let window,manager,server,quitting=false;const dashboards=new Set(),authorizedFolders=new Set();
 const backgrounds={forest:'#111815',graphite:'#151515',midnight:'#101624',violet:'#191322',paper:'#f8f6ef'};
-const allowedHosts=new Set(['micocode.vercel.app','github.com','openrouter.ai','opencode.ai','models.dev','docs.litellm.ai','ollama.com','docs.ollama.com','oai.aihorde.net','aihorde.net','nodejs.org']);
+ const allowedHosts=new Set(['micocode.vercel.app','github.com','openrouter.ai','opencode.ai','models.dev','docs.litellm.ai','ollama.com','docs.ollama.com','oai.aihorde.net','aihorde.net','nodejs.org','build.nvidia.com','docs.api.nvidia.com','free-ride.xyz','clawhub.ai']);
 function safeExternal(url){try{const u=new URL(url);return u.protocol==='https:'&&allowedHosts.has(u.hostname)&&!u.username&&!u.password}catch{return false}}
 async function createVault(dir){
  await mkdir(dir,{recursive:true});const file=path.join(dir,'credentials.bin');let values={};
@@ -40,7 +40,7 @@ async function start(){
  manager=new ProviderManager({dataDir,runtimeDir:app.isPackaged?path.join(process.resourcesPath,'node-runtime'):path.join(appDir,'..','resources','node-runtime'),gatewayBase:server.origin+'/managed/v1',gatewayKey,vault,onProgress:progress=>{if(window&&!window.isDestroyed())window.webContents.send('mico:progress',progress)}});
  window=new BrowserWindow({width:1440,height:950,minWidth:720,minHeight:540,title:'MicoCode',backgroundColor:backgrounds.forest,show:false,autoHideMenuBar:true,icon:path.join(appDir,'icon.ico'),webPreferences:{preload:path.join(appDir,'preload.cjs'),nodeIntegration:false,nodeIntegrationInWorker:false,contextIsolation:true,sandbox:true,webSecurity:true,partition:'persist:micocode'}});
  window.removeMenu();secureWindow(window,server.origin);
- ipcMain.handle('mico:setup',async(event,provider,engine)=>{validateSender(event);return managedClientConnection(await manager.setup(assertProvider(provider),engine),server.origin)});
+  ipcMain.handle('mico:setup',async(event,provider,engine,credentials)=>{validateSender(event);return managedClientConnection(await manager.setup(assertProvider(provider),engine,credentials),server.origin)});
   ipcMain.handle('mico:cancel',event=>{validateSender(event);manager.cancel()});
   ipcMain.handle('mico:status',event=>{validateSender(event);return manager.statuses()});
   ipcMain.handle('mico:detect-existing-9router',event=>{validateSender(event);return manager.detectExistingNine()});
@@ -196,7 +196,7 @@ async function start(){
  }
  const api=await fetch(server.origin+'/api/models');
  const report={version:app.getVersion(),...state,invalidProviderRejected:invalid,statusCount,...(managedSetup?{managedSetup}:{}),apiStatus:api.status,errors};
- report.passed=state.workspace&&state.bridge&&state.node==='undefined'&&invalid&&statusCount===4&&(!managedSetup||managedSetup.status===200)&&(!managedSetup?.generation||managedSetup.generation.status===200&&managedSetup.generation.hasContent)&&(!managedSetup?.agent||managedSetup.agent.assistant&&!managedSetup.agent.error)&&(!managedSetup?.edit||managedSetup.edit.staged&&managedSetup.edit.applied&&managedSetup.edit.preserved&&managedSetup.edit.preview&&!managedSetup.edit.error)&&api.ok&&errors.length===0;
+  report.passed=state.workspace&&state.bridge&&state.node==='undefined'&&invalid&&statusCount===5&&(!managedSetup||managedSetup.status===200)&&(!managedSetup?.generation||managedSetup.generation.status===200&&managedSetup.generation.hasContent)&&(!managedSetup?.agent||managedSetup.agent.assistant&&!managedSetup.agent.error)&&(!managedSetup?.edit||managedSetup.edit.staged&&managedSetup.edit.applied&&managedSetup.edit.preserved&&managedSetup.edit.preview&&!managedSetup.edit.error)&&api.ok&&errors.length===0;
  const screenshot=process.argv.find(x=>x.startsWith('--smoke-screenshot='))?.slice('--smoke-screenshot='.length);if(screenshot)await writeFile(screenshot,(await window.webContents.capturePage()).toPNG());
  if(smokePath)await writeFile(smokePath,JSON.stringify(report,null,2));await manager.close();await server.close();app.exit(report.passed?0:1);
 }

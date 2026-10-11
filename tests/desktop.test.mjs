@@ -10,7 +10,7 @@ import {isLocalRequest,createLocalServer,managedClientConnection} from '../deskt
 import {applyManagedConnection,discoverProxy,listProxyModels} from '../lib/mico/providers.mjs';
 import {actionSchema} from '../lib/mico/action-schema.mjs';
 
-test('provider automation only accepts supported installer IDs',()=>{for(const id of ['9router','cliproxy','litellm','ollama'])assert.equal(assertProvider(id),id);for(const id of ['../ollama','custom','powershell','9router;whoami',null])assert.throws(()=>assertProvider(id))});
+test('provider automation only accepts supported installer IDs',()=>{for(const id of ['9router','cliproxy','litellm','freeride','ollama'])assert.equal(assertProvider(id),id);for(const id of ['../ollama','custom','powershell','9router;whoami',null])assert.throws(()=>assertProvider(id))});
 test('managed engines cannot be changed to paid or arbitrary destinations',()=>{assert.equal(assertEngine('local'),'local');assert.equal(assertEngine('community'),'community');for(const value of ['paid','https://other.example','custom',null])assert.throws(()=>assertEngine(value))});
 test('provider archives cannot escape, create links, or overwrite a destination',async()=>{
  const root=await mkdtemp(path.join(os.tmpdir(),'mico-archive-'));
@@ -79,6 +79,21 @@ test('managed renderer transport accepts any configured free model',async()=>{
   const body={model:'llama3-1-8b',messages:[{role:'user',content:'Hi'}]};
   assert.equal((await fetch(endpoint,{method:'POST',headers,body:JSON.stringify(body)})).status,200);
   assert.equal((await fetch(endpoint,{method:'POST',headers,body:JSON.stringify({...body,model:'paid-model'})})).status,400);
+ }finally{await server.close()}
+});
+
+test('managed FreeRide exposes its cross-provider auto route through the protected relay',async()=>{
+ const connection={config:{provider:'proxy',proxyPreset:'freeride',proxyUrl:'http://127.0.0.1:11343/v1',model:'freeride/auto',freeModels:['freeride/auto','nvidia_nim/nemotron'],routerFreeOnly:true,managed:true,routerEngine:'community'},key:'any'};let forwarded;
+ const server=await createLocalServer({webDir:os.tmpdir(),port:0,getManagedConnection:id=>id==='freeride'?connection:null,fetchImpl:async(url,options)=>{
+  if(url.endsWith('/models'))return Response.json({data:[{id:'nvidia_nim/nemotron',owned_by:'nvidia_nim'}]});
+  forwarded={url,options};return Response.json({choices:[{message:{content:'FreeRide fallback worked'}}]});
+ }});
+ try{
+  const exposed=managedClientConnection(connection,server.origin);assert.equal(exposed.config.proxyUrl,server.origin+'/providers/freeride/v1');
+  const headers={Authorization:'Bearer any','Content-Type':'application/json',Origin:server.origin};
+  const catalogue=await fetch(exposed.config.proxyUrl+'/models',{headers});assert.deepEqual((await catalogue.json()).data.map(m=>m.id),['nvidia_nim/nemotron','freeride/auto']);
+  const response=await fetch(exposed.config.proxyUrl+'/chat/completions',{method:'POST',headers,body:JSON.stringify({model:'freeride/auto',messages:[{role:'user',content:'Make a small fix'}]})});
+  assert.equal(response.status,200);assert.equal(forwarded.url,'http://127.0.0.1:11343/v1/chat/completions');assert.equal(JSON.parse(forwarded.options.body).model,'freeride/auto');
  }finally{await server.close()}
 });
 

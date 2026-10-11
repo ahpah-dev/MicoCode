@@ -19,6 +19,10 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.7.0 adds one-click FreeRide installation with automatic free-provider failover and direct NVIDIA NIM connections. It hides unreliable legacy OpenCode/Horde choices from new setup while keeping saved connections compatible.
+
+On Windows, choose **Your routers → FreeRide → Set up**. MicoCode reuses a running gateway or installs a pinned private copy, reuses NVIDIA NIM/OpenRouter keys already saved in Connections, and saves new provider keys with Windows encryption. One provider key is enough; optional keys add failover choices. The managed FreeRide profile opts out of FreeRide telemetry.
+
 Version 0.6.3 auto-detects a running local 9Router, loads its provider catalogue when your key is saved, and prompts for the key when needed. OpenCode quota cooldowns no longer block other 9Router providers; private and existing routers are clearly distinguished.
 
 Version 0.6.2 isolates 9Router provider quotas so exhausting one provider no longer cools down unrelated providers. It also distinguishes MicoCode’s private 9Router from your existing router, and only lists OpenCode routes in managed mode when an active OpenCode connection is configured.
@@ -53,7 +57,7 @@ Local action requests disable optional Ollama thinking per request, so supported
 
 Local models receive the same bounded action schema in the browser and managed desktop gateway. Static checks catch stray text between explicit HTML head elements, and automatic polish retries focus on issues introduced by the current run. Changes remain staged for your review; these checks do not replace testing layout and interactions in Preview.
 
-For direct access, choose **Your routers → OpenCode Zen**, paste your own Zen key, then **Save & connect**. MicoCode intersects the official live catalogue with Models.dev's explicit zero pricing and text protocol metadata, and uses the correct Chat, Responses, or Anthropic endpoint. A public catalogue verifies availability and pricing, not your key or model access; generation checks those when you send a prompt. Provider quotas and [OpenCode's data policies](https://opencode.ai/docs/zen/#privacy) apply. No paid or unknown-price route is substituted.
+Existing saved OpenCode Zen profiles remain usable, but OpenCode Zen is no longer offered as a new connection choice. NVIDIA NIM provides direct model access with account credits; FreeRide adds local cross-provider failover.
 
 Version 0.4.0 makes your own 9Router a first-class connection in the Windows app. Choose **Use existing** to connect to your running router and browse every model and combo it exposes, grouped by provider. Refresh the catalogue, save favorite models, and see reported pricing and context windows. Model choice is retained, the agent budgets from model context metadata, and restart no longer replaces your own router with MicoCode's private managed instance. If models are missing, check the key's permissions, enabled models per connection, and disabled list in the router dashboard. Provider quotas and billing remain controlled by those providers.
 
@@ -66,7 +70,7 @@ Open **Models → Your routers**. Choose **Use existing** on 9Router to browse m
 
 The default **local engine** uses Ollama. MicoCode reuses an existing installation and model, or downloads the official portable runtime and Qwen 3.5 9B automatically. A fresh setup may download a large runtime plus about 6.4 GB for the model. Local inference has no service quota or per-message fee; hardware, memory, context, and speed still matter.
 
-The optional **community engine** uses AI Horde's documented anonymous access and sends prompts and requested files to volunteer workers. It is experimental: availability, queues, and model quality vary. The public service returned generation errors during the latest release probe, so it is not the default. Additional upstream accounts require your own authorized sign-in or key. MicoCode does not create accounts, bypass provider restrictions, or enable paid fallback.
+Previously saved **community-engine** profiles remain supported for migration, but AI Horde is no longer offered for new connections. FreeRide is the recommended multi-provider failover gateway. MicoCode does not create upstream accounts or bypass provider limits.
 
 **Ollama → Set up & connect** connects local models directly. When a managed connection is selected, MicoCode restores it when reopened, stops processes it started when closed, and leaves pre-existing Ollama servers running. A saved connection to your own 9Router remains selected across restarts. Installations stay in the application profile. The manager encrypts generated connection credentials with Windows encryption. Only the trusted workspace can invoke narrowly scoped native setup APIs; generated previews cannot access them.
 
@@ -86,9 +90,9 @@ The console exposes named workspace commands, not an OS shell. npm builds, backe
 
 ## Other free connections
 
-The browser edition includes WebLLM (Qwen 3.5 9B and Qwen 3 8B) on compatible WebGPU hardware, existing local Ollama (Gemma 4 12B/26B/31B, Qwen 3.8 27B, Qwen 3.6 27B Coding & 35B, Qwen 3.5 9B/27B/35B, Qwen 3 Coder 30B/480B, Nemotron 3 Super 120B, Devstral 24B), OpenCode Zen's verified free text models (Muse Spark 1.3 Contributor, Qwen 3.6 Plus, GLM-5, DeepSeek V4 Flash, Kimi K2.5, Nemotron 3 Ultra, Nemotron 3.5 Lightning, Poolside Laguna S 2.1, MiniMax-M3, MiMo V2.6 Flash, MiMo V2 Pro, Step 5 Preview, Fledge Alpha, Grok Code Fast 1), OpenRouter's zero-price router (Gemma 4 31B IT, Gemma 4 26B A4B IT, Nemotron 3 Ultra 550B, Nemotron 3.5 Lightning, Nemotron 3 Super 120B, Poolside Laguna S 2.1, North Mini Code), 9Router / LiteLLM / compatible provider routes (including Muse Spark 1.3 Contributor, GLM-5.3, GLM-5.3 Flash, Gemma 4 31B, Qwen 3.8 Max, Qwen 3.7 Plus, DeepSeek V4.1 Flash, DeepSeek V4 Pro, Kimi K3, Kimi K2.7 Code), and anonymous AI Horde. Automatic provider installation is exclusive to Windows.
+The browser edition includes WebLLM, local Ollama, OpenRouter, direct NVIDIA NIM, and custom OpenAI-compatible endpoints. The Windows app can install FreeRide locally and route across NVIDIA NIM, OpenRouter, Groq, Hugging Face, Cerebras, Cloudflare Workers AI, and local Ollama with automatic failover. Existing OpenCode Zen and AI Horde profiles remain compatible but are hidden from new connection choices. Automatic provider installation is exclusive to Windows.
 
-For manually configured routers, set the exact URL and its own key. Remote endpoints must use HTTPS; allow the exact MicoCode origin in CORS. Browser keys are isolated by endpoint and remain in the tab's session. The picker lists exposed models and marks prices when supplied by the router. Names containing “free” are not price proof. Downstream billing in manually configured routers remains the owner's responsibility. The dedicated Zen and OpenRouter relays enforce their free model policies independently.
+For manually configured routers, set the exact URL and its own key. Remote endpoints must use HTTPS; allow the exact MicoCode origin in CORS. Browser keys are isolated by endpoint and remain in the tab's session. The picker lists exposed models and marks prices when supplied by the router. Names containing “free” are not price proof. Downstream billing in manually configured routers remains the owner's responsibility. The dedicated OpenRouter relay enforces its zero-price policy independently.
 
 OpenRouter requires your own key. Each request enforces zero maximum prompt/completion pricing, with free routes only for fallback. Provider quotas still apply. Smart limit handling honors retry/reset headers, paces requests, retries transient failures at most twice, and supports cancellation. Daily quota, budget, credit, and authentication errors stop. It does not remove limits or rotate credentials across providers.
 
@@ -127,6 +131,6 @@ A packaged executable smoke check verifies the actual renderer, native bridge, a
 
 ## Credits
 
-MicoCode uses React, CodeMirror, WebLLM, Electron, and Node.js. Managed providers are independent projects: [9Router](https://github.com/decolua/9router), [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI), [LiteLLM](https://github.com/BerriAI/litellm), [uv](https://github.com/astral-sh/uv), and [Ollama](https://github.com/ollama/ollama). Their licenses and service terms apply to their software and services.
+MicoCode uses React, CodeMirror, WebLLM, Electron, and Node.js. Managed providers are independent projects: [9Router](https://github.com/decolua/9router), [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI), [LiteLLM](https://github.com/BerriAI/litellm), [FreeRide](https://github.com/Shaivpidadi/FreeRideV3), [uv](https://github.com/astral-sh/uv), and [Ollama](https://github.com/ollama/ollama). NVIDIA NIM is served by [NVIDIA Build](https://build.nvidia.com/models). Their licenses and service terms apply to their software and services.
 
 MicoCode is independent software inspired by OpenCode and Antigravity, and is not affiliated with those products or the listed providers. MicoCode is MIT licensed.

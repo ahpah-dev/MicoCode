@@ -8,7 +8,7 @@ import {fileURLToPath} from 'node:url';
 import os from 'node:os';
 import path from 'node:path';
 import {build} from 'esbuild';
-import {applyManagedConnection,catalogueError,credentialSlot,discoverProxy,fullCatalogue,listProxyModels,selectCatalogueModel,supplementOpenCodeModels} from '../lib/mico/providers.mjs';
+import {applyManagedConnection,catalogueError,credentialSlot,discoverProxy,fullCatalogue,listProxyModels,proxyPresets,selectCatalogueModel,supplementOpenCodeModels} from '../lib/mico/providers.mjs';
 
 test('native Ollama setup accepts its intentionally keyless loopback connection',()=>{
  const result={config:{provider:'ollama',ollamaUrl:'http://127.0.0.1:19286/managed/ollama',model:'deepseek-r1:8b'},key:''};
@@ -17,6 +17,16 @@ test('native Ollama setup accepts its intentionally keyless loopback connection'
  assert.throws(()=>applyManagedConnection({}, {...result,config:{...result.config,ollamaUrl:'https://remote.example'}}),/local connection/);
  assert.throws(()=>applyManagedConnection({}, {...result,key:undefined}),/incomplete connection/);
  assert.throws(()=>applyManagedConnection({}, {config:{provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:55000/v1',model:'mico-free/free-code',freeModels:['mico-free/free-code']},key:''}),/incomplete connection/);
+});
+
+test('NVIDIA NIM and FreeRide use current endpoints while legacy direct presets stay hidden',async()=>{
+ const preset=proxyPresets.find(p=>p.id==='nim'),prior=globalThis.fetch;assert.equal(preset.url,'https://integrate.api.nvidia.com/v1');
+ assert.equal(proxyPresets.find(p=>p.id==='freeride').url,'http://127.0.0.1:11343/v1');assert.equal(proxyPresets.find(p=>p.id==='horde').hidden,true);assert.equal(proxyPresets.find(p=>p.id==='opencode').hidden,true);
+  globalThis.fetch=async(url,options)=>{assert.equal(url,preset.url+'/models');assert.equal(options.headers.Authorization,'Bearer nvapi-test-key');return Response.json({data:[{id:'nvidia/nemotron',owned_by:'nvidia'},{id:'nvidia/nemotron',owned_by:'nvidia'}]})};
+  try{assert.deepEqual((await listProxyModels({provider:'proxy',proxyPreset:'nim',proxyUrl:preset.url},'nvapi-test-key')).map(m=>m.id),['nvidia/nemotron'])}finally{globalThis.fetch=prior}
+ const freeride=proxyPresets.find(p=>p.id==='freeride');
+ globalThis.fetch=async url=>{assert.equal(url,freeride.url+'/models');return Response.json({data:[{id:'nvidia_nim/nemotron',owned_by:'nvidia_nim'}]})};
+ try{assert.ok((await listProxyModels({provider:'proxy',proxyPreset:'freeride',proxyUrl:freeride.url},'any')).some(m=>m.id==='freeride/auto'))}finally{globalThis.fetch=prior}
 });
 
 test('catalogue selection preserves exact provider and combo IDs and refuses stale profiles',()=>{

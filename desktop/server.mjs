@@ -22,13 +22,17 @@ export function isLocalRequest(request,origin){return new URL(request.url).origi
 export function managedClientConnection(connection,origin){
  if(!connection||connection.config.provider!=='proxy')return connection;
  const id=connection.config.proxyPreset;
- if(!['9router','cliproxy','litellm'].includes(id))throw new Error('Unsupported managed router.');
+  if(!['9router','cliproxy','litellm','freeride'].includes(id))throw new Error('Unsupported managed router.');
  return {...connection,config:{...connection.config,proxyUrl:origin+'/providers/'+id+'/v1'}};
 }
 export function managedRouterCatalogue(data,connection){
- if(connection?.config?.proxyPreset!=='9router'||!Array.isArray(connection.openCodeFreeModels))return data;
- const field=Array.isArray(data?.data)?'data':Array.isArray(data?.models)?'models':null;
- if(!field)return data;
+  const field=Array.isArray(data?.data)?'data':Array.isArray(data?.models)?'models':null;
+  if(!field)return data;
+  if(connection?.config?.proxyPreset==='freeride'){
+   if(data[field].some(m=>m?.id==='freeride/auto'))return data;
+   return {...data,[field]:[...data[field],{id:'freeride/auto',name:'FreeRide Auto · provider failover',object:'model',owned_by:'FreeRide'}]};
+  }
+  if(connection?.config?.proxyPreset!=='9router'||!Array.isArray(connection.openCodeFreeModels))return data;
  const existing=new Set(data[field].map(m=>m?.id));
  const extra=connection.openCodeFreeModels.filter(m=>m&&typeof m.id==='string'&&m.id.startsWith('oc/')&&m.catalogueSource==='opencode-live'&&m.pricing?.prompt==='0'&&m.pricing?.completion==='0'&&!existing.has(m.id));
  return {...data,[field]:[...data[field],...extra]};
@@ -38,7 +42,7 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
  async function handle(request){
   if(!isLocalRequest(request,origin))return json('Origin is not allowed.',403);
   const url=new URL(request.url),route=url.pathname;
-  const providerRoute=route.match(/^\/providers\/(9router|cliproxy|litellm)\/v1\/(models|chat\/completions)$/);
+  const providerRoute=route.match(/^\/providers\/(9router|cliproxy|litellm|freeride)\/v1\/(models|chat\/completions)$/);
   if(providerRoute){
    const [,id,action]=providerRoute,connection=getManagedConnection(id);
    if(!connection)return json('Your managed router is stopped. Open Models and click Set up & connect.',503);
@@ -65,7 +69,7 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
     // finishes. A router process can exit after sending headers; forwarding that
     // partial body hides the connection error behind an invalid model reply.
     const data=await routerBody(r);
-    if(id==='9router'&&action==='models'&&r.ok){const catalogue=JSON.parse(data.toString('utf8'));return Response.json(managedRouterCatalogue(catalogue,connection),{status:r.status,headers})}
+    if(['9router','freeride'].includes(id)&&action==='models'&&r.ok){const catalogue=JSON.parse(data.toString('utf8'));return Response.json(managedRouterCatalogue(catalogue,connection),{status:r.status,headers})}
     return new Response(data,{status:r.status,headers});
    }catch(e){if(request.signal.aborted)throw e;if(e.code==='MICO_RESPONSE_LIMIT')return json('The router response was too large. Try a smaller task or reduce the router model catalogue.',502);return json(e.name==='TimeoutError'?'The coding model took too long. Try a smaller local model or a shorter task.':'Your managed router stopped responding. Open Models and click Set up & connect.',e.name==='TimeoutError'?504:503)}
   }

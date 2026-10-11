@@ -13,9 +13,11 @@ const diagnostics=new Map();
 manager=new ProviderManager({dataDir,runtimeDir:path.join(root,'build','resources','node-runtime'),gatewayBase:server.origin+'/managed/v1',gatewayKey,vault,onProgress:p=>{if(p.percent===undefined||p.percent===100)console.log(p.provider+': '+p.stage+' · '+p.message)},onDiagnostic:(id,line)=>diagnostics.set(id,(diagnostics.get(id)||'').slice(-3000)+line)});
 const results=[];
 try{
- for(const provider of process.argv.slice(3).length?process.argv.slice(3):['9router','cliproxy','litellm','ollama']){
-  try{
-   const first=await manager.setup(provider),second=await manager.setup(provider);
+  const providers=process.argv.slice(3).length?process.argv.slice(3):['9router','cliproxy','litellm','ollama',...(process.env.NVIDIA_API_KEY?['freeride']:[])];
+  for(const provider of providers){
+   try{
+    const credentials=provider==='freeride'&&process.env.NVIDIA_API_KEY?{nvidiaApiKey:process.env.NVIDIA_API_KEY}:undefined;
+    const first=await manager.setup(provider,'local',credentials),second=await manager.setup(provider,'local');
    if(first.config.provider==='proxy'){const catalogue=await discoverProxy(first.config,first.key,AbortSignal.timeout(20000));if(!catalogue.some(m=>m.id===first.config.model))throw new Error('Frontend free-route discovery rejected the managed model.');}
    const same=first.config.proxyUrl===second.config.proxyUrl&&first.config.ollamaUrl===second.config.ollamaUrl;
    results.push({provider,connected:true,idempotent:same,model:first.config.model,paidFallback:false});

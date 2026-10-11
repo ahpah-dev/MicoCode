@@ -2,7 +2,7 @@ import {spawn} from 'node:child_process';
 import {mkdir,readFile,writeFile,access,readdir,rm} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import path from 'node:path';
-import {freeCatalogue,fullCatalogue,routeSlug} from '../lib/mico/providers.mjs';
+import {bestCodingModel,freeCatalogue,fullCatalogue,routeSlug} from '../lib/mico/providers.mjs';
 import {loadOpenCodeModels} from '../lib/mico/opencode.mjs';
 import {managedRouterCatalogue} from './server.mjs';
 import net from 'node:net';
@@ -10,7 +10,7 @@ import {randomBytes} from 'node:crypto';
 import {artifacts,versions} from './artifacts.mjs';
 import {downloadVerified,extractVerifiedZip} from './install.mjs';
 
-export const managedProviders=['9router','cliproxy','litellm','ollama'];
+export const managedProviders=['9router','cliproxy','litellm','freeride','ollama'];
 export function assertProvider(id){if(!managedProviders.includes(id))throw new Error('Unsupported managed provider.');return id}
 export function assertEngine(engine){if(!['local','community'].includes(engine))throw new Error('Unsupported free engine.');return engine}
 const exists=async file=>{try{await access(file,constants.F_OK);return true}catch{return false}};
@@ -30,7 +30,7 @@ export class ProviderManager{
    this.notify=onProgress;this.vault=vault;this.fetch=fetchImpl;this.diagnostic=onDiagnostic;this.loadOpenCodeModels=loadOpenCodeModelsImpl;this.children=new Map();this.connections=new Map();this.active=null;this.cookies=new Map();this.ollamaUpstream=null;this.ollamaModel=null;this.ollamaModels=null;this.closing=false;
  }
  folder(id){return path.join(this.root,assertProvider(id))}
- versionFolder(id){return path.join(this.folder(id),id==='9router'?versions.nine:id==='litellm'?versions.litellm:artifacts[id].version)}
+  versionFolder(id){return path.join(this.folder(id),id==='9router'?versions.nine:id==='litellm'?versions.litellm:id==='freeride'?versions.freeride:artifacts[id].version)}
   emit(provider,stage,message,percent){this.notify({provider,stage,message,...(Number.isFinite(percent)?{percent}: {})})}
   async secret(name){let key=await this.vault.get(name);if(!key){key='sk-mico-'+randomBytes(24).toString('hex');await this.vault.set(name,key)}return key}
   async detectExistingNine(){
@@ -52,7 +52,8 @@ export class ProviderManager{
   const previous=this.children.get(id);if(previous?.exitCode===null)return previous;
   const child=spawn(exe,args,{...options,env:{...process.env,...options.env},windowsHide:true,shell:false,stdio:['ignore','pipe','pipe']});
   // Consume output without persisting prompts or credentials.
-  const log=chunk=>this.diagnostic(id,chunk.toString().replace(/sk-mico-[\w-]+|sk-[a-zA-Z0-9_-]{20,}|integration-only-free-route/g,'[redacted]').slice(-3000));
+   const envSecrets=Object.entries(options.env||{}).filter(([name,value])=>/(KEY|TOKEN|SECRET|PASSWORD)/i.test(name)&&typeof value==='string'&&value.length>8).map(([,value])=>value);
+   const log=chunk=>{let text=chunk.toString().replace(/sk-mico-[\w-]+|sk-[a-zA-Z0-9_-]{20,}|nvapi-[\w-]{16,}|gsk_[\w-]{16,}|hf_[\w-]{16,}|integration-only-free-route/g,'[redacted]');for(const secret of envSecrets)text=text.replaceAll(secret,'[redacted]');this.diagnostic(id,text.slice(-3000))};
   const forget=()=>{if(this.children.get(id)===child){this.children.delete(id);this.connections.delete(id)}};
   child.stdout.on('data',log);child.stderr.on('data',log);child.on('error',e=>{forget();this.diagnostic(id,e.code||'Process start failed.')});child.once('exit',forget);
   this.children.set(id,child);return child;
@@ -73,7 +74,7 @@ export class ProviderManager{
    await pause(500,signal);
   }throw new Error('The provider did not start in time. Retry setup.');
  }
- async installZip(id,artifact,signal){
+  async installZip(id,artifact,signal){
   const dir=this.versionFolder(id);if(await exists(path.join(dir,'.package-ready.json')))return dir;
   const zip=path.join(this.root,'downloads',id+'-'+artifact.version+'.zip');
   this.emit(id,'download','Downloading '+(id==='cliproxy'?'CLIProxyAPI':id==='ollama'?'Ollama':'the private Python installer')+' from its official release…');
@@ -81,37 +82,112 @@ export class ProviderManager{
   this.emit(id,'install','Checksum verified. Extracting into MicoCode’s private folder…');
   // A prior interrupted extraction was never marked installed; its private version folder may be replaced.
   if(await exists(dir))await rm(dir,{recursive:true,force:true});
-  await extractVerifiedZip(zip,dir,signal);await writeFile(path.join(dir,'.package-ready.json'),JSON.stringify({version:artifact.version}));await rm(zip,{force:true});return dir;
- }
- async setup(id,engine='local'){
-  assertProvider(id);assertEngine(engine);if(this.active)throw new Error('Another provider setup is already running.');
-  const controller=new AbortController();this.active={id,controller};const signal=controller.signal;
-  const hadChild=this.children.get(id);
-  try{
-   await mkdir(this.folder(id),{recursive:true});
-   const cached=this.connections.get(id);if(cached&&cached.config.routerEngine===engine&&hadChild?.exitCode===null){
-    this.emit(id,'verify','Checking the running connection…');
-    try{if(id!=='ollama'&&engine==='local')await this.verifyLocalEngine(signal);if(id==='9router')await this.syncOpenCodeCatalogue(cached,signal);await this.verify(cached,signal);this.emit(id,'ready','Connected. Your free route is ready.');return cached}
+   await extractVerifiedZip(zip,dir,signal);await writeFile(path.join(dir,'.package-ready.json'),JSON.stringify({version:artifact.version}));await rm(zip,{force:true});return dir;
+  }
+  async saveFreeRideCredentials(credentials={}){
+   if(!credentials||typeof credentials!=='object'||Array.isArray(credentials))return false;
+   const fields={nvidiaApiKey:'freeride-nvidia-key',openRouterApiKey:'freeride-openrouter-key',groqApiKey:'freeride-groq-key',huggingFaceToken:'freeride-huggingface-token',cerebrasApiKey:'freeride-cerebras-key',cloudflareApiToken:'freeride-cloudflare-token',cloudflareAccountId:'freeride-cloudflare-account'};
+   let changed=false;
+   for(const [field,secret] of Object.entries(fields))if(typeof credentials[field]==='string'&&credentials[field].trim()){
+    const value=credentials[field].trim();if(value.length>2048||/[\r\n\0]/.test(value))throw new Error('A FreeRide provider key is invalid. Check the pasted value and try again.');
+    if(typeof this.vault?.set!=='function')throw new Error('Secure credential storage is unavailable. Restart MicoCode and try again.');
+    const existing=typeof this.vault?.get==='function'?await this.vault.get(secret):undefined;
+    if(existing!==value){await this.vault.set(secret,value);changed=true}
+   }
+   return changed;
+  }
+  async ensureUv(id,signal){
+   const dir=path.join(this.root,'uv',artifacts.uv.version),zip=path.join(this.root,'downloads','uv.zip');
+   if(!await exists(path.join(dir,'uv.exe'))){this.emit(id,'download','Downloading the verified private Python installer…');await downloadVerified(artifacts.uv,zip,signal,p=>this.emit(id,'download','Downloading uv from Astral’s official release…',p));if(await exists(dir))await rm(dir,{recursive:true,force:true});await extractVerifiedZip(zip,dir,signal);await rm(zip,{force:true})}
+   return this.findExecutable(dir,['uv.exe']);
+  }
+  async setupFreeRide(signal,{verifyGeneration=false}={}){
+   const id='freeride',defaultBase='http://127.0.0.1:11343';let existing=false;
+   try{existing=(await this.fetch(defaultBase+'/health',{redirect:'error',signal:AbortSignal.any([signal,AbortSignal.timeout(1800)])})).ok}catch{}
+   const secretNames={NVIDIA_API_KEY:'freeride-nvidia-key',OPENROUTER_API_KEY:'freeride-openrouter-key',GROQ_API_KEY:'freeride-groq-key',HF_TOKEN:'freeride-huggingface-token',CEREBRAS_API_KEY:'freeride-cerebras-key',CLOUDFLARE_API_TOKEN:'freeride-cloudflare-token',CLOUDFLARE_ACCOUNT_ID:'freeride-cloudflare-account'};
+    const providerEnv={};for(const [envName,secret] of Object.entries(secretNames))providerEnv[envName]=typeof this.vault?.get==='function'?(await this.vault.get(secret)||''):'';
+    for(const name of ['NVIDIA_API_KEY_2','NIM_API_KEY','OPENROUTER_API_KEY_2','OPENROUTER_API_KEY_3','GROQ_API_KEY_2','GROQ_API_KEY_3','CEREBRAS_API_KEY_2','HF_TOKEN_2','HUGGINGFACE_API_KEY','HUGGINGFACE_API_KEY_2'])providerEnv[name]='';
+    providerEnv.NVIDIA_NIM_FREE_MODELS_OVERRIDE=['deepseek-ai/deepseek-v4-flash','nvidia/nemotron-3.5-lightning-30b-a3b','nvidia/nemotron-3-super-120b-a12b','z-ai/glm-5.3','z-ai/glm-5.3-flash','moonshotai/kimi-k3','openai/gpt-oss-120b','qwen/qwen3-next-80b-a3b-instruct','stepfun-ai/step-3.5-flash','minimaxai/minimax-m2.7'].join(',');
+    if(Boolean(providerEnv.CLOUDFLARE_API_TOKEN)!==Boolean(providerEnv.CLOUDFLARE_ACCOUNT_ID))throw new Error('FreeRide needs both a Cloudflare API token and account ID. Complete both fields or clear them.');
+    const hasProviderKey=Object.keys(secretNames).some(name=>Boolean(providerEnv[name]));
+    let ollama=this.ollamaUpstream;
+    if(!ollama){const candidate='http://127.0.0.1:11434';try{if((await this.fetch(candidate+'/api/version',{signal:AbortSignal.any([signal,AbortSignal.timeout(1500)])})).ok)ollama=candidate}catch{}}
+    const reuseExisting=existing&&!hasProviderKey,externalHome=process.env.USERPROFILE||process.env.HOME||'',externalExe=externalHome?path.join(externalHome,'.local','bin','freeride.exe'):'',reuseInstalled=!existing&&!hasProviderKey&&!ollama&&externalExe&&await exists(externalExe);
+    const port=reuseExisting?11343:existing?await freePort():11343,base='http://127.0.0.1:'+port,api=base+'/v1';
+    if(!reuseExisting){
+     if(reuseInstalled){
+      this.emit(id,'start','Starting your existing FreeRide installation…');this.start(id,externalExe,['serve','--host','127.0.0.1','--port',String(port)],{cwd:externalHome});
+     }else{
+      if(!hasProviderKey&&!ollama)throw new Error('FreeRide needs at least one provider key. Add your NVIDIA NIM key, another free provider key, or start Ollama.');
+      providerEnv.OLLAMA_BASE_URL=ollama||'';
+    const dir=this.versionFolder(id),python=path.join(dir,'Scripts','python.exe'),exe=path.join(dir,'Scripts','freeride.exe'),readyFile=path.join(dir,'.freeride-package-ready.json');
+    if(!await exists(readyFile)){
+     if(await exists(dir))await rm(dir,{recursive:true,force:true});await mkdir(dir,{recursive:true});
+     const uv=await this.ensureUv(id,signal),uvEnv={UV_CACHE_DIR:path.join(this.root,'uv-cache'),UV_PYTHON_INSTALL_DIR:path.join(this.root,'python'),UV_NO_PROGRESS:'1',UV_NO_CONFIG:'1',PYTHONNOUSERSITE:'1',PATH:this.runtime+path.delimiter+process.env.PATH};
+     this.emit(id,'install','Installing the private FreeRide failover gateway…');
+     await this.run(uv,['venv','--python',versions.python,'--managed-python',dir],{signal,env:uvEnv});
+      const wheel=path.join(this.root,'downloads','freeride_gateway-'+versions.freeride+'-py3-none-any.whl');
+     await rm(wheel,{force:true});
+     await downloadVerified(artifacts.freeride,wheel,signal,p=>this.emit(id,'download','Downloading verified FreeRide '+versions.freeride+'…',p));
+     await this.run(uv,['pip','install','--python',python,wheel],{signal,env:uvEnv});await rm(wheel,{force:true});await writeFile(readyFile,JSON.stringify({version:versions.freeride}),{mode:0o600});
+      }
+      const home=path.join(this.folder(id),'home'),freerideState=path.join(home,'.freeride');await mkdir(freerideState,{recursive:true});
+      let state={};try{state=JSON.parse(await readFile(path.join(freerideState,'config.json'),'utf8'))}catch{}
+      state.telemetry=false;state.telemetry_disclosure_shown=true;await writeFile(path.join(freerideState,'config.json'),JSON.stringify(state),{mode:0o600});
+      this.emit(id,'start','Starting FreeRide locally with automatic provider failover…');
+      this.start(id,exe,['serve','--host','127.0.0.1','--port',String(port)],{cwd:dir,env:{...providerEnv,USERPROFILE:home,HOME:home,FREERIDE_TELEMETRY:'off'}});
+     }
+    await this.ready(base+'/health',id,signal);
+   }
+   this.emit(id,'verify','Loading FreeRide’s live failover catalogue…');
+   const response=await this.fetch(api+'/models',{headers:{Authorization:'Bearer any'},redirect:'error',signal:AbortSignal.any([signal,AbortSignal.timeout(60000)])});
+   const data=await response.json().catch(()=>null);if(!response.ok)throw new Error('FreeRide could not load its model catalogue ('+response.status+'). Check its provider keys and retry.');
+    const models=fullCatalogue(data),routes=[...new Set(models.map(m=>m.id).filter(id=>typeof id==='string'&&id.length>0))];
+    if(!routes.length)throw new Error('FreeRide is running but has no available models. Add a provider key or install a local Ollama model, then retry.');
+    const model='freeride/auto';
+    if(verifyGeneration){
+     this.emit(id,'verify','Testing a short request through FreeRide’s provider failover…');
+     const probe=await this.fetch(api+'/chat/completions',{method:'POST',headers:{Authorization:'Bearer any','Content-Type':'application/json'},body:JSON.stringify({model,messages:[{role:'user',content:'Reply with OK.'}],temperature:0,max_tokens:4,stream:false}),redirect:'error',signal:AbortSignal.any([signal,AbortSignal.timeout(130000)])});
+     const result=await probe.json().catch(()=>null);
+     if(!probe.ok||!result?.choices?.[0]?.message?.content)throw new Error('FreeRide started but its setup check could not complete a model request ('+probe.status+'). Check a provider key, account credits, or your local Ollama model, then retry.');
+     if(typeof this.vault?.set==='function')await this.vault.set('freeride-setup-verified','0.7.0');
+    }
+    return {config:{provider:'proxy',proxyPreset:id,proxyUrl:api,model,freeModels:[model,...routes],routerFreeOnly:true},key:'any'};
+  }
+  async setup(id,engine='local',credentials={}){
+   assertProvider(id);assertEngine(engine);if(this.active)throw new Error('Another provider setup is already running.');
+   const selectedEngine=id==='freeride'?'community':engine;
+   const controller=new AbortController();this.active={id,controller};const signal=controller.signal;
+   const hadChild=this.children.get(id);
+   try{
+    await mkdir(this.folder(id),{recursive:true});
+      const credentialsChanged=id==='freeride'?await this.saveFreeRideCredentials(credentials):false;
+      if(credentialsChanged&&this.children.get(id)?.exitCode===null)await this.stop(id);
+      const freeRideVerified=id==='freeride'&&typeof this.vault?.get==='function'&&await this.vault.get('freeride-setup-verified')==='0.7.0';
+      const cached=this.connections.get(id);if(cached&&cached.config.routerEngine===selectedEngine&&hadChild?.exitCode===null){
+     this.emit(id,'verify','Checking the running connection…');
+     try{if(['9router','cliproxy','litellm'].includes(id)&&engine==='local')await this.verifyLocalEngine(signal);if(id==='9router')await this.syncOpenCodeCatalogue(cached,signal);await this.verify(cached,signal);this.emit(id,'ready','Connected. Your free route is ready.');return cached}
     catch(e){if(signal.aborted)throw e;this.emit(id,'configure','Repairing the private router connection…');await this.stop(id)}
    }
    if(this.children.get(id)?.exitCode===null)await this.stop(id);
-   if(id!=='ollama'&&engine==='local'){
+    if(['9router','cliproxy','litellm'].includes(id)&&engine==='local'){
     this.emit(id,'configure','Preparing the free local engine for your router…');
     const local=await this.setupOllama(signal);await this.verify(local,signal);this.connections.set('ollama',local);
     await writeFile(path.join(this.folder('ollama'),'installed.json'),JSON.stringify({version:artifacts.ollama.version}),{mode:0o600});
    }
-   const base=this.gatewayBase.replace('/managed/v1','/managed/'+engine+'/v1');
+    const base=this.gatewayBase.replace('/managed/v1','/managed/'+selectedEngine+'/v1');
    let connection;
-   if(id==='9router')connection=await this.setupNine(signal,base);
-   else if(id==='cliproxy')connection=await this.setupCLI(signal,base);
-   else if(id==='litellm')connection=await this.setupLite(signal,base);
-   else connection=await this.setupOllama(signal);
+    if(id==='9router')connection=await this.setupNine(signal,base);
+    else if(id==='cliproxy')connection=await this.setupCLI(signal,base);
+    else if(id==='litellm')connection=await this.setupLite(signal,base);
+     else if(id==='freeride')connection=await this.setupFreeRide(signal,{verifyGeneration:credentialsChanged||!freeRideVerified});
+    else connection=await this.setupOllama(signal);
    if(id==='9router')await this.syncOpenCodeCatalogue(connection,signal);
    this.emit(id,'verify','Verifying the model catalogue and free route…');await this.verify(connection,signal);
-   await writeFile(path.join(this.folder(id),'installed.json'),JSON.stringify({version:id==='9router'?versions.nine:id==='litellm'?versions.litellm:artifacts[id].version}),{mode:0o600});
-   connection.config.routerEngine=id==='ollama'?'local':engine;connection.config.managed=true;
-   await writeFile(path.join(this.root,'last-provider.json'),JSON.stringify({provider:id,engine}),{mode:0o600});
-   this.connections.set(id,connection);this.emit(id,'ready',id==='ollama'?'Local coding model connected. No account or service quota.':'Connected through '+(id==='9router'?'9Router':id==='cliproxy'?'CLIProxyAPI':'LiteLLM')+'. Your free '+engine+' route is ready.');return connection;
+    await writeFile(path.join(this.folder(id),'installed.json'),JSON.stringify({version:id==='9router'?versions.nine:id==='litellm'?versions.litellm:id==='freeride'?versions.freeride:artifacts[id].version}),{mode:0o600});
+    connection.config.routerEngine=id==='ollama'?'local':selectedEngine;connection.config.managed=true;
+    await writeFile(path.join(this.root,'last-provider.json'),JSON.stringify({provider:id,engine:selectedEngine}),{mode:0o600});
+    this.connections.set(id,connection);this.emit(id,'ready',id==='ollama'?'Local coding model connected. No account or service quota.':id==='freeride'?'FreeRide connected. Automatic provider failover is ready.':'Connected through '+(id==='9router'?'9Router':id==='cliproxy'?'CLIProxyAPI':'LiteLLM')+'. Your free '+selectedEngine+' route is ready.');return connection;
   }catch(e){if(this.children.get(id)!==hadChild)await this.stop(id);this.emit(id,signal.aborted?'cancelled':'error',signal.aborted?'Setup cancelled. You can resume with the same button.':e.message);throw e}
   finally{this.active=null}
  }
@@ -130,8 +206,8 @@ export class ProviderManager{
   const r=await this.fetch(url,{headers:connection.key?{Authorization:'Bearer '+connection.key}:{},signal:AbortSignal.any([signal,AbortSignal.timeout(20000)])});
   if(!r.ok)throw new Error('The installed provider did not accept its connection ('+r.status+'). Retry setup.');
    const d=await r.json();
-   const nine=connection.config.proxyPreset==='9router';
-   const ids=local?(d.models||[]).map(m=>m.name):(nine?fullCatalogue(managedRouterCatalogue(d,connection)):freeCatalogue(d,connection.config.freeModels,connection.config.routerFreeOnly)).map(m=>m.id);
+    const nine=connection.config.proxyPreset==='9router',managedFreeRide=connection.config.proxyPreset==='freeride';
+    const ids=local?(d.models||[]).map(m=>m.name):((nine||managedFreeRide)?fullCatalogue(managedRouterCatalogue(d,connection)):freeCatalogue(d,connection.config.freeModels,connection.config.routerFreeOnly)).map(m=>m.id);
    if(!ids.includes(connection.config.model))throw new Error('The router did not expose the configured model. Retry setup.');
    if(nine)connection.config.routerModels=ids;
  }

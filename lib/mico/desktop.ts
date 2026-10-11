@@ -1,5 +1,5 @@
 import type {Config} from './types';
-export type ManagedProvider='9router'|'cliproxy'|'litellm'|'ollama';
+export type ManagedProvider='9router'|'cliproxy'|'litellm'|'freeride'|'ollama';
 export type SetupProgress={provider:ManagedProvider;stage:'download'|'install'|'start'|'configure'|'verify'|'ready'|'warning'|'error'|'cancelled';message:string;percent?:number};
 export type SetupResult={config:Partial<Config>;key:string;dashboard?:string;catalogueWarning?:string};
 export type OpenFolderResult={root:string;name:string;files:Record<string,string>;totalBytes:number};
@@ -42,7 +42,7 @@ export type DesktopGitAPI={
 };
 export type DesktopAPI={
  version:string;
- setup:(provider:ManagedProvider,engine?:'local'|'community')=>Promise<SetupResult>;
+ setup:(provider:ManagedProvider,engine?:'local'|'community',credentials?:Record<string,string>)=>Promise<SetupResult>;
  detectExistingNine?:()=>Promise<boolean>;
  cancelSetup:()=>Promise<void>;
  providerStatus:()=>Promise<ProviderStatus[]>;
@@ -57,4 +57,4 @@ export type DesktopAPI={
  git?:DesktopGitAPI;
 };
 declare global{interface Window{micoDesktop?:DesktopAPI}}
-export function isManagedProvider(id:string):id is ManagedProvider{return ['9router','cliproxy','litellm','ollama'].includes(id)}
+export function isManagedProvider(id:string):id is ManagedProvider{return ['9router','cliproxy','litellm','freeride','ollama'].includes(id)}
