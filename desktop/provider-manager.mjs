@@ -151,9 +151,12 @@ export class ProviderManager{
    if(!Array.isArray(disabled.ids)||!Array.isArray(clientKeys.keys))throw new Error('The private router model-access policy could not be checked.');
    // Keep explicit selections. A prior list stays automatic only while it
    // exactly matches the marker saved when MicoCode populated that list.
-   const ownsList=c=>{const enabled=c.providerSpecificData?.enabledModels,marker=c.providerSpecificData?.micoFreeCatalogue;return Array.isArray(enabled)&&Array.isArray(marker)&&enabled.length===marker.length&&enabled.every((id,i)=>id===marker[i])};
-   const candidates=connections.filter(c=>{if(!c||c.isActive!==true||!['opencode','opencode-zen'].includes(c.provider)||typeof c.id!=='string'||!c.id)return false;const enabled=c.providerSpecificData?.enabledModels,marker=c.providerSpecificData?.micoFreeCatalogue;return ownsList(c)||marker==null&&(enabled==null||Array.isArray(enabled)&&enabled.length===0)});
-   const models=await this.loadOpenCodeModels(this.fetch,AbortSignal.any([signal,AbortSignal.timeout(20000)]));
+    const ownsList=c=>{const enabled=c.providerSpecificData?.enabledModels,marker=c.providerSpecificData?.micoFreeCatalogue;return Array.isArray(enabled)&&Array.isArray(marker)&&enabled.length===marker.length&&enabled.every((id,i)=>id===marker[i])};
+    const candidates=connections.filter(c=>{if(!c||c.isActive!==true||!['opencode','opencode-zen'].includes(c.provider)||typeof c.id!=='string'||!c.id)return false;const enabled=c.providerSpecificData?.enabledModels,marker=c.providerSpecificData?.micoFreeCatalogue;return ownsList(c)||marker==null&&(enabled==null||Array.isArray(enabled)&&enabled.length===0)});
+    // Public availability is not an installed route. Only supplement the
+    // private router when it has an active OpenCode connection to serve it.
+    if(!candidates.length){connection.openCodeFreeModels=[];delete connection.catalogueWarning;return {updated:0,models:[],publicModels:0}}
+    const models=await this.loadOpenCodeModels(this.fetch,AbortSignal.any([signal,AbortSignal.timeout(20000)]));
    const verified=new Map(models.filter(m=>m?.verified===true&&m.paid===false&&typeof m.id==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$/.test(m.id)).map(m=>[m.id,m]));
    const ids=[...verified.keys()];
    let updated=0;

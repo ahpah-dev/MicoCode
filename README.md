@@ -19,6 +19,8 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.6.2 isolates 9Router provider quotas so exhausting one provider no longer cools down unrelated providers. It also distinguishes MicoCode’s private 9Router from your existing router, and only lists OpenCode routes in managed mode when an active OpenCode connection is configured.
+
 Version 0.6.1 fixes 9Router/OpenCode reasoning-model follow-up errors by echoing reasoning as protocol metadata without mistaking it for an agent action.
 
 Version 0.6.0 is a major visual refresh: frosted-glass top bar, luminous accents, pill navigation, glass cards, animated hero, refined composer and dialogs, and thin themed scrollbars across all five themes.
@@ -43,7 +45,7 @@ The 0.4.2 build fixes agent edits that failed with "The model reached its output
 
 The 0.4.1 build repairs interrupted router replies, crashed managed processes, keyless Ollama setup, and catalogue results left over after switching providers. Reconnect repairs unhealthy private routers. Coding requests can use the selected route even when catalogue discovery is temporarily unavailable; provider authorization still applies. Compatible streaming and text-block replies are decoded without treating reasoning or tool calls as code.
 
-Managed **9Router → Refresh model catalogue** discovers current verified free OpenCode text models, including public `oc/` routes that 9Router can omit when other providers are connected. It respects the private dashboard's disabled models and client-key restrictions, and preserves credentials and user model selections. For a separate router, MicoCode supplements its catalogue with verified public OpenCode Free IDs and labels their router access as unchecked; that router still enforces its settings and authorization when a prompt is sent. Other provider and combo IDs remain exactly as returned by `/v1/models`.
+Managed **9Router → Refresh model catalogue** discovers verified free OpenCode text models only when an active OpenCode provider is configured in that private router; it respects disabled models and client-key restrictions. A private MicoCode 9Router is separate from your existing 9Router account. Choose **Use existing 9Router** to load the provider models and combos enabled for your own API key. For a manually connected router, additional public OpenCode Free IDs are labelled as unchecked; your router still enforces its settings and authorization. Other provider and combo IDs returned by `/v1/models` are preserved.
 
 Local action requests disable optional Ollama thinking per request, so supported models retain their full output budget for the JSON action answer. Ollama's model files and server settings remain unchanged. An explicit output-limit finish is still reported as an incomplete reply and never applied as a completed edit; the agent retries once with a smaller request instead of ending the run. [Ollama documents model-specific thinking controls](https://github.com/ollama/ollama/blob/main/docs/capabilities/thinking.mdx).
 

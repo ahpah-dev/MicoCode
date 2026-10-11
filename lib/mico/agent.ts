@@ -56,8 +56,13 @@ export async function complete(messages:Chat[],config:Config,key:string,signal:A
   const body=local?{model:config.model,messages,stream:false,think:false,format:actionSchema,options:{temperature:config.temperature,num_predict:4096}}:horde||opencode?{action:'complete',model:config.model,messages,temperature:config.temperature}:custom?{model:config.model,messages,temperature:config.temperature,max_tokens:4096,stream:false}:{model:config.model,messages,temperature:config.temperature,freeFallback:config.freeFallback};
   const effectiveKey=key||(!local&&!horde&&config.provider==='proxy'?readCredential(config):'');
   const operation=()=>fetch(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json',...(!local&&!horde&&effectiveKey?{Authorization:`Bearer ${effectiveKey}`}:{})},body:JSON.stringify(body),signal:AbortSignal.any([signal,AbortSignal.timeout(managedLocal?620000:130000)])});
- // Cooldowns belong to the connection, never to a model: switching models cannot reset quotas.
- const response=await resilientRequest(operation,{scope:config.provider+':'+(opencode?'opencode':horde?'horde':custom?normalizeEndpoint(config.proxyUrl):local?config.ollamaUrl:''),signal,enabled:config.resilience,paceMs:local?0:config.provider==='openrouter'?3200:1500,onStatus});
+  // 9Router quotas are enforced per provider route; exhausting OpenCode must
+  // not cool down unrelated providers exposed by the same router.
+  const routerModel=config.model.trim(),slash=routerModel.indexOf('/');
+  const routerProvider=slash>0?routerModel.slice(0,slash):routerModel;
+  const routerScope=custom&&config.proxyPreset==='9router'?':'+routerProvider:'';
+  // Other connections keep a shared cooldown so model switching cannot reset provider limits.
+  const response=await resilientRequest(operation,{scope:config.provider+':'+(opencode?'opencode':horde?'horde':custom?normalizeEndpoint(config.proxyUrl)+routerScope:local?config.ollamaUrl:''),signal,enabled:config.resilience,paceMs:local?0:config.provider==='openrouter'?3200:1500,onStatus});
   const content=await readModelText(response,{local,signal,onReasoning});
  onToken(content);return content;
 }

@@ -112,3 +112,19 @@ test('9Router OpenCode reasoning is echoed on the next agent turn',async()=>{
   assert.equal(followup.reasoning_content,'preserve this reasoning for the OpenCode follow-up');
  }finally{globalThis.fetch=prior}
 });
+test('a 9Router provider quota does not cool down other provider routes',async()=>{
+ const prior=globalThis.fetch;const sent=[];
+ globalThis.fetch=async(_url,init)=>{
+  const body=JSON.parse(init.body);sent.push(body.model);
+  if(body.model.startsWith('oc/'))return Response.json({error:{message:'Daily free quota exhausted'}},{status:429});
+  return Response.json({choices:[{message:{content:'{"message":"Ready","actions":[],"done":true}'}}]});
+ };
+ const base={...defaultConfig,provider:'proxy',proxyPreset:'9router',proxyUrl:'http://127.0.0.1:9917/v1',resilience:true};
+ try{
+  await assert.rejects(complete([{role:'user',content:'test'}],{...base,model:'oc/muse-free'},'test-key',new AbortController().signal,()=>{}),/another enabled model\/provider/);
+  const result=await complete([{role:'user',content:'test'}],{...base,model:'cc/gpt-free'},'test-key',new AbortController().signal,()=>{});
+  assert.match(result,/"Ready"/);assert.deepEqual(sent,['oc/muse-free','cc/gpt-free']);
+  await assert.rejects(complete([{role:'user',content:'test'}],{...base,model:'oc/another-free'},'test-key',new AbortController().signal,()=>{}),/cooling down/);
+  assert.deepEqual(sent,['oc/muse-free','cc/gpt-free']);
+ }finally{globalThis.fetch=prior}
+});

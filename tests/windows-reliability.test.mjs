@@ -175,29 +175,26 @@ test('automatic OpenCode lists refresh availability while preserving user-change
  assert.equal(result.updated,1);assert.deepEqual(rows[0].providerSpecificData.enabledModels,['next-free']);assert.deepEqual(rows[2].providerSpecificData.enabledModels,[]);
 });
 
-test('managed 9Router exposes verified public OpenCode models without a saved provider record',async()=>{
- const live={...connection(),dashboard:'http://127.0.0.1:55001/dashboard'};const messages=[];let writes=0;
+test('managed 9Router does not advertise OpenCode models without an active provider connection',async()=>{
+ const live={...connection(),dashboard:'http://127.0.0.1:55001/dashboard'};let discoveries=0;
  const upstream=async(url,options)=>{
   if(url.endsWith('/api/providers'))return Response.json({connections:[]});
   if(url.endsWith('/api/keys'))return Response.json({keys:[{key:'test-client'}]});
   if(url.includes('/api/models/disabled?providerAlias=oc'))return Response.json({ids:[]});
-  if(options.method==='PUT'||options.method==='PATCH')writes++;
   if(url.endsWith('/v1/models'))return Response.json({data:[{id:'mico-free/free-code'}]});
-  messages.push({headers:options.headers,body:JSON.parse(options.body)});return Response.json({choices:[{message:{content:'{"message":"Public free provider reached"}'}}]});
+  return Response.json({choices:[{message:{content:'{"message":"Local route reached"}'}}]});
  };
  const server=await createLocalServer({webDir:os.tmpdir(),port:0,getManagedConnection:()=>live,fetchImpl:upstream});
- const manager=new ProviderManager({dataDir:os.tmpdir(),runtimeDir:os.tmpdir(),gatewayBase:server.origin+'/managed/v1',gatewayKey:'internal',vault:{},fetchImpl:upstream,loadOpenCodeModelsImpl:async()=>[{id:'live-free',name:'Live Free Coder',verified:true,paid:false,contextLength:32000,maxOutput:4096},{id:'paid',verified:true,paid:true}]});
+ const manager=new ProviderManager({dataDir:os.tmpdir(),runtimeDir:os.tmpdir(),gatewayBase:server.origin+'/managed/v1',gatewayKey:'internal',vault:{},fetchImpl:upstream,loadOpenCodeModelsImpl:async()=>{discoveries++;return [{id:'live-free',name:'Live Free Coder',verified:true,paid:false}]}});
  manager.cookies.set('9router','session=private');manager.connections.set('9router',live);
  try{
   assert.equal(await manager.refreshNineCatalogue(),live);
-  assert.deepEqual(live.config.routerModels,['mico-free/free-code','oc/live-free']);
+  assert.deepEqual(live.config.routerModels,['mico-free/free-code']);assert.deepEqual(live.openCodeFreeModels,[]);assert.equal(discoveries,0);
   const config={...live.config,proxyUrl:server.origin+'/providers/9router/v1',managed:true};
   const catalogue=await listProxyModels(config,live.key,AbortSignal.timeout(5000));
-  const free=catalogue.find(m=>m.id==='oc/live-free');assert.equal(free.verified,true);assert.equal(free.paid,false);assert.equal(free.catalogueSource,'opencode-live');assert.equal(free.accessUnchecked,true);
+  assert.deepEqual(catalogue.map(m=>m.id),['mico-free/free-code']);
   const raw=await (await fetch(config.proxyUrl+'/models',{headers:{Authorization:'Bearer '+live.key}})).json();
-  assert.equal(raw.data.find(m=>m.id==='oc/live-free').pricing.prompt,'0');assert.equal(raw.data.find(m=>m.id==='oc/live-free').owned_by,'OpenCode Free');
-  const response=await fetch(config.proxyUrl+'/chat/completions',{method:'POST',headers:{Authorization:'Bearer '+live.key,'Content-Type':'application/json'},body:JSON.stringify({model:'oc/live-free',messages:[{role:'user',content:'Build a page'}]})});
-  assert.equal(response.status,200);assert.equal(messages.at(-1).body.model,'oc/live-free');assert.deepEqual(messages.at(-1).headers,{Authorization:'Bearer test-client','Content-Type':'application/json'});assert.equal(writes,0);
+  assert.deepEqual(raw.data.map(m=>m.id),['mico-free/free-code']);
  }finally{await server.close()}
 });
 
@@ -212,7 +209,7 @@ test('public OpenCode supplementation respects disabled routes and the exact man
  ];
  for(const policy of policies){
   const manager=new ProviderManager({dataDir:os.tmpdir(),runtimeDir:os.tmpdir(),gatewayBase:'http://127.0.0.1:19286/managed/v1',gatewayKey:'internal',vault:{},loadOpenCodeModelsImpl:async()=>models,fetchImpl:async url=>{
-   if(url.endsWith('/api/providers'))return Response.json({connections:[]});
+   if(url.endsWith('/api/providers'))return Response.json({connections:[{id:'opencode-account',provider:'opencode',isActive:true,providerSpecificData:{enabledModels:[]}}]});
    if(url.endsWith('/api/keys'))return Response.json({keys:[policy]});
    return Response.json({ids:['disabled']});
   }});
@@ -224,7 +221,7 @@ test('public OpenCode supplementation respects disabled routes and the exact man
 test('failed public OpenCode discovery keeps base routes and removes unverified supplemental rows',async()=>{
  const live={...connection(),dashboard:'http://127.0.0.1:55001/dashboard',openCodeFreeModels:[{id:'oc/old-live',catalogueSource:'opencode-live',pricing:{prompt:'0',completion:'0'}}]};
  const manager=new ProviderManager({dataDir:os.tmpdir(),runtimeDir:os.tmpdir(),gatewayBase:'http://127.0.0.1:19286/managed/v1',gatewayKey:'internal',vault:{},loadOpenCodeModelsImpl:async()=>{throw new TypeError('Official discovery offline')},fetchImpl:async url=>{
-  if(url.endsWith('/api/providers'))return Response.json({connections:[]});
+  if(url.endsWith('/api/providers'))return Response.json({connections:[{id:'opencode-account',provider:'opencode',isActive:true,providerSpecificData:{enabledModels:[]}}]});
   if(url.endsWith('/api/keys'))return Response.json({keys:[{key:'test-client'}]});
   if(url.includes('/api/models/disabled?providerAlias=oc'))return Response.json({ids:[]});
   return Response.json({data:[{id:'mico-free/free-code'}]});
