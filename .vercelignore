@@ -1,0 +1,7 @@
+node_modules
+release
+build
+dist-web
+.git
+tests
+out
