@@ -19,6 +19,8 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.7.1 routes NVIDIA NIM discovery and generation through MicoCode’s API instead of cross-origin renderer requests. Router setup opens the correct key-entry screen, FreeRide uses its upstream model catalogue, and setup verification allows reasoning models time to respond.
+
 Version 0.7.0 adds one-click FreeRide installation with automatic free-provider failover and direct NVIDIA NIM connections. It hides unreliable legacy OpenCode/Horde choices from new setup while keeping saved connections compatible.
 
 On Windows, choose **Your routers → FreeRide → Set up**. MicoCode reuses a running gateway or installs a pinned private copy, reuses NVIDIA NIM/OpenRouter keys already saved in Connections, and saves new provider keys with Windows encryption. One provider key is enough; optional keys add failover choices. The managed FreeRide profile opts out of FreeRide telemetry.

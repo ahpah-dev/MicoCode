@@ -44,25 +44,26 @@ export async function complete(messages:Chat[],config:Config,key:string,signal:A
  }
  const local=config.provider==='ollama';
  const horde=config.provider==='proxy'&&config.proxyPreset==='horde';
- const opencode=config.provider==='proxy'&&config.proxyPreset==='opencode';
- const custom=config.provider==='proxy'&&!horde&&!opencode;
+  const opencode=config.provider==='proxy'&&config.proxyPreset==='opencode';
+  const nim=config.provider==='proxy'&&config.proxyPreset==='nim';
+  const custom=config.provider==='proxy'&&!horde&&!opencode&&!nim;
   const managedLocal=config.managed&&config.routerEngine==='local'&&(local||config.freeModels.includes(config.model));
  if(managedLocal)onStatus('Generating with your local model. The first prompt may take longer while it loads; Stop cancels the request.');
  if(opencode&&!key)throw new Error('Add your own OpenCode Zen key in Models before sending a prompt.');
- const url=local?config.ollamaUrl.replace(/\/$/,'')+'/api/chat':horde?'/api/horde':opencode?'/api/opencode':custom?normalizeEndpoint(config.proxyUrl)+'/chat/completions':'/api/ai';
+  const url=local?config.ollamaUrl.replace(/\/$/,'')+'/api/chat':horde?'/api/horde':opencode?'/api/opencode':nim?'/api/nim':custom?normalizeEndpoint(config.proxyUrl)+'/chat/completions':'/api/ai';
  // The managed local route shares the standard output window. A narrower one
   // truncated any write_file carrying a complete page and reported an output
   // limit instead of an edit.
-  const body=local?{model:config.model,messages,stream:false,think:false,format:actionSchema,options:{temperature:config.temperature,num_predict:4096}}:horde||opencode?{action:'complete',model:config.model,messages,temperature:config.temperature}:custom?{model:config.model,messages,temperature:config.temperature,max_tokens:4096,stream:false}:{model:config.model,messages,temperature:config.temperature,freeFallback:config.freeFallback};
+   const body=local?{model:config.model,messages,stream:false,think:false,format:actionSchema,options:{temperature:config.temperature,num_predict:4096}}:horde||opencode||nim?{action:'complete',model:config.model,messages,temperature:config.temperature}:custom?{model:config.model,messages,temperature:config.temperature,max_tokens:4096,stream:false}:{model:config.model,messages,temperature:config.temperature,freeFallback:config.freeFallback};
   const effectiveKey=key||(!local&&!horde&&config.provider==='proxy'?readCredential(config):'');
-  const operation=()=>fetch(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json',...(!local&&!horde&&effectiveKey?{Authorization:`Bearer ${effectiveKey}`}:{})},body:JSON.stringify(body),signal:AbortSignal.any([signal,AbortSignal.timeout(managedLocal?620000:130000)])});
+   const operation=()=>fetch(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json',...(!local&&!horde&&effectiveKey?{Authorization:`Bearer ${effectiveKey}`}:{})},body:JSON.stringify(body),signal:AbortSignal.any([signal,AbortSignal.timeout(managedLocal?620000:nim?190000:130000)])});
   // 9Router quotas are enforced per provider route; exhausting OpenCode must
   // not cool down unrelated providers exposed by the same router.
   const routerModel=config.model.trim(),slash=routerModel.indexOf('/');
   const routerProvider=slash>0?routerModel.slice(0,slash):routerModel;
   const routerScope=custom&&config.proxyPreset==='9router'?':'+routerProvider:'';
   // Other connections keep a shared cooldown so model switching cannot reset provider limits.
-  const response=await resilientRequest(operation,{scope:config.provider+':'+(opencode?'opencode':horde?'horde':custom?normalizeEndpoint(config.proxyUrl)+routerScope:local?config.ollamaUrl:''),signal,enabled:config.resilience,paceMs:local?0:config.provider==='openrouter'?3200:1500,onStatus});
+   const response=await resilientRequest(operation,{scope:config.provider+':'+(opencode?'opencode':nim?'nim':horde?'horde':custom?normalizeEndpoint(config.proxyUrl)+routerScope:local?config.ollamaUrl:''),signal,enabled:config.resilience,paceMs:local?0:config.provider==='openrouter'?3200:1500,onStatus});
   const content=await readModelText(response,{local,signal,onReasoning});
  onToken(content);return content;
 }

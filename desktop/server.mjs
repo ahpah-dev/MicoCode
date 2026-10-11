@@ -6,6 +6,7 @@ import {POST as ai} from '../api/ai.ts';
 import {POST as connection} from '../api/connection.ts';
 import {GET as models} from '../api/models.ts';
 import {POST as opencode} from '../api/opencode.ts';
+import {POST as nim} from '../api/nim.ts';
 import {actionSchema} from '../lib/mico/action-schema.mjs';
 
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.zip':'application/zip','.wasm':'application/wasm','.woff2':'font/woff2'};
@@ -117,7 +118,7 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
     return new Response(data,{status:response.status,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
    }catch(e){if(request.signal.aborted)throw e;if(e.code==='MICO_RESPONSE_LIMIT')return json('The local model response was too large. Try a smaller task.',502);return json(e.name==='TimeoutError'?'The local coding model took too long. Try a smaller model or a shorter task.':'The local coding engine stopped responding. Reconnect it in Models.',e.name==='TimeoutError'?504:503)}
   }
-  const api=route==='/api/horde'?horde:route==='/api/ai'?ai:route==='/api/connection'?connection:route==='/api/models'?models:route==='/api/opencode'?opencode:null;
+   const api=route==='/api/horde'?horde:route==='/api/ai'?ai:route==='/api/connection'?connection:route==='/api/models'?models:route==='/api/opencode'?opencode:route==='/api/nim'?nim:null;
   if(api)return request.method===(route==='/api/models'?'GET':'POST')?api(request):json('Method not allowed.',405);
   if(request.method!=='GET')return json('Method not allowed.',405);
   if(route==='/app')return new Response(null,{status:302,headers:{Location:'/app/'}});

@@ -145,9 +145,10 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
   }catch(e){if(!abort.signal.aborted)setStatus((e as Error).message);else setStatus('Connection stopped or timed out. Check your router, then try again.')}
   finally{clearTimeout(timer);setBusy(false);controller.current=null}
  }
- function quickConnect(id:string){
-  if(desktop&&isManagedProvider(id)){void setupNative(id);return}
-  const next=chooseProxy(id);
+  function quickConnect(id:string){
+   const next=chooseProxy(id);
+   if(desktop&&isManagedProvider(id)){void setupNative(id);return}
+   if(id==='nim'&&!readCredential(next)){setStatus('Add your NVIDIA Build API key below, then click Connect & verify.');setTimeout(()=>keyInput.current?.focus(),0);return}
   // Anonymous Horde is the only preset that supplies an intentionally public key.
   // Other routers use the key saved for their exact URL, or their configured no-key mode.
   void connect(next);
@@ -171,7 +172,7 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
     const r=await fetch(next.ollamaUrl+'/api/tags');const d=await r.json();setLocalModels((d.models||[]).map((m:{name:string})=>m.name));
    }
      setOk(true);onReady(next.provider);if(provider!=='freeride'&&(next.proxyPreset!=='9router'||next.provider!=='proxy'))setStatus(provider==='ollama'||next.routerEngine==='local'?'Installed, started, and connected. Your coding model runs on this computer, with no service quota.':'Installed, started, and connected. The managed route uses free anonymous community compute. Availability and queue times vary.');
-  }catch(e){setStatus((e as Error).message.replace(/^Error invoking remote method '[^']+': Error: /,''))}
+   }catch(e){setStatus((e as Error).message.replace(/^Error invoking remote method '[^']+': Error: /,''));setProgress(null)}
   finally{setBusy(false)}
  }
  function cancel(){controller.current?.abort();if(progress&&desktop)void desktop.cancelSetup()}

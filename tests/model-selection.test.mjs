@@ -22,7 +22,7 @@ test('native Ollama setup accepts its intentionally keyless loopback connection'
 test('NVIDIA NIM and FreeRide use current endpoints while legacy direct presets stay hidden',async()=>{
  const preset=proxyPresets.find(p=>p.id==='nim'),prior=globalThis.fetch;assert.equal(preset.url,'https://integrate.api.nvidia.com/v1');
  assert.equal(proxyPresets.find(p=>p.id==='freeride').url,'http://127.0.0.1:11343/v1');assert.equal(proxyPresets.find(p=>p.id==='horde').hidden,true);assert.equal(proxyPresets.find(p=>p.id==='opencode').hidden,true);
-  globalThis.fetch=async(url,options)=>{assert.equal(url,preset.url+'/models');assert.equal(options.headers.Authorization,'Bearer nvapi-test-key');return Response.json({data:[{id:'nvidia/nemotron',owned_by:'nvidia'},{id:'nvidia/nemotron',owned_by:'nvidia'}]})};
+  globalThis.fetch=async(url,options)=>{assert.equal(url,'/api/nim');assert.equal(JSON.parse(options.body).action,'models');assert.equal(options.headers.Authorization,'Bearer nvapi-test-key');return Response.json({models:[{id:'nvidia/nemotron',provider:'nvidia'}]})};
   try{assert.deepEqual((await listProxyModels({provider:'proxy',proxyPreset:'nim',proxyUrl:preset.url},'nvapi-test-key')).map(m=>m.id),['nvidia/nemotron'])}finally{globalThis.fetch=prior}
  const freeride=proxyPresets.find(p=>p.id==='freeride');
  globalThis.fetch=async url=>{assert.equal(url,freeride.url+'/models');return Response.json({data:[{id:'nvidia_nim/nemotron',owned_by:'nvidia_nim'}]})};

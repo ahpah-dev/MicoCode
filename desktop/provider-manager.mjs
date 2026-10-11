@@ -107,7 +107,9 @@ export class ProviderManager{
    const secretNames={NVIDIA_API_KEY:'freeride-nvidia-key',OPENROUTER_API_KEY:'freeride-openrouter-key',GROQ_API_KEY:'freeride-groq-key',HF_TOKEN:'freeride-huggingface-token',CEREBRAS_API_KEY:'freeride-cerebras-key',CLOUDFLARE_API_TOKEN:'freeride-cloudflare-token',CLOUDFLARE_ACCOUNT_ID:'freeride-cloudflare-account'};
     const providerEnv={};for(const [envName,secret] of Object.entries(secretNames))providerEnv[envName]=typeof this.vault?.get==='function'?(await this.vault.get(secret)||''):'';
     for(const name of ['NVIDIA_API_KEY_2','NIM_API_KEY','OPENROUTER_API_KEY_2','OPENROUTER_API_KEY_3','GROQ_API_KEY_2','GROQ_API_KEY_3','CEREBRAS_API_KEY_2','HF_TOKEN_2','HUGGINGFACE_API_KEY','HUGGINGFACE_API_KEY_2'])providerEnv[name]='';
-    providerEnv.NVIDIA_NIM_FREE_MODELS_OVERRIDE=['deepseek-ai/deepseek-v4-flash','nvidia/nemotron-3.5-lightning-30b-a3b','nvidia/nemotron-3-super-120b-a12b','z-ai/glm-5.3','z-ai/glm-5.3-flash','moonshotai/kimi-k3','openai/gpt-oss-120b','qwen/qwen3-next-80b-a3b-instruct','stepfun-ai/step-3.5-flash','minimaxai/minimax-m2.7'].join(',');
+     // Use FreeRide's tested provider catalogue rather than forcing model IDs
+     // that may not exist for this NVIDIA account or upstream release.
+     providerEnv.NVIDIA_NIM_FREE_MODELS_OVERRIDE='';
     if(Boolean(providerEnv.CLOUDFLARE_API_TOKEN)!==Boolean(providerEnv.CLOUDFLARE_ACCOUNT_ID))throw new Error('FreeRide needs both a Cloudflare API token and account ID. Complete both fields or clear them.');
     const hasProviderKey=Object.keys(secretNames).some(name=>Boolean(providerEnv[name]));
     let ollama=this.ollamaUpstream;
@@ -121,7 +123,7 @@ export class ProviderManager{
       if(!hasProviderKey&&!ollama)throw new Error('FreeRide needs at least one provider key. Add your NVIDIA NIM key, another free provider key, or start Ollama.');
       providerEnv.OLLAMA_BASE_URL=ollama||'';
     const dir=this.versionFolder(id),python=path.join(dir,'Scripts','python.exe'),exe=path.join(dir,'Scripts','freeride.exe'),readyFile=path.join(dir,'.freeride-package-ready.json');
-    if(!await exists(readyFile)){
+    if(!await exists(readyFile)||!await exists(exe)||!await exists(python)){
      if(await exists(dir))await rm(dir,{recursive:true,force:true});await mkdir(dir,{recursive:true});
      const uv=await this.ensureUv(id,signal),uvEnv={UV_CACHE_DIR:path.join(this.root,'uv-cache'),UV_PYTHON_INSTALL_DIR:path.join(this.root,'python'),UV_NO_PROGRESS:'1',UV_NO_CONFIG:'1',PYTHONNOUSERSITE:'1',PATH:this.runtime+path.delimiter+process.env.PATH};
      this.emit(id,'install','Installing the private FreeRide failover gateway…');
@@ -147,10 +149,12 @@ export class ProviderManager{
     const model='freeride/auto';
     if(verifyGeneration){
      this.emit(id,'verify','Testing a short request through FreeRide’s provider failover…');
-     const probe=await this.fetch(api+'/chat/completions',{method:'POST',headers:{Authorization:'Bearer any','Content-Type':'application/json'},body:JSON.stringify({model,messages:[{role:'user',content:'Reply with OK.'}],temperature:0,max_tokens:4,stream:false}),redirect:'error',signal:AbortSignal.any([signal,AbortSignal.timeout(130000)])});
-     const result=await probe.json().catch(()=>null);
-     if(!probe.ok||!result?.choices?.[0]?.message?.content)throw new Error('FreeRide started but its setup check could not complete a model request ('+probe.status+'). Check a provider key, account credits, or your local Ollama model, then retry.');
-     if(typeof this.vault?.set==='function')await this.vault.set('freeride-setup-verified','0.7.0');
+      const probe=await this.fetch(api+'/chat/completions',{method:'POST',headers:{Authorization:'Bearer any','Content-Type':'application/json'},body:JSON.stringify({model,messages:[{role:'user',content:'Reply with OK.'}],temperature:0,max_tokens:256,stream:false}),redirect:'error',signal:AbortSignal.any([signal,AbortSignal.timeout(130000)])});
+      const result=await probe.json().catch(()=>null);
+      const message=result?.choices?.[0]?.message,responded=typeof message?.content==='string'&&!!message.content.trim()||typeof message?.reasoning_content==='string'&&!!message.reasoning_content.trim();
+      const detail=result?.error?.message||result?.detail?.error?.message||result?.detail?.message;
+      if(!probe.ok||result?.error||!responded)throw new Error('FreeRide started but its setup check could not complete a model request ('+probe.status+'). '+(typeof detail==='string'?detail.slice(0,250)+' ':'')+'Check a provider key, account credits, or your local Ollama model, then retry.');
+      if(typeof this.vault?.set==='function')await this.vault.set('freeride-setup-verified','0.7.1');
     }
     return {config:{provider:'proxy',proxyPreset:id,proxyUrl:api,model,freeModels:[model,...routes],routerFreeOnly:true},key:'any'};
   }
@@ -163,7 +167,7 @@ export class ProviderManager{
     await mkdir(this.folder(id),{recursive:true});
       const credentialsChanged=id==='freeride'?await this.saveFreeRideCredentials(credentials):false;
       if(credentialsChanged&&this.children.get(id)?.exitCode===null)await this.stop(id);
-      const freeRideVerified=id==='freeride'&&typeof this.vault?.get==='function'&&await this.vault.get('freeride-setup-verified')==='0.7.0';
+       const freeRideVerified=id==='freeride'&&typeof this.vault?.get==='function'&&await this.vault.get('freeride-setup-verified')==='0.7.1';
       const cached=this.connections.get(id);if(cached&&cached.config.routerEngine===selectedEngine&&hadChild?.exitCode===null){
      this.emit(id,'verify','Checking the running connection…');
      try{if(['9router','cliproxy','litellm'].includes(id)&&engine==='local')await this.verifyLocalEngine(signal);if(id==='9router')await this.syncOpenCodeCatalogue(cached,signal);await this.verify(cached,signal);this.emit(id,'ready','Connected. Your free route is ready.');return cached}
