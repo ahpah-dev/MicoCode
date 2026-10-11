@@ -6,6 +6,8 @@ Little ideas. Real things. A free agentic coding workspace for Windows and the b
 
 ## Windows app
 
+Version 0.4.5 finishes the customization pass: dropdowns across Settings and Connections are now dressed to match the workspace, with a theme-aware chevron, hover fill, focus ring, and popup list — and selects no longer force a dark popup inside the light Paper theme. The file explorer and the Mico panel are draggable by their inner edges, with sensible limits, keyboard resizing, double-click reset, and widths that persist across restarts. The message box grows as you type instead of sitting at a fixed height.
+
 Version 0.4.4 makes the interface customizable and easier to use. Settings has a new Interface section: density (comfortable or compact), text size, editor text size, Mico panel side, reduce motion, and getting-started tips — all applied immediately and saved on this device. A "Your first build" checklist on Welcome walks through connecting a model, describing a task, and reviewing staged edits, one click per step. Panel layout persists across restarts, and pressing / anywhere jumps to the message box.
 
 Version 0.4.3 gives every theme a proper status and elevation system. Warning, error, connection, and diff colors were hardcoded dark values, so the light Paper theme rendered them as dark boxes on a light panel and console error text fell to 1.58:1 contrast — effectively unreadable. Status colors now resolve from per-theme tokens and are verified to meet WCAG AA in all five themes; Paper's console errors are now 6.49:1. Overlays, focus rings, scrollbars, and text selection also follow the theme, with soft warm shadows on Paper instead of a black wash.
