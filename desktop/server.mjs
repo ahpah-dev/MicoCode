@@ -38,18 +38,22 @@ export function managedRouterCatalogue(data,connection){
  const extra=connection.openCodeFreeModels.filter(m=>m&&typeof m.id==='string'&&m.id.startsWith('oc/')&&m.catalogueSource==='opencode-live'&&m.pricing?.prompt==='0'&&m.pricing?.completion==='0'&&!existing.has(m.id));
  return {...data,[field]:[...data[field],...extra]};
 }
-export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaUpstream=()=>null,getOllamaModel=()=>null,getOllamaModels=()=>null,getManagedConnection=()=>null,fetchImpl=fetch}){
+export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaUpstream=()=>null,getOllamaModel=()=>null,getOllamaModels=()=>null,getManagedConnection=()=>null,recoverFreeRide=null,fetchImpl=fetch}){
  let origin='http://127.0.0.1:'+port;
  async function handle(request){
   if(!isLocalRequest(request,origin))return json('Origin is not allowed.',403);
   const url=new URL(request.url),route=url.pathname;
   const providerRoute=route.match(/^\/providers\/(9router|cliproxy|litellm|freeride)\/v1\/(models|chat\/completions)$/);
   if(providerRoute){
-   const [,id,action]=providerRoute,connection=getManagedConnection(id);
+    const [,id,action]=providerRoute;let connection=getManagedConnection(id);
+    if(!connection&&id==='freeride'&&recoverFreeRide&&request.headers.get('authorization')==='Bearer any'){
+     if(request.signal.aborted)throw request.signal.reason;
+     try{connection=await recoverFreeRide()}catch(e){return json(e.message||'FreeRide could not reconnect. Run Set up & connect FreeRide.',503)}
+    }
    if(!connection)return json('Your managed router is stopped. Open Models and click Set up & connect.',503);
    if(!connection.key||request.headers.get('authorization')!=='Bearer '+connection.key)return json('Reconnect your managed router to refresh its protected connection.',401);
    const expected=action==='models'?'GET':'POST';if(request.method!==expected)return json('Method not allowed.',405);
-   const target=new URL(connection.config.proxyUrl);
+    let target=new URL(connection.config.proxyUrl);
    if(target.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(target.hostname)||target.username||target.password||target.search||target.hash||target.pathname!=='/v1')return json('Invalid managed router configuration. Reconnect in Models.',503);
     let body;
     if(expected==='POST'){
@@ -63,7 +67,16 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
      body={model:body.model,messages:body.messages,temperature:body.temperature,max_tokens:body.max_tokens,stream:false};
     }
    try{
-    const r=await fetchImpl(target.href.replace(/\/$/,'')+'/'+action,{method:expected,redirect:'error',headers:{Authorization:'Bearer '+connection.key,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(action==='models'?20000:610000)])});
+     const send=()=>fetchImpl(target.href.replace(/\/$/,'')+'/'+action,{method:expected,redirect:'error',headers:{Authorization:'Bearer '+connection.key,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(action==='models'?20000:610000)])});
+     let r;
+     try{r=await send()}catch(error){
+      // ECONNREFUSED proves no generation reached the stopped process. Do not
+      // replay requests after a body disconnect, timeout, quota, or auth error.
+      if(id!=='freeride'||!recoverFreeRide||error.cause?.code!=='ECONNREFUSED'||request.signal.aborted)throw error;
+      connection=await recoverFreeRide();target=new URL(connection.config.proxyUrl);
+      if(target.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(target.hostname)||target.username||target.password||target.search||target.hash||target.pathname!=='/v1')throw new Error('Invalid reconnected FreeRide address.');
+      r=await send();
+     }
     const headers={'Content-Type':r.headers.get('content-type')||'application/json','Cache-Control':'no-store'};
     for(const name of ['retry-after','x-ratelimit-remaining','x-ratelimit-reset']){const value=r.headers.get(name);if(value)headers[name]=value}
     // Do not commit successful headers until the non-streaming router response

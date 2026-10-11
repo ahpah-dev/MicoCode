@@ -19,6 +19,8 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.7.2 preserves FreeRide setup errors instead of replacing them with generic CORS advice. Previously configured FreeRide gateways reconnect automatically when stopped, and a refused connection is retried once after repair; quota errors and interrupted generation are never replayed by this recovery path.
+
 Version 0.7.1 routes NVIDIA NIM discovery and generation through MicoCode’s API instead of cross-origin renderer requests. Router setup opens the correct key-entry screen, FreeRide uses its upstream model catalogue, and setup verification allows reasoning models time to respond.
 
 Version 0.7.0 adds one-click FreeRide installation with automatic free-provider failover and direct NVIDIA NIM connections. It hides unreliable legacy OpenCode/Horde choices from new setup while keeping saved connections compatible.

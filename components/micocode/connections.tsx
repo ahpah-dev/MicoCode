@@ -43,7 +43,10 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
  useEffect(()=>desktop?.onProgress(event=>setProgress(event)),[desktop]);
  useEffect(()=>{
   if(!['proxy','openrouter'].includes(config.provider)||restoring||locked||busy)return;
-  if(config.provider==='proxy'&&!config.proxyUrl)return;
+   if(config.provider==='proxy'&&!config.proxyUrl)return;
+   // Before native FreeRide setup completes, its public default port may not
+   // exist. Keep the setup/key error instead of overwriting it with CORS advice.
+   if(desktop&&config.provider==='proxy'&&config.proxyPreset==='freeride'&&!config.managed)return;
   const abort=new AbortController();
   catalogueController.current?.abort();catalogueController.current=abort;
   setModels([]);setCatalogueWarning('');setRefreshingModels(true);
@@ -74,8 +77,9 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
   const next={...saved,provider:'proxy' as const,proxyPreset:'9router' as const,proxyUrl:saved.managed?p.url:(saved.proxyUrl||p.url),model:'',managed:false,freeModels:[],routerFreeOnly:false};
   setConfig(next);setModels([]);setCatalogueWarning('');setStatus('Using your 9Router. Enter its API key, then connect to load every enabled provider model and combo.');setOk(false);
  }
- async function refreshProxyModels(){
-  if(disabled||config.provider!=='proxy')return;
+  async function refreshProxyModels(){
+   if(disabled||config.provider!=='proxy')return;
+   if(desktop&&config.proxyPreset==='freeride'&&!config.managed){await setupNative('freeride');return}
   const abort=new AbortController();catalogueController.current?.abort();catalogueController.current=abort;
   setRefreshingModels(true);
   try{

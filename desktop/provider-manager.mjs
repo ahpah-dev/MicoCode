@@ -195,7 +195,7 @@ export class ProviderManager{
   }catch(e){if(this.children.get(id)!==hadChild)await this.stop(id);this.emit(id,signal.aborted?'cancelled':'error',signal.aborted?'Setup cancelled. You can resume with the same button.':e.message);throw e}
   finally{this.active=null}
  }
- async restore(){
+  async restore(){
   try{const {provider,engine='local'}=JSON.parse(await readFile(path.join(this.root,'last-provider.json'),'utf8'));assertProvider(provider);if(!await exists(path.join(this.folder(provider),'installed.json')))return null;return await this.setup(provider,engine)}catch{return null}
  }
  async verifyLocalEngine(signal){
@@ -272,10 +272,19 @@ export class ProviderManager{
    if(signal.aborted)throw e;
    connection.openCodeFreeModels=[];
    const warning='OpenCode model discovery could not refresh. Existing router models remain available; retry Refresh models later.';
-   connection.catalogueWarning=warning;this.emit('9router','warning',warning);return {updated:0,warning};
+    connection.catalogueWarning=warning;this.emit('9router','warning',warning);return {updated:0,warning};
+   }
   }
- }
- async refreshNineCatalogue(signal=AbortSignal.timeout(30000)){
+   async recoverFreeRide(){
+   // Recovery only applies after native setup succeeded; browsing Models must
+   // never initiate a fresh install or download without a configured gateway.
+   if(!await exists(path.join(this.folder('freeride'),'installed.json')))throw new Error('FreeRide needs setup first. Open Models, add a provider key, and click Set up & connect FreeRide.');
+   if(this.freeRideRecovery)return this.freeRideRecovery;
+   this.emit('freeride','configure','Reconnecting FreeRide using your saved provider keys…');
+   this.freeRideRecovery=this.setup('freeride','community');
+    try{return await this.freeRideRecovery}finally{this.freeRideRecovery=null}
+   }
+  async refreshNineCatalogue(signal=AbortSignal.timeout(30000)){
   const connection=this.connections.get('9router');if(!connection)throw new Error('Your managed 9Router is stopped. Run Set up & connect first.');
   await this.syncOpenCodeCatalogue(connection,signal);await this.verify(connection,signal);return connection;
  }

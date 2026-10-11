@@ -169,3 +169,27 @@ const wait=async(check,stage)=>{for(let i=0;i<150;i++){if(check())return;await n
   assert.deepEqual(result.writes,['oc/second']);assert.match(result.status,/Selected Second model/);
  }finally{if(path.resolve(dir).startsWith(path.resolve(prefix)))await rm(dir,{recursive:true,force:true})}
 });
+
+test('FreeRide setup failure remains visible instead of being overwritten by an automatic direct-port probe',async context=>{
+ let electron;try{electron=(await import('electron')).default}catch{context.skip('Electron unavailable');return}
+ if(typeof electron!=='string'||!existsSync(electron)){context.skip('Electron unavailable');return}
+ const repo=fileURLToPath(new URL('../',import.meta.url)),dir=await mkdtemp(path.join(os.tmpdir(),'mico-freeride-ui-'));
+ try{
+  const renderer=`
+import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
+import {Connections} from ${JSON.stringify(path.join(repo,'components/micocode/connections.tsx'))};
+import {defaultConfig} from ${JSON.stringify(path.join(repo,'lib/mico/types.ts'))};
+let current,directProbes=0;
+window.micoDesktop={onProgress:()=>()=>{},setup:async()=>{throw Error('FreeRide needs at least one provider key. Add your NVIDIA NIM key.')}};
+window.fetch=async url=>{if(String(url).includes('11343')){directProbes++;throw TypeError('Network request failed')}return Response.json({data:[{id:'local/test'}]})};
+function Fixture(){const [config,setConfig]=useState({...defaultConfig,provider:'proxy',managed:true,proxyPreset:'9router'});current=config;return React.createElement(Connections,{config,apiKey:'',setConfig,setKey:()=>{},onReady:()=>{},onClose:()=>{}})}
+createRoot(document.querySelector('#root')).render(React.createElement(Fixture));
+const wait=async check=>{for(let i=0;i<150;i++){if(check())return;await new Promise(r=>setTimeout(r,20))}throw Error('UI timeout')};
+(async()=>{await wait(()=>document.querySelector('[aria-label="Set up and connect FreeRide"]'));document.querySelector('[aria-label="Set up and connect FreeRide"]').click();await wait(()=>document.querySelector('.connection-status')?.textContent.includes('needs at least one provider key'));await new Promise(r=>setTimeout(r,200));console.log('FREERIDE_UI '+JSON.stringify({preset:current.proxyPreset,directProbes,status:document.querySelector('.connection-status')?.textContent}))})().catch(e=>console.log('FREERIDE_UI '+JSON.stringify({error:e.message})));`;
+  const bundle=await build({stdin:{contents:renderer,resolveDir:repo,sourcefile:'freeride-ui.tsx'},bundle:true,write:false,format:'esm',platform:'browser',tsconfig:path.join(repo,'tsconfig.json')});
+  await writeFile(path.join(dir,'bundle.js'),bundle.outputFiles[0].contents);
+  const main=`const {app,BrowserWindow}=require('electron'),http=require('http'),fs=require('fs'),path=require('path');let server;app.setPath('userData',path.join(__dirname,'profile'));app.whenReady().then(async()=>{server=http.createServer((req,res)=>{if(req.url==='/bundle.js'){res.setHeader('Content-Type','text/javascript');res.end(fs.readFileSync(path.join(__dirname,'bundle.js')))}else res.end('<div id="root"></div><script type="module" src="/bundle.js"></script>')});await new Promise(r=>server.listen(0,'127.0.0.1',r));const win=new BrowserWindow({show:false,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false}});win.webContents.on('console-message',d=>{if(d.message.startsWith('FREERIDE_UI ')){fs.writeFileSync(path.join(__dirname,'report.json'),d.message.slice(12));app.quit()}});await win.loadURL('http://127.0.0.1:'+server.address().port);setTimeout(()=>app.quit(),15000)});app.on('will-quit',()=>server?.close());`;
+  await writeFile(path.join(dir,'main.cjs'),main);await promisify(execFile)(electron,[path.join(dir,'main.cjs')],{windowsHide:true,timeout:25000,maxBuffer:1000000});
+  const result=JSON.parse(await readFile(path.join(dir,'report.json'),'utf8'));assert.equal(result.error,undefined);assert.equal(result.preset,'freeride');assert.equal(result.directProbes,0);assert.match(result.status,/needs at least one provider key/);
+ }finally{await rm(dir,{recursive:true,force:true})}
+});
