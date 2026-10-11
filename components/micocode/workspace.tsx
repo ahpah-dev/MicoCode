@@ -4,7 +4,7 @@ import {ArrowDownToLine,ArrowRight,ArrowUp,ArrowUpRight,Check,ChevronDown,Chevro
 import Editor from './editor';
 import {Appearance} from './appearance';
 import {useTheme} from '@/lib/mico/appearance';
-import {AGENT_DEFAULT,AGENT_MAX,AGENT_MIN,SIDEBAR_DEFAULT,SIDEBAR_MAX,SIDEBAR_MIN,applyInterfacePrefs,clampPanelWidth,interfacePrefsFromConfig,normalizePanelWidths} from '@/lib/mico/interface';
+import {AGENT_DEFAULT,AGENT_MAX,AGENT_MIN,CONSOLE_DEFAULT,CONSOLE_MAX,CONSOLE_MIN,SIDEBAR_DEFAULT,SIDEBAR_MAX,SIDEBAR_MIN,applyInterfacePrefs,clampPanelWidth,interfacePrefsFromConfig,normalizePanelWidths} from '@/lib/mico/interface';
 import '@/lib/mico/desktop';
 import Preview from './preview';
 import {Connections} from './connections';
@@ -34,9 +34,9 @@ export default function Workspace(){
  const [managedRestoring,setManagedRestoring]=useState(()=>typeof window!=='undefined'&&!!window.micoDesktop);
  const [consoleOpen,setConsoleOpen]=useState<boolean>(()=>readPanels()?.console??false);
   const [sidebarWidth,setSidebarWidth]=useState<number|null>(()=>readPanels()?.sidebarWidth??null);
-  const [agentWidth,setAgentWidth]=useState<number|null>(()=>readPanels()?.agentWidth??null);const [logs,setLogs]=useState<string[]>(['MicoCode workspace console. Type help for available commands.']);const [consoleInput,setConsoleInput]=useState('');const [revision,setRevision]=useState(0);
+  const [agentWidth,setAgentWidth]=useState<number|null>(()=>readPanels()?.agentWidth??null);const [consoleHeight,setConsoleHeight]=useState<number|null>(()=>readPanels()?.consoleHeight??null);const [logs,setLogs]=useState<string[]>(['MicoCode workspace console. Type help for available commands.']);const [consoleInput,setConsoleInput]=useState('');const [revision,setRevision]=useState(0);
   const controller=useRef<AbortController|null>(null);const projectRef=useRef<Project|undefined>(undefined);const projectsRef=useRef<Project[]>([]);const messagesEnd=useRef<HTMLDivElement>(null);const promptRef=useRef<HTMLTextAreaElement>(null);const importInput=useRef<HTMLInputElement>(null);const folderInput=useRef<HTMLInputElement>(null);
-  const dragRef=useRef<{kind:'sidebar'|'agent';startX:number;startW:number}|null>(null);
+  const dragRef=useRef<{kind:'sidebar'|'agent'|'console';startX:number;startY:number;startW:number}|null>(null);
  const p=projects.find(p=>p.id===projectId)||projects[0];projectRef.current=p;projectsRef.current=projects;
  const notify=useCallback((text:string)=>setToast(text),[]);
  const updateProject=useCallback((patch:Partial<Project>|((p:Project)=>Partial<Project>),id?:string)=>{const target=id||projectRef.current?.id;setProjects(list=>list.map(p=>p.id===target?{...p,...(typeof patch==='function'?patch(p):patch),updated:Date.now()}:p))},[]);
@@ -48,7 +48,7 @@ export default function Workspace(){
  useEffect(()=>{if(projectId)localStorage.setItem('mico-project',projectId)},[projectId]);
   useEffect(()=>{applyInterfacePrefs(interfacePrefsFromConfig(config))},[config]);
   useEffect(()=>{folderInput.current?.setAttribute('webkitdirectory','');folderInput.current?.setAttribute('directory','')},[]);
-  useEffect(()=>{try{localStorage.setItem('mico-ui:panels',JSON.stringify({sidebar,agent:agentPanel,console:consoleOpen,sidebarWidth,agentWidth}))}catch{}},[sidebar,agentPanel,consoleOpen,sidebarWidth,agentWidth]);
+  useEffect(()=>{try{localStorage.setItem('mico-ui:panels',JSON.stringify({sidebar,agent:agentPanel,console:consoleOpen,sidebarWidth,agentWidth,consoleHeight}))}catch{}},[sidebar,agentPanel,consoleOpen,sidebarWidth,agentWidth,consoleHeight]);
   useEffect(()=>{const el=promptRef.current;if(!el)return;el.style.height='auto';el.style.height=Math.min(el.scrollHeight,200)+'px'},[prompt]);
  useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),4200);return()=>clearTimeout(t)},[toast]);
  useEffect(()=>{if(p?.messages.length||tokenText)messagesEnd.current?.scrollIntoView({behavior:'smooth'})},[p?.messages.length,tokenText]);
@@ -98,20 +98,20 @@ export default function Workspace(){
  const searchResults=p&&query?Object.entries(p.files).flatMap(([path,text])=>text.split('\n').map((line,index)=>line.toLowerCase().includes(query.toLowerCase())?{path,line,index}:null).filter(Boolean)).slice(0,60):[];
  const providerLabel=config.provider==='browser'?'Qwen Coder · '+config.browserSize:config.provider==='ollama'?'Ollama':config.provider==='proxy'?(proxyPresets.find(p=>p.id===config.proxyPreset)?.name||'Free proxy')+(config.model?' · '+config.model.split('/').pop():''):config.model==='openrouter/free'?'Free auto router':config.model.split('/').pop();
   const ready=config.provider==='browser'?browserReady(config.browserSize):connected===config.provider;
-  function endResize(el:HTMLElement|null){dragRef.current=null;el?.classList.remove('dragging');if(typeof document!=='undefined')document.body.classList.remove('resizing')}
-  function resizeHandle(kind:'sidebar'|'agent',width:number|null){
-   const min=kind==='sidebar'?SIDEBAR_MIN:AGENT_MIN,max=kind==='sidebar'?SIDEBAR_MAX:AGENT_MAX,def=kind==='sidebar'?SIDEBAR_DEFAULT:AGENT_DEFAULT;
-   const set=kind==='sidebar'?setSidebarWidth:setAgentWidth;
-   const label=kind==='sidebar'?'File explorer width':'Mico panel width';
-   const outward=kind==='sidebar'?1:config.agentSide==='right'?-1:1;
-   return {className:'resize-handle',role:'separator' as const,'aria-orientation':'vertical' as const,'aria-label':label,'aria-valuemin':min,'aria-valuemax':max,'aria-valuenow':width??def,tabIndex:0,
-    onPointerDown:(e:React.PointerEvent<HTMLDivElement>)=>{if(e.button!==0)return;e.preventDefault();dragRef.current={kind,startX:e.clientX,startW:width??def};try{e.currentTarget.setPointerCapture(e.pointerId)}catch{/* A failed capture must not cancel the drag. */}e.currentTarget.classList.add('dragging');document.body.classList.add('resizing')},
-    onPointerMove:(e:React.PointerEvent<HTMLDivElement>)=>{const d=dragRef.current;if(!d||d.kind!==kind)return;set(clampPanelWidth(d.startW+(e.clientX-d.startX)*(kind==='sidebar'?1:config.agentSide==='right'?-1:1),min,max))},
+  function endResize(el:HTMLElement|null){dragRef.current=null;el?.classList.remove('dragging');if(typeof document!=='undefined')document.body.classList.remove('resizing','resizing-console')}
+  function resizeHandle(kind:'sidebar'|'agent'|'console',size:number|null){
+   const min=kind==='sidebar'?SIDEBAR_MIN:kind==='agent'?AGENT_MIN:CONSOLE_MIN,max=kind==='sidebar'?SIDEBAR_MAX:kind==='agent'?AGENT_MAX:CONSOLE_MAX,def=kind==='sidebar'?SIDEBAR_DEFAULT:kind==='agent'?AGENT_DEFAULT:CONSOLE_DEFAULT;
+   const set=kind==='sidebar'?setSidebarWidth:kind==='agent'?setAgentWidth:setConsoleHeight;
+   const label=kind==='sidebar'?'File explorer width':kind==='agent'?'Mico panel width':'Console height';
+   const outward=kind==='console'?1:kind==='sidebar'?1:config.agentSide==='right'?-1:1;
+   return {className:'resize-handle',role:'separator' as const,'aria-orientation':(kind==='console'?'horizontal':'vertical') as 'horizontal'|'vertical','aria-label':label,'aria-valuemin':min,'aria-valuemax':max,'aria-valuenow':size??def,tabIndex:0,
+    onPointerDown:(e:React.PointerEvent<HTMLDivElement>)=>{if(e.button!==0)return;e.preventDefault();dragRef.current={kind,startX:e.clientX,startY:e.clientY,startW:size??def};try{e.currentTarget.setPointerCapture(e.pointerId)}catch{/* A failed capture must not cancel the drag. */}e.currentTarget.classList.add('dragging');document.body.classList.add('resizing');if(kind==='console')document.body.classList.add('resizing-console')},
+    onPointerMove:(e:React.PointerEvent<HTMLDivElement>)=>{const d=dragRef.current;if(!d||d.kind!==kind)return;if(kind==='console')set(clampPanelWidth(d.startW+(d.startY-e.clientY),min,max));else set(clampPanelWidth(d.startW+(e.clientX-d.startX)*(kind==='sidebar'?1:config.agentSide==='right'?-1:1),min,max))},
     onPointerUp:(e:React.PointerEvent<HTMLDivElement>)=>endResize(e.currentTarget),
     onPointerCancel:(e:React.PointerEvent<HTMLDivElement>)=>endResize(e.currentTarget),
     onLostPointerCapture:(e:React.SyntheticEvent<HTMLDivElement>)=>endResize(e.currentTarget as HTMLElement),
-    onDoubleClick:()=>{set(null);notify((kind==='sidebar'?'Explorer':'Mico panel')+' width reset to default.')},
-    onKeyDown:(e:React.KeyboardEvent<HTMLDivElement>)=>{if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight')return;e.preventDefault();set(clampPanelWidth((width??def)+(e.key==='ArrowRight'?12:-12)*outward,min,max))}};
+    onDoubleClick:()=>{set(null);notify((kind==='sidebar'?'Explorer':kind==='agent'?'Mico panel':'Console')+' '+(kind==='console'?'height':'width')+' reset to default.')},
+    onKeyDown:(e:React.KeyboardEvent<HTMLDivElement>)=>{const up=e.key==='ArrowUp'||e.key==='ArrowRight',left=e.key==='ArrowLeft'||e.key==='ArrowDown';if(!up&&!left)return;e.preventDefault();set(clampPanelWidth((size??def)+(up?12:-12)*outward,min,max))}};
   }
  if(!loaded||!p)return <main className="boot"><Logo size={45}/><span>Opening your workspace…</span></main>;
  return <main className="app-shell">
@@ -145,7 +145,7 @@ export default function Workspace(){
        {(view==='preview'||view==='split')&&<Preview files={effectiveFiles} onLog={log} revision={revision} pending={changePaths.length>0}/>}
       </div>}
      </div>
-    <div className={'console-panel '+(consoleOpen?'expanded':'')}><div className="console-heading"><button onClick={()=>setConsoleOpen(v=>!v)}><Terminal size={13}/><span>Console</span><ChevronDown size={12} className={consoleOpen?'rotate':''}/></button><span className="console-caption">{consoleOpen?'Workspace commands & preview output':'HTML · CSS · JavaScript'}</span><button className="icon-button" title="Run project checks" onClick={()=>{setConsoleOpen(true);const issues=checkProject(effectiveFiles);log(issues.length?issues.join('\n'):'Passed: JSON syntax and local HTML resource checks. Runtime behavior can be tested in Preview.')}}><CheckCheck size={14}/></button></div>{consoleOpen&&<><div className="console-output">{logs.map((s,i)=><pre key={i} className={s.startsWith('[error]')?'error-text':''}>{s}</pre>)}</div><form onSubmit={runConsole}><span>›</span><input aria-label="Workspace console command" value={consoleInput} onChange={e=>setConsoleInput(e.target.value)} placeholder="Type help for workspace commands…" autoComplete="off" spellCheck={false}/></form></>}</div>
+    <div className={'console-panel '+(consoleOpen?'expanded':'')} style={consoleOpen&&consoleHeight?{height:consoleHeight}:undefined}>{consoleOpen&&<div {...resizeHandle('console',consoleHeight)}/>}<div className="console-heading"><button onClick={()=>setConsoleOpen(v=>!v)}><Terminal size={13}/><span>Console</span><ChevronDown size={12} className={consoleOpen?'rotate':''}/></button><span className="console-caption">{consoleOpen?'Workspace commands & preview output':'HTML · CSS · JavaScript'}</span><button className="icon-button" title="Run project checks" onClick={()=>{setConsoleOpen(true);const issues=checkProject(effectiveFiles);log(issues.length?issues.join('\n'):'Passed: JSON syntax and local HTML resource checks. Runtime behavior can be tested in Preview.')}}><CheckCheck size={14}/></button></div>{consoleOpen&&<><div className="console-output">{logs.map((s,i)=><pre key={i} className={s.startsWith('[error]')?'error-text':''}>{s}</pre>)}</div><form onSubmit={runConsole}><span>›</span><input aria-label="Workspace console command" value={consoleInput} onChange={e=>setConsoleInput(e.target.value)} placeholder="Type help for workspace commands…" autoComplete="off" spellCheck={false}/></form></>}</div>
    </section>
    {agentPanel&&<aside className="agent-panel" style={agentWidth?{width:agentWidth}:undefined}><div className="agent-heading"><div><Sparkles size={15}/><strong>Mico</strong><span className="agent-badge">YOUR CODING COMPANION</span></div><button className="icon-button" title="Hide agent" onClick={()=>setAgentPanel(false)}><PanelRightClose size={15}/></button></div><div className="agent-session"><span><span className={'status-dot '+(busy?'working':ready?'ready':'')}/>{busy?'Working on your idea':ready?'Ready when you are':'Make something good'}</span><button className="icon-button" disabled={busy} title="New conversation" onClick={()=>{updateProject({messages:[]});notify('Started a fresh conversation. Project files are unchanged.')}}><Plus size={15}/></button></div>
     <div className="messages">{p.messages.length===0?<div className="agent-welcome"><div className="agent-symbol"><Sparkles size={22}/></div><h2>A little help.<br/>A lot of possibility.</h2><p>I’m Mico, your coding companion.<br/>Tell me what’s on your mind, and<br/>we’ll build it one step at a time.</p><div className="agent-starters">{prompts.map((s,i)=><button key={s} onClick={()=>{setPrompt(s);promptRef.current?.focus()}}>{i===0?<Globe size={14}/>:i===1?<Code2 size={14}/>:<Monitor size={14}/>}<span>{s}</span><ArrowUpRight size={12}/></button>)}</div><div className="agent-how"><span>01</span> Describe an idea <i>→</i><span>02</span> Review the code</div></div>:p.messages.map(m=><div key={m.id} className={'message '+m.role}>{m.role==='activity'?<><Check size={11}/><span>{m.text}</span></>:<><div className="message-author">{m.role==='user'?'You':m.role==='error'?'Connection update':<><Sparkles size={12}/> Mico</>}</div><div className="message-text">{m.text}</div></>}</div>)}{busy&&<div className="thinking"><LoaderCircle size={13} className="spin"/><span>{tokenText?`Generating · ${tokenText.length.toLocaleString()} characters`:'Working…'}</span></div>}<div ref={messagesEnd}/></div>

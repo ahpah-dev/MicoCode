@@ -6,6 +6,8 @@ Little ideas. Real things. A free agentic coding workspace for Windows and the b
 
 ## Windows app
 
+Version 0.4.8 makes the console draggable like the side panels: drag its top edge, use the arrow keys, or double-click to reset the height — it persists across restarts. The Open folder and Import buttons in the explorer keep a tidy fixed size instead of stretching with the sidebar, and the chat box no longer frames every click with a green ring.
+
 Version 0.4.6 gives the whole workspace a cohesive visual system: clearer navigation, more deliberate surfaces, calmer spacing, a redesigned first-run Welcome, richer chat and review states, and an editor that follows the active theme instead of showing CodeMirror’s stock slate. All five themes and mobile layout were checked in the running app.
 
 Version 0.4.7 lets you open any folder on your computer as a live workspace. In the Windows app, choose Open folder and MicoCode loads its HTML, CSS, JavaScript, Markdown, and other text files, then writes reviewed edits straight back to that folder when you apply them — an atomic save per file, with dependency, secret, binary, and oversized files skipped for safety. Edits stay staged until you approve them, and the browser edition can import a read-only copy.

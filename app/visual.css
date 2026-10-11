@@ -197,7 +197,7 @@ body{background:var(--surface-canvas);color:var(--ink-primary);letter-spacing:.0
 /* Composer: fixed-feeling input dock with a distinct action row. */
 .composer-wrap{padding:12px 13px 10px;background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--surface-panel) 60%,transparent))}
 .composer{border-radius:15px;border-color:var(--stroke-strong);background:linear-gradient(160deg,var(--surface-raised),var(--surface-panel));box-shadow:var(--shadow-md);transition:border-color var(--motion-fast),box-shadow var(--motion-fast),background var(--motion-fast)}
-.composer:focus-within{border-color:color-mix(in srgb,var(--mint) 55%,var(--stroke-strong));box-shadow:var(--shadow-focus),var(--shadow-md)}
+.composer:focus-within{border-color:var(--stroke-strong);box-shadow:var(--shadow-md)}
 .composer-context{padding:10px 11px 0}
 .composer-context button{min-height:24px;border-radius:999px;padding:4px 8px;background:var(--surface-selected);border-color:color-mix(in srgb,var(--mint) 16%,var(--stroke-subtle));color:var(--ink-secondary)}
 .composer textarea{min-height:78px;padding:12px 13px 4px;font-size:12px;line-height:1.65}
@@ -222,6 +222,7 @@ button:active:not(:disabled){transform:translateY(1px)}
 input,textarea,select{border-color:var(--stroke-subtle);border-radius:10px;background-color:var(--surface-panel)}
 input:hover,textarea:hover,select:hover{border-color:var(--stroke-strong)}
 input:focus,textarea:focus,select:focus{border-color:color-mix(in srgb,var(--mint) 55%,var(--stroke-strong))}
+.composer textarea:focus,.composer textarea:focus-visible{outline:none;box-shadow:none;border-color:var(--stroke-subtle)}
 
 /* Modals, settings, connections and review share one premium surface. */
 .modal{border-radius:20px;padding:28px;background:linear-gradient(155deg,var(--surface-raised),var(--surface-panel) 62%);border-color:var(--stroke-strong)}

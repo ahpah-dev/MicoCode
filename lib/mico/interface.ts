@@ -84,6 +84,9 @@ export const SIDEBAR_DEFAULT = 215;
 export const AGENT_MIN = 280;
 export const AGENT_MAX = 560;
 export const AGENT_DEFAULT = 355;
+export const CONSOLE_MIN = 90;
+export const CONSOLE_MAX = 420;
+export const CONSOLE_DEFAULT = 185;
 
 /** Clamp a saved width into range, or null when it was never set. */
 export function clampPanelWidth(value: unknown, min: number, max: number): number | null {
@@ -92,12 +95,13 @@ export function clampPanelWidth(value: unknown, min: number, max: number): numbe
   return Math.min(max, Math.max(min, Math.round(n)));
 }
 
-/** Saved panel widths survive only when they are usable numbers. */
-export function normalizePanelWidths(value: unknown): {sidebarWidth: number | null; agentWidth: number | null} {
-  const v = (value ?? {}) as {sidebarWidth?: unknown; agentWidth?: unknown};
+/** Saved panel sizes survive only when they are usable numbers. */
+export function normalizePanelWidths(value: unknown): {sidebarWidth: number | null; agentWidth: number | null; consoleHeight: number | null} {
+  const v = (value ?? {}) as {sidebarWidth?: unknown; agentWidth?: unknown; consoleHeight?: unknown};
   return {
     sidebarWidth: clampPanelWidth(v.sidebarWidth, SIDEBAR_MIN, SIDEBAR_MAX),
     agentWidth: clampPanelWidth(v.agentWidth, AGENT_MIN, AGENT_MAX),
+    consoleHeight: clampPanelWidth(v.consoleHeight, CONSOLE_MIN, CONSOLE_MAX),
   };
 }
 

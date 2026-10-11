@@ -4,6 +4,9 @@ import {
   AGENT_DEFAULT,
   AGENT_MAX,
   AGENT_MIN,
+  CONSOLE_DEFAULT,
+  CONSOLE_MAX,
+  CONSOLE_MIN,
   SIDEBAR_DEFAULT,
   SIDEBAR_MAX,
   SIDEBAR_MIN,
@@ -57,10 +60,12 @@ test('panel widths clamp into range and reject garbage', () => {
   assert.equal(clampPanelWidth('oops', SIDEBAR_MIN, SIDEBAR_MAX), null);
   assert.equal(clampPanelWidth(undefined, AGENT_MIN, AGENT_MAX), null);
   assert.equal(clampPanelWidth(400.4, AGENT_MIN, AGENT_MAX), 400);
-  assert.deepEqual(normalizePanelWidths(undefined), {sidebarWidth: null, agentWidth: null});
-  assert.deepEqual(normalizePanelWidths({sidebarWidth: 240, agentWidth: 10}), {sidebarWidth: 240, agentWidth: AGENT_MIN});
+  assert.equal(clampPanelWidth(5, CONSOLE_MIN, CONSOLE_MAX), CONSOLE_MIN);
+  assert.deepEqual(normalizePanelWidths(undefined), {sidebarWidth: null, agentWidth: null, consoleHeight: null});
+  assert.deepEqual(normalizePanelWidths({sidebarWidth: 240, agentWidth: 10, consoleHeight: 900}), {sidebarWidth: 240, agentWidth: AGENT_MIN, consoleHeight: CONSOLE_MAX});
   assert.ok(SIDEBAR_DEFAULT >= SIDEBAR_MIN && SIDEBAR_DEFAULT <= SIDEBAR_MAX);
   assert.ok(AGENT_DEFAULT >= AGENT_MIN && AGENT_DEFAULT <= AGENT_MAX);
+  assert.ok(CONSOLE_DEFAULT >= CONSOLE_MIN && CONSOLE_DEFAULT <= CONSOLE_MAX);
 });
 
 test('the stylesheet honors every preference the settings UI offers', async () => {
