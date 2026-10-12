@@ -55,7 +55,7 @@ export type DesktopAPI={
  appearance:(theme:string)=>Promise<void>;
  openFolder:()=>Promise<OpenFolderResult|null>;
  applyFolderChanges:(folder:string,changes:Record<string,string|null>)=>Promise<{written:string[];deleted:string[]}>;
- restoreConnection:()=>Promise<SetupResult|null>;
+ restoreConnection:(provider?:ManagedProvider,engine?:'local'|'community')=>Promise<SetupResult|null>;
  git?:DesktopGitAPI;
 };
 declare global{interface Window{micoDesktop?:DesktopAPI}}

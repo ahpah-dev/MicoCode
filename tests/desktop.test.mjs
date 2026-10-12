@@ -62,6 +62,33 @@ test('Octopus is configured on loopback with its database inside the private fol
 
 // Only the most recent router used to come back, so a second one the user had set
 // up looked broken after a restart.
+// The workspace saved "Octopus is my router" while the manager's last-provider
+// record said CLIProxyAPI. Restoring only the latter left Octopus down, and the
+// workspace then dialled its loopback port directly — which the browser reports as
+// a CORS failure, not as a stopped router.
+test('restore prefers the router the workspace has selected over the one used last',async()=>{
+ const dir=await mkdtemp(path.join(os.tmpdir(),'mico-restore-'));
+ const manager=new ProviderManager({dataDir:dir,runtimeDir:dir,gatewayBase:'http://127.0.0.1:1/managed/v1',gatewayKey:'gateway',vault:{get:async()=>null,set:async()=>{}}});
+ const chosen=[];
+ manager.setup=async(id,engine)=>{chosen.push([id,engine]);return {config:{provider:'proxy',proxyPreset:id,proxyUrl:'http://127.0.0.1:1/v1',model:'m'},key:'k'}};
+ try{
+  for(const id of ['cliproxy','octopus'])await mkdir(path.join(dir,'providers',id),{recursive:true});
+  await writeFile(path.join(dir,'providers','cliproxy','installed.json'),'{"version":"1"}');
+  await writeFile(path.join(dir,'providers','octopus','installed.json'),'{"version":"0.13.10"}');
+  await writeFile(path.join(dir,'providers','last-provider.json'),JSON.stringify({provider:'cliproxy',engine:'community'}));
+  assert.ok(await manager.restore('octopus','community'),'the selected router is restored');
+  assert.deepEqual(chosen,[['octopus','community']],'the workspace selection wins over the last-used router');
+  chosen.length=0;
+  await manager.restore(undefined,'community');
+  assert.deepEqual(chosen,[['cliproxy','community']],'with nothing selected it falls back to the last-used router');
+  chosen.length=0;
+  // A selected router that was never installed falls back instead of failing setup.
+  await rm(path.join(dir,'providers','octopus','installed.json'),{force:true});
+  await manager.restore('octopus','community');
+  assert.deepEqual(chosen,[['cliproxy','community']],'an uninstalled selection falls back to the last-used router');
+ }finally{await rm(dir,{recursive:true,force:true})}
+});
+
 test('every router the user set up is remembered and can be brought back',async()=>{
  const dir=await mkdtemp(path.join(os.tmpdir(),'mico-routers-'));
  const manager=new ProviderManager({dataDir:dir,runtimeDir:dir,gatewayBase:'http://127.0.0.1:1/managed/v1',gatewayKey:'gateway',vault:{get:async()=>null,set:async()=>{}}});

@@ -252,9 +252,22 @@ export class ProviderManager{
   }catch(e){if(this.children.get(id)!==hadChild)await this.stop(id);this.emit(id,signal.aborted?'cancelled':'error',signal.aborted?'Setup cancelled. You can resume with the same button.':e.message);throw e}
   finally{this.active=null}
  }
-  async restore(){
-  try{const {provider,engine='local'}=JSON.parse(await readFile(path.join(this.root,'last-provider.json'),'utf8'));assertProvider(provider);if(!await exists(path.join(this.folder(provider),'installed.json')))return null;return await this.setup(provider,engine)}catch{return null}
- }
+  // Restores the router the workspace actually has selected, falling back to the
+  // one used last. Restoring only "whichever ran last" is what left the workspace
+  // dialling a router that was not running — which the browser then reports as a
+  // CORS failure rather than "this router is stopped".
+  async restore(preferredProvider,preferredEngine){
+   try{
+    const saved=JSON.parse(await readFile(path.join(this.root,'last-provider.json'),'utf8'));
+    const wanted=[preferredProvider,saved.provider].filter((id,index,list)=>typeof id==='string'&&managedProviders.includes(id)&&list.indexOf(id)===index);
+    for(const candidate of wanted){
+     if(!await exists(path.join(this.folder(candidate),'installed.json')))continue;
+     const engine=(candidate===preferredProvider?preferredEngine:saved.engine)==='local'?'local':'community';
+     return await this.setup(candidate,engine);
+    }
+    return null;
+   }catch{return null}
+  }
  // Every router the user has set up, so the ones that are not the most recent can
  // be brought back too instead of looking broken after MicoCode restarts.
  // Routers configured before MicoCode started recording them are found on disk: an

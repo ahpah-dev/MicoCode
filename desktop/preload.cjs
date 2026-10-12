@@ -7,7 +7,7 @@ if(process.isMainFrame)contextBridge.exposeInMainWorld('micoDesktop',Object.free
  cancelSetup:()=>ipcRenderer.invoke('mico:cancel'),
  providerStatus:()=>ipcRenderer.invoke('mico:status'),
  refreshModels:()=>ipcRenderer.invoke('mico:refresh-models'),
- restoreConnection:()=>ipcRenderer.invoke('mico:restore'),
+ restoreConnection:(provider,engine)=>ipcRenderer.invoke('mico:restore',provider,engine),
  openDashboard:provider=>ipcRenderer.invoke('mico:dashboard',provider),
  copyDashboardKey:provider=>ipcRenderer.invoke('mico:dashboard-key',provider),
  stopProvider:provider=>ipcRenderer.invoke('mico:stop',provider),

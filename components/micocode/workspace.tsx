@@ -6,6 +6,7 @@ import {Appearance} from './appearance';
 import {useTheme} from '@/lib/mico/appearance';
 import {AGENT_DEFAULT,AGENT_MAX,AGENT_MIN,CONSOLE_DEFAULT,CONSOLE_MAX,CONSOLE_MIN,SIDEBAR_DEFAULT,SIDEBAR_MAX,SIDEBAR_MIN,applyInterfacePrefs,clampPanelWidth,interfacePrefsFromConfig,normalizePanelWidths,workspaceShortcuts} from '@/lib/mico/interface';
 import '@/lib/mico/desktop';
+import {isManagedProvider} from '@/lib/mico/desktop';
 import Preview from './preview';
 import {Connections} from './connections';
 import {PluginsDialog} from './plugins-dialog';
@@ -159,7 +160,9 @@ export default function Workspace(){
      notify(hasKey?'Existing 9Router found. Loading its enabled provider models.':'Existing 9Router found. Add its API key to load your provider models.');
      return;
     }
-    const result=await desktop.restoreConnection();if(!active||!result)return;
+    // Ask for the router this workspace has selected, not just whichever ran last.
+    const wanted=saved?.provider==='proxy'&&saved.managed&&saved.proxyPreset&&isManagedProvider(saved.proxyPreset)?saved.proxyPreset:undefined;
+    const result=await desktop.restoreConnection(wanted,saved?.routerEngine==='local'?'local':'community');if(!active||!result)return;
     setConfig(previous=>{const next:Config=applyManagedConnection(previous,result);try{writeCredential(next,result.key);localStorage.setItem('mico-config',JSON.stringify(next));rememberProfile(next)}catch{}return next});
     setApiKey(result.key);setConnected(result.config.provider||'proxy');notify('Your managed connection is ready.');
    })().catch(()=>{if(active)notify('Reconnect your managed router in Models.')}).finally(()=>{if(active)setManagedRestoring(false)});

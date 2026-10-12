@@ -10,48 +10,42 @@ if (!token) {
   process.exit(1);
 }
 
-const tag = 'v0.8.3';
-const name = 'MicoCode 0.8.3 — GPT-Load Removed, Octopus Stays Running';
+const tag = 'v0.8.4';
+const name = 'MicoCode 0.8.4 â€” The Right Router Comes Back';
 const checksums = fs.readFileSync('release/SHA256SUMS.txt', 'utf8').trim();
 
-const body = `## MicoCode v0.8.3 — GPT-Load Removed, Octopus Stays Running
+const body = `## MicoCode v0.8.4 â€” The Right Router Comes Back
 
-### GPT-Load is gone
-It never worked reliably enough to keep, so it has been removed outright rather than
-left in the app: its installer, its pinned artifact, its management-API client, its
-dashboard entry and its card. Octopus remains as the multi-route free gateway.
+### MicoCode was restoring the wrong router
+The workspace had saved "Octopus is my router" while the manager's own record of the last
+router used said CLIProxyAPI. On launch only the last-used one was restored, so Octopus was
+never started.
 
-### A router you set up is no longer left switched off
-Octopus answered every request with *"Your managed router is stopped. Open Models and
-click Set up & connect."* even though it was installed, configured and healthy.
+Worse, a managed router is meant to be reached through MicoCode's own server. With no
+connection for Octopus, the workspace fell back to dialling its loopback port directly â€” which
+is cross-origin, has no CORS headers, and therefore surfaced as **"Could not reach the router.
+Start it, use its final API URL without redirects, allow this site in CORS, and allow
+local-network access when your browser asks."** A stopped router was being reported as a
+browser-permissions problem, which sends you looking in entirely the wrong place.
 
-The cause: MicoCode only started recording which routers you had set up in 0.8.2, so a
-router configured before that was invisible to the restart and stayed down while
-everything routed to it failed. An installed package is now treated as proof that you
-set that router up — **whichever build installed it** — so every router you have
-configured comes back on launch, in the background, without competing with a setup you
-are waiting on.
+MicoCode now restores **the router the workspace actually has selected**, falling back to the
+last-used one only when that selection is not installed.
 
-### The model panel reads better
-- "Your routers" no longer describes itself as just 9Router and LiteLLM.
-- The intro paragraph names the router you actually selected instead of saying "this router".
-- The hint about "Use existing" now only appears for 9Router, where it applies.
-- The panel's smallest labels — status chips, model badges, model counts — were set at
-  7–8px and have been lifted to a readable size.
-- Provider tiles respond to the pointer the way the router cards already did.
+### A stopped managed router now says so
+Dialling a managed router directly is refused outright, so the message is:
+
+> Your Octopus router is not running. Open Models and click Set up & connect to start it.
+
+It also comes back on its own: every router you have installed is brought up at launch,
+including ones installed by an earlier build that never recorded them.
 
 ### Verification
-- 186 tests pass with no skips. One asserts a router is brought back from an installed
-  package that has no record of ever being set up — the exact case that left Octopus
-  down — and the accepted-installer test now asserts GPT-Load is *rejected*.
-- No GPT-Load reference remains anywhere in the shipping code.
-- TypeScript check clean; production web build clean; packaged app smoke-tested, and
-  the installers below were built fresh from this commit.
-
-### Note
-GPT-Load's 103 MB download is left behind in
-\`%APPDATA%\\MicoCode\\providers\\gptload\` on machines that installed it. It is no
-longer used and can be deleted to reclaim the space.
+- 187 tests pass with no skips. A new test builds the exact mismatch â€” workspace selection
+  versus last-used record, both installed â€” and asserts the selection wins, that the last-used
+  router is used when nothing is selected, and that an uninstalled selection falls back rather
+  than failing.
+- TypeScript check clean; production web build clean; packaged app smoke-tested, and the
+  installers below were built fresh from this commit.
 
 ### Checksums
 \`\`\`
@@ -102,8 +96,8 @@ async function publish() {
 
   // Upload assets
   const filesToUpload = [
-    {path: 'release/MicoCode-Setup-0.8.3-x64.exe', name: 'MicoCode-Setup-0.8.3-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
-    {path: 'release/MicoCode-Portable-0.8.3-x64.exe', name: 'MicoCode-Portable-0.8.3-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Setup-0.8.4-x64.exe', name: 'MicoCode-Setup-0.8.4-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Portable-0.8.4-x64.exe', name: 'MicoCode-Portable-0.8.4-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
     {path: 'release/SHA256SUMS.txt', name: 'SHA256SUMS.txt', contentType: 'text/plain'}
   ];
 

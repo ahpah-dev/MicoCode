@@ -19,6 +19,10 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.8.4 fixes why a chosen router could still come back as “Could not reach the router”:
+- **MicoCode restored the wrong router.** The workspace saved “Octopus is my router” while the manager’s own record of the last router used said CLIProxyAPI. On start it restored only the last-used one, so Octopus was never started — and because a managed router must be reached through MicoCode’s own server, the workspace fell back to dialling Octopus’s loopback port directly. That is cross-origin, so the browser reported a **CORS** failure instead of a stopped router, which sent you looking in entirely the wrong place. MicoCode now restores the router the workspace actually has selected, falling back to the last-used one only when that selection is not installed.
+- **A stopped managed router now says so.** Dialling it directly is refused outright, so the message is “Your Octopus router is not running. Open Models and click Set up & connect to start it.” instead of a CORS hint about tunnels and browser permissions.
+
 Version 0.8.3 removes GPT-Load, makes a configured router actually stay running, and tidies the model panel:
 - **GPT-Load is gone.** It never worked reliably enough to keep, so its installer, its pinned artifact, its management-API client and its card have all been removed rather than left in place. Octopus remains as the multi-route gateway.
 - **A router you set up earlier is no longer left switched off.** Octopus reported “Your managed router is stopped. Open Models and click Set up & connect.” on every request even though it was installed and configured. MicoCode only remembered routers set up under 0.8.2 or later, so anything configured before that was invisible to the restart and stayed down. An installed package is now treated as proof you set that router up, whoever installed it.
