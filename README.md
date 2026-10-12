@@ -19,6 +19,8 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.8.7 makes MicoCode pick the **best free model, not the first one listed**, and compares releases properly: Gemini 3.8 Flash now beats 3.7, versions are only compared inside one family so GPT-5.4 never outranks Gemini 3.8 on a bigger number, and a parameter count like gpt-oss-120b is never read as a version.
+
 Version 0.8.6 adds **OmniRoute** — and it is the biggest free-router addition yet:
 - **OmniRoute** ([diegosouzapw/OmniRoute](https://github.com/diegosouzapw/OmniRoute), MIT, ~76k stars): one endpoint in front of hundreds of providers. MicoCode installs it over npm with the Node runtime it already bundles, runs it headless on a free loopback port with its own private data directory, then **mints an access key for it and restricts that key to the free catalogue**. The key cannot reach a paid model — asking for one returns 403 — so this route can never spend money.
 - **Free-only is enforced by the router, not by a list in the UI.** MicoCode reads OmniRoute's own free catalogue, keeps only models whose provider publishes a free tier, drops the ones gated upstream (OpenCode's free tier only answers from inside OpenCode), and hands that exact set to the key. Everything else is invisible to it.

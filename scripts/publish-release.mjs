@@ -10,52 +10,49 @@ if (!token) {
   process.exit(1);
 }
 
-const tag = 'v0.8.6';
-const name = 'MicoCode 0.8.6 — OmniRoute, Free Models Only';
+const tag = 'v0.8.7';
+const name = 'MicoCode 0.8.7 — The Best Free Model, Not the First One';
 const checksums = fs.readFileSync('release/SHA256SUMS.txt', 'utf8').trim();
 
-const body = `## MicoCode v0.8.6 — OmniRoute, Free Models Only
+const body = `## MicoCode v0.8.7 — The Best Free Model, Not the First One
 
-### OmniRoute is in, and it is locked to free models
-[OmniRoute](https://github.com/diegosouzapw/OmniRoute) (MIT, ~76k stars) puts one endpoint in
-front of hundreds of providers. MicoCode now installs it over npm with the Node runtime it
-already bundles for 9Router, runs it headless on a free loopback port with its own private data
-directory, and mints an access key for it.
-
-**That key is restricted to the free catalogue.** MicoCode reads OmniRoute's own free-model
-catalogue, keeps only the models whose provider publishes a free tier, drops the ones gated
-upstream, and hands exactly that set to the key. Anything else is invisible to it:
+### MicoCode was picking its free model from list order
+0.8.6 connected OmniRoute and locked it to free models correctly, but then chose which
+free model to run by taking **whatever the router happened to list first**. On a clean
+install that landed on a small mini model while better routes sat further down the same
+list. It now picks by MicoCode's own ranking, so the strongest free model available wins
+wherever it appears:
 
 \`\`\`
-models visible to the key     171
-request for a paid combo      403
+before   ddgw/gpt-5.4-mini          (first in the list)
+after    agy/gemini-3.8-flash       (ranked best)
 \`\`\`
 
-So this route cannot spend money — the restriction is enforced by the router itself, not by a
-list in the interface that could drift.
+### Releases are now compared properly
+Ranking treated every model in a tier as equal, so an older release could win on
+alphabetical order — Gemini 3.7 beat Gemini 3.8. Worse, the obvious fix is a trap:
+comparing version numbers across families makes every GPT-5.x outrank every Gemini 3.x,
+because 5.4 is a bigger number than 3.8. Versions are now compared **only inside one
+family**, so:
 
-Free routes measured on a clean install include GPT-5.4 Mini, GPT-5.6 Luna, Claude Haiku 4.5,
-Mistral Small, gpt-oss-120b and Gemma 4, alongside AI Horde's community models.
+- \`gemini-3.8-flash\` beats \`gemini-3.7-flash-high\` — same family, newer release
+- \`gpt-5.4-mini\` and \`gemini-3.8-flash\` are not compared numerically at all
+- \`gpt-oss-120b\` is not read as version 120 — a parameter count is not a release
 
-### Why some providers are excluded
-OpenCode's free tier only answers from inside OpenCode — it returns
-\`403: can only be used from within OpenCode\` to anything else. Offering it would hand you a
-route that always fails, so it is filtered out of the free set.
+### What this does not change
+MicoCode cannot invent free models that a free provider does not serve. A bare OmniRoute
+instance only has its keyless providers live, and those serve small or odd models.
+OmniRoute's own free catalogue does list current flagships — Claude Opus 5, GPT-5.6 Sol,
+Gemini 3.8 Flash — but they come from providers that need an account. **Connect those in
+OmniRoute's dashboard and they appear here automatically**, because the free key is
+restricted to whatever the catalogue currently offers.
 
 ### Verification
-- 182 tests pass with no skips. Two are new: one asserts OmniRoute is a managed router pinned to
-  an npm version with no downloadable artifact to pin, the other proves the free filter keeps
-  free providers, drops gated ones, and allows nothing when a provider has no free tier.
-- The whole path was run against the real 520 MB package: install, headless start, key creation,
-  free-only restriction, and a \`GET /v1/models\` through MicoCode's own server returning the same
-  set of models. A paid combo was refused with 403.
+- 183 tests pass with no skips. The new one asserts a list beginning with a small model
+  still resolves to the strongest current one, that the newest release wins inside a
+  family, and that a parameter count is never mistaken for a version.
 - TypeScript check clean; production web build clean; packaged app smoke-tested, and the
   installers below were built fresh from this commit.
-
-### A note on the install
-OmniRoute is delivered over npm rather than a pinned download, the same way 9Router is. The
-version is pinned in the app, the install is the first thing setup does, and it takes a few
-minutes and about 520 MB.
 
 ### Checksums
 \`\`\`
@@ -106,8 +103,8 @@ async function publish() {
 
   // Upload assets
   const filesToUpload = [
-    {path: 'release/MicoCode-Setup-0.8.6-x64.exe', name: 'MicoCode-Setup-0.8.6-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
-    {path: 'release/MicoCode-Portable-0.8.6-x64.exe', name: 'MicoCode-Portable-0.8.6-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Setup-0.8.7-x64.exe', name: 'MicoCode-Setup-0.8.7-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Portable-0.8.7-x64.exe', name: 'MicoCode-Portable-0.8.7-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
     {path: 'release/SHA256SUMS.txt', name: 'SHA256SUMS.txt', contentType: 'text/plain'}
   ];
 

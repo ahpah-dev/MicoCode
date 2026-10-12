@@ -5,8 +5,9 @@ import os from 'node:os';
 import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import JSZip from 'jszip';
 import {archivePath,extractVerifiedZip,downloadVerified} from '../desktop/install.mjs';
-import {assertProvider,assertEngine,cliProxyConfig,liteLLMConfig,managedProviders,omniRouteFreeIds,ProviderManager} from '../desktop/provider-manager.mjs';
+import {assertProvider,assertEngine,cliProxyConfig,liteLLMConfig,managedProviders,omniRouteFreeIds,omniRoutePreferredModel,ProviderManager} from '../desktop/provider-manager.mjs';
 import {artifacts,versions} from '../desktop/artifacts.mjs';
+import {modelVersion,rankCodingModels} from '../lib/mico/auto-connect.mjs';
 import {isLocalRequest,createLocalServer,managedClientConnection} from '../desktop/server.mjs';
 import {applyManagedConnection,discoverProxy,listProxyModels,managedPresets,proxyPresets} from '../lib/mico/providers.mjs';
 import {actionSchema} from '../lib/mico/action-schema.mjs';
@@ -77,6 +78,21 @@ test('OmniRoute is a managed router installed from npm at a pinned version',()=>
  assert.equal(artifacts.omniroute,undefined,'OmniRoute ships over npm, so it has no downloadable artifact to pin');
 });
 
+// Taking the first id a router lists is how a free route ends up on a small model
+// while a current one sits further down the list.
+test('the OmniRoute model offered is the strongest free one, not the first listed',()=>{
+ const list=['ddgw/gpt-5.4-mini','ddgw/claude-haiku-4-5','ddgw/mistral-small-2603','agy/gemini-3.8-flash','cerebras/glm-5.3'];
+ const chosen=omniRoutePreferredModel(list);
+ assert.notEqual(chosen,list[0],'list order must not decide it');
+ assert.equal(chosen,'agy/gemini-3.8-flash','the strongest current model wins, wherever it sits in the list');
+ // Releases are only comparable inside one family: gpt-5.4 is not newer than gemini-3.8.
+ assert.equal(rankCodingModels(['agy/gemini-3.7-flash-high','agy/gemini-3.8-flash'])[0],'agy/gemini-3.8-flash','the newest release in a family wins');
+ assert.equal(modelVersion('agy/gemini-3.8-flash'),3.8);
+ assert.equal(modelVersion('ddgw/tinfoil/gpt-oss-120b'),0,'a parameter count is not a version');
+ assert.equal(omniRoutePreferredModel(['auto/best-free']),'auto/best-free','a free combo is used when nothing concrete can be ranked');
+ assert.equal(omniRoutePreferredModel([]),'','an empty catalogue yields no model');
+ assert.equal(omniRoutePreferredModel(undefined),'');
+});
 // The whole point of the OmniRoute integration: its access key may only reach free
 // models, so the workspace cannot spend money through it.
 test('the OmniRoute access key is restricted to free models only',()=>{

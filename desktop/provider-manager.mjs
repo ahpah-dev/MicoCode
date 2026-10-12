@@ -3,6 +3,7 @@ import {mkdir,readFile,writeFile,access,readdir,rm} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import path from 'node:path';
 import {bestCodingModel,freeCatalogue,fullCatalogue,managedPresets,routeSlug} from '../lib/mico/providers.mjs';
+import {rankCodingModels} from '../lib/mico/auto-connect.mjs';
 import {loadOpenCodeModels} from '../lib/mico/opencode.mjs';
 import {managedRouterCatalogue} from './server.mjs';
 import net from 'node:net';
@@ -31,6 +32,14 @@ export function cliProxyConfig(port,key,base,upstreamKey,authDir,routes=['free-c
 // models only — the access key is restricted to exactly this list.
 export function omniRouteFreeIds(catalogue,freeProviders,gated=new Set(['opencode'])){
  return (catalogue?.data||[]).filter(model=>model&&model.id&&freeProviders.has(model.owned_by)&&!gated.has(model.owned_by)).map(model=>model.id);
+}
+// The model MicoCode offers from a free catalogue: the strongest one by its own
+// ranking, never simply the first id the router listed. A free list that happens to
+// begin with a small or superseded model must not decide what the workspace runs.
+export function omniRoutePreferredModel(models){
+ const list=Array.isArray(models)?models.filter(id=>typeof id==='string'&&id):[];
+ if(!list.length)return '';
+ return rankCodingModels(list)[0]||(list.includes('auto/best-free')?'auto/best-free':list[0]);
 }
 export class ProviderManager{
  constructor({dataDir,runtimeDir,gatewayBase,gatewayKey,onProgress=()=>{},vault,fetchImpl=fetch,onDiagnostic=()=>{},loadOpenCodeModelsImpl=loadOpenCodeModels}){
@@ -494,7 +503,11 @@ export class ProviderManager{
    const allowed=await this.omniRouteJson(base+'/v1/models',signal,{headers:{Authorization:'Bearer '+clientKey}});
    const models=(allowed?.data||[]).map(model=>model.id);
    if(!models.length)throw new Error('OmniRoute exposed no free models to its new key. Retry setup.');
-   const preferred=models.includes('auto/best-free')?'auto/best-free':models[0];
+   // Pick the strongest free model by MicoCode's own ranking — the one that knows a
+   // current model from a superseded one — rather than whatever the router happened
+   // to list first. A free list that happens to start with a small model must not
+   // decide what the workspace runs.
+   const preferred=omniRoutePreferredModel(models);
    return {config:{provider:'proxy',proxyPreset:id,proxyUrl:base+'/v1',model:preferred,freeModels:models,routerFreeOnly:true},key:clientKey,dashboard:base+'/'};
   }
   async omniRouteJson(url,signal,{method='GET',body,headers={}}={}){
