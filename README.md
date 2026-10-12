@@ -19,6 +19,8 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.7.5 adds first-class Google AI Studio API integration (`https://generativelanguage.googleapis.com/v1beta/openai`) with live Gemini 2.5 Pro, Gemini 2.5 Flash, and Gemma model discovery, automatic `models/` prefix normalization, 1M-token context window metadata, rate-limit header forwarding, and redacted key diagnostics.
+
 Version 0.7.4 upgrades Auto-Configure to prioritize local proxy routers (9Router on port 20128 and FreeRide on 11343) ahead of small local models, automatically reusing or generating 9Router API keys and probing exposed models in parallel to select the strongest working coding model. It also adds tolerant action normalization and an expanded repair loop so models using common tool aliases or OpenAI tool_calls complete coding tasks without action-format errors.
 
 Version 0.7.3 introduces zero-config automatic AI configuration: running local AI engines (Ollama on port 11434/11435, 9Router on 20128, and FreeRide on 11343) are auto-detected and connected on startup with no manual setup. It adds a React ErrorBoundary to prevent unhandled render crashes, normalizes CRLF/LF line endings in exact edits, strips reasoning tags and trailing commas from agent JSON replies, and elevates visual polish across all five themes.

@@ -7,6 +7,7 @@ import {GET as models} from './api/models.ts';
 import {POST as horde} from './api/horde.ts';
 import {POST as opencode} from './api/opencode.ts';
 import {POST as nim} from './api/nim.ts';
+import {POST as aistudio} from './api/aistudio.ts';
 
 const root=fileURLToPath(new URL('.',import.meta.url));
 export default defineConfig({
@@ -15,7 +16,7 @@ export default defineConfig({
  plugins:[react(),{name:'micocode-local-api',configureServer(server){
   server.middlewares.use(async(req,res,next)=>{
    const path=(req.url||'').split('?')[0];
-    const handler=path==='/api/models'&&req.method==='GET'?models:path==='/api/ai'&&req.method==='POST'?ai:path==='/api/connection'&&req.method==='POST'?connection:path==='/api/horde'&&req.method==='POST'?horde:path==='/api/opencode'&&req.method==='POST'?opencode:path==='/api/nim'&&req.method==='POST'?nim:null;
+    const handler=path==='/api/models'&&req.method==='GET'?models:path==='/api/ai'&&req.method==='POST'?ai:path==='/api/connection'&&req.method==='POST'?connection:path==='/api/horde'&&req.method==='POST'?horde:path==='/api/opencode'&&req.method==='POST'?opencode:path==='/api/nim'&&req.method==='POST'?nim:path==='/api/aistudio'&&req.method==='POST'?aistudio:null;
    if(!handler)return next();
    try{
     const chunks:Buffer[]=[];for await(const chunk of req)chunks.push(Buffer.from(chunk));

@@ -84,7 +84,7 @@ export class ProviderManager{
   const child=spawn(exe,args,{...options,env:{...process.env,...options.env},windowsHide:true,shell:false,stdio:['ignore','pipe','pipe']});
   // Consume output without persisting prompts or credentials.
    const envSecrets=Object.entries(options.env||{}).filter(([name,value])=>/(KEY|TOKEN|SECRET|PASSWORD)/i.test(name)&&typeof value==='string'&&value.length>8).map(([,value])=>value);
-   const log=chunk=>{let text=chunk.toString().replace(/sk-mico-[\w-]+|sk-[a-zA-Z0-9_-]{20,}|nvapi-[\w-]{16,}|gsk_[\w-]{16,}|hf_[\w-]{16,}|integration-only-free-route/g,'[redacted]');for(const secret of envSecrets)text=text.replaceAll(secret,'[redacted]');this.diagnostic(id,text.slice(-3000))};
+   const log=chunk=>{let text=chunk.toString().replace(/sk-mico-[\w-]+|sk-[a-zA-Z0-9_-]{20,}|AIza[\w-]{20,}|nvapi-[\w-]{16,}|gsk_[\w-]{16,}|hf_[\w-]{16,}|integration-only-free-route/g,'[redacted]');for(const secret of envSecrets)text=text.replaceAll(secret,'[redacted]');this.diagnostic(id,text.slice(-3000))};
   const forget=()=>{if(this.children.get(id)===child){this.children.delete(id);this.connections.delete(id)}};
   child.stdout.on('data',log);child.stderr.on('data',log);child.on('error',e=>{forget();this.diagnostic(id,e.code||'Process start failed.')});child.once('exit',forget);
   this.children.set(id,child);return child;
