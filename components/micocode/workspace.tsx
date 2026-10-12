@@ -16,6 +16,7 @@ import {createProject} from '@/lib/mico/templates';
 import {loadProjects,saveProjects} from '@/lib/mico/storage';
 import {checkProject,diffLines,isPrivatePath,mergeFiles,safePath} from '@/lib/mico/core.mjs';
 import {browserReady,runAgent,stopBrowser} from '@/lib/mico/agent';
+import {discoverLocalNineKey,pickWorkingCodingModel,rankCodingModels} from '@/lib/mico/auto-connect.mjs';
 import {applyManagedConnection,connectionIdentity,credentialSlot,listProxyModels,proxyPresets,readCredential,rememberProfile,selectCatalogueModel,shouldRestoreManagedConnection,writeCredential} from '@/lib/mico/providers.mjs';
 type View='welcome'|'code'|'preview'|'split'|'changes';
 type Dialog='connections'|'projects'|'new'|'file'|'commands'|'help'|'history'|'settings'|'plugins'|null;
@@ -58,66 +59,61 @@ export default function Workspace(){
  const autoConfigure=useCallback(async(quiet=false)=>{
   if(busy)return false;
   setAutoScanning(true);
+  const apply=(next:Config,message:string)=>{
+   setConfig(next);setConnected(next.provider);
+   try{localStorage.setItem('mico-config',JSON.stringify(next));localStorage.setItem('mico-auto','1');rememberProfile(next)}catch{}
+   notify(message);
+  };
+  const alive=async(url:string)=>{try{return (await fetch(url,{signal:AbortSignal.timeout(1500)})).ok}catch{return false}};
+  let hint='';
   try{
    const saved=localStorage.getItem('mico-config');
    let previous:Config|null=null;try{previous=saved?JSON.parse(saved) as Config:null}catch{}
-   const candidateUrls=[previous?.ollamaUrl,'http://127.0.0.1:11434','http://localhost:11434','http://127.0.0.1:11435'].filter(Boolean) as string[];
-   const uniqueUrls=Array.from(new Set(candidateUrls.map(u=>u.replace(/\/$/,''))));
-   for(const url of uniqueUrls){
+   // 1. Routers first: they expose the strongest coding models. Pick one that
+   //    demonstrably follows MicoCode's JSON action protocol, not just the first listed.
+   for(const router of [{id:'9router',health:'http://127.0.0.1:20128/api/health'},{id:'freeride',health:'http://127.0.0.1:11343/health'}]){
+    if(!await alive(router.health))continue;
+    const preset=proxyPresets.find(p=>p.id===router.id)!;
+    const base:Config={...defaultConfig,...previous,provider:'proxy',proxyPreset:router.id as Config['proxyPreset'],proxyUrl:preset.url,managed:false,freeModels:[],routerFreeOnly:false,model:''};
+    let key=readCredential(base),keyNote='';
+    if(!key&&router.id==='9router'){
+     const found=await discoverLocalNineKey();
+     if(found){key=found.key;keyNote=` using your router key “${found.name}”`}
+    }
     try{
-     const res=await fetch(`${url}/api/tags`,{signal:AbortSignal.timeout(2000)});
-     if(res.ok){
-      const d=await res.json() as {models?:{name:string}[]};
-      const names=(d.models||[]).map(m=>m.name);
-      if(names.length){
-       const best=names.find(s=>/gemma4|qwen3\.[5678]|qwen3-coder|glm-5|deepseek-v4|nemotron-3|devstral|qwen3|coder/i.test(s))||names[0];
-       const next:Config={...defaultConfig,...previous,provider:'ollama',ollamaUrl:url,model:best};
-       setConfig(next);setConnected('ollama');
-       try{localStorage.setItem('mico-config',JSON.stringify(next));rememberProfile(next)}catch{}
-       notify(`⚡ Auto-configured: local Ollama connected with ${best}.`);
-       return true;
-      }
+     const available=await listProxyModels(base,key,AbortSignal.timeout(15000));
+     // Quiet startup: keep a previously auto-picked model while it is still offered.
+     if(quiet&&previous?.provider==='proxy'&&previous.proxyPreset===router.id&&previous.model&&available.some((m:{id:string})=>m.id===previous!.model)&&localStorage.getItem('mico-auto')==='1'&&key){
+      setConnected('proxy');setApiKey(key);return true;
      }
-    }catch{}
-   }
-   try{
-    const res=await fetch('http://127.0.0.1:20128/api/health',{signal:AbortSignal.timeout(1500)});
-    if(res.ok){
-     const endpoint=proxyPresets.find(p=>p.id==='9router')!.url;
-     const next:Config={...defaultConfig,...previous,provider:'proxy',proxyPreset:'9router',proxyUrl:endpoint,model:previous?.model||'',managed:false};
-     const hasKey=!!readCredential(next);setConfig(next);setConnected('proxy');
-     try{localStorage.setItem('mico-config',JSON.stringify(next));rememberProfile(next)}catch{}
-     notify(hasKey?'⚡ Auto-configured: 9Router found and connected.':'⚡ 9Router detected. Add an API key in Models if required.');
-     return true;
-    }
-   }catch{}
-   try{
-    const res=await fetch('http://127.0.0.1:11343/health',{signal:AbortSignal.timeout(1500)});
-    if(res.ok){
-     const endpoint=proxyPresets.find(p=>p.id==='freeride')!.url;
-     const next:Config={...defaultConfig,...previous,provider:'proxy',proxyPreset:'freeride',proxyUrl:endpoint,model:previous?.model||'',managed:false};
-     setConfig(next);setConnected('proxy');
-     try{localStorage.setItem('mico-config',JSON.stringify(next));rememberProfile(next)}catch{}
-     notify('⚡ Auto-configured: FreeRide gateway connected.');
-     return true;
-    }
-   }catch{}
-   if(window.micoDesktop?.detectExistingNine){
-    try{
-     const found=await window.micoDesktop.detectExistingNine();
-     if(found){
-      const endpoint=proxyPresets.find(p=>p.id==='9router')!.url;
-      const next:Config={...defaultConfig,...previous,provider:'proxy',proxyPreset:'9router',proxyUrl:endpoint,model:previous?.model||'',managed:false};
-      setConfig(next);setConnected('proxy');
-      try{localStorage.setItem('mico-config',JSON.stringify(next));rememberProfile(next)}catch{}
-      notify('⚡ Existing 9Router found.');
+     const chosen=await pickWorkingCodingModel({base:preset.url,key,models:available,signal:AbortSignal.timeout(90000)});
+     if(chosen){
+      const next:Config={...base,model:chosen};
+      if(key){writeCredential(next,key);setApiKey(key)}
+      apply(next,`⚡ Auto-configured ${preset.name} with ${chosen.split('/').pop()}${keyNote}.`);
       return true;
      }
+     hint=`${preset.name} is running, but none of its top models answered in MicoCode's format. Check its provider connections in Models.`;
+    }catch(e){
+     hint=router.id==='9router'&&!key?'9Router is running but MicoCode could not find an API key for it. Create one in its dashboard and paste it in Models.':`Could not load models from ${preset.name}: ${(e as Error).message}`;
+    }
+   }
+   // 2. Local Ollama: pick the strongest installed model.
+   const candidateUrls=[previous?.ollamaUrl,'http://127.0.0.1:11434','http://localhost:11434','http://127.0.0.1:11435'].filter(Boolean) as string[];
+   for(const url of Array.from(new Set(candidateUrls.map(u=>u.replace(/\/$/,''))))){
+    try{
+     const res=await fetch(`${url}/api/tags`,{signal:AbortSignal.timeout(2000)});
+     if(!res.ok)continue;
+     const d=await res.json() as {models?:{name:string}[]};
+     const names=(d.models||[]).map(m=>m.name);
+     if(!names.length)continue;
+     const best=rankCodingModels(names)[0]||names[0];
+     apply({...defaultConfig,...previous,provider:'ollama',ollamaUrl:url,model:best},`⚡ Auto-configured local Ollama with ${best}.${hint?' '+hint:' For stronger coding, start 9Router or add a router in Models.'}`);
+     return true;
     }catch{}
    }
-   if(!quiet){
-    notify('No local AI engines running. Start Ollama ("ollama serve") or choose a model in Models.');
-   }
+   if(window.micoDesktop?.detectExistingNine&&await window.micoDesktop.detectExistingNine().catch(()=>false)){hint=hint||'9Router detected. Add an API key in Models.'}
+   if(!quiet)notify(hint||'No local AI engines running. Start Ollama (\"ollama serve\") or 9Router, or choose a model in Models.');
    return false;
   }catch(e){
    if(!quiet)notify('Auto-configure check failed: '+(e as Error).message);
@@ -133,7 +129,7 @@ export default function Workspace(){
    if(shouldRestoreManagedConnection(saved))return;
   }
   let saved:Config|undefined;try{saved=JSON.parse(localStorage.getItem('mico-config')||'null')||undefined}catch{}
-  if(saved&&saved.provider!=='ollama'&&readCredential(saved)&&saved.model)return;
+  if(saved?.model&&saved.provider!=='ollama'&&localStorage.getItem('mico-auto')!=='1')return;
   void autoConfigure(true);
  },[loaded,autoConfigure]);
 

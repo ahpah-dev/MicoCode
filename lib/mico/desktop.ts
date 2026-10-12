@@ -44,6 +44,7 @@ export type DesktopAPI={
  version:string;
  setup:(provider:ManagedProvider,engine?:'local'|'community',credentials?:Record<string,string>)=>Promise<SetupResult>;
  detectExistingNine?:()=>Promise<boolean>;
+ existingNineKey?:()=>Promise<{key:string;name:string}|null>;
  cancelSetup:()=>Promise<void>;
  providerStatus:()=>Promise<ProviderStatus[]>;
  refreshModels:()=>Promise<SetupResult>;

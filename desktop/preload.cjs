@@ -3,6 +3,7 @@ if(process.isMainFrame)contextBridge.exposeInMainWorld('micoDesktop',Object.free
  version:'0.6.0',
  setup:(provider,engine,credentials)=>ipcRenderer.invoke('mico:setup',provider,engine,credentials),
  detectExistingNine:()=>ipcRenderer.invoke('mico:detect-existing-9router'),
+ existingNineKey:()=>ipcRenderer.invoke('mico:existing-9router-key'),
  cancelSetup:()=>ipcRenderer.invoke('mico:cancel'),
  providerStatus:()=>ipcRenderer.invoke('mico:status'),
  refreshModels:()=>ipcRenderer.invoke('mico:refresh-models'),

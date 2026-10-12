@@ -44,6 +44,7 @@ async function start(){
   ipcMain.handle('mico:cancel',event=>{validateSender(event);manager.cancel()});
   ipcMain.handle('mico:status',event=>{validateSender(event);return manager.statuses()});
   ipcMain.handle('mico:detect-existing-9router',event=>{validateSender(event);return manager.detectExistingNine()});
+  ipcMain.handle('mico:existing-9router-key',event=>{validateSender(event);return manager.existingNineKey()});
  ipcMain.handle('mico:refresh-models',async event=>{validateSender(event);return managedClientConnection(await manager.refreshNineCatalogue(),server.origin)});
  let restoration;
  ipcMain.handle('mico:restore',event=>{validateSender(event);return restoration||(restoration=manager.restore().then(result=>managedClientConnection(result,server.origin)))});

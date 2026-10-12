@@ -19,6 +19,8 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.7.4 upgrades Auto-Configure to prioritize local proxy routers (9Router on port 20128 and FreeRide on 11343) ahead of small local models, automatically reusing or generating 9Router API keys and probing exposed models in parallel to select the strongest working coding model. It also adds tolerant action normalization and an expanded repair loop so models using common tool aliases or OpenAI tool_calls complete coding tasks without action-format errors.
+
 Version 0.7.3 introduces zero-config automatic AI configuration: running local AI engines (Ollama on port 11434/11435, 9Router on 20128, and FreeRide on 11343) are auto-detected and connected on startup with no manual setup. It adds a React ErrorBoundary to prevent unhandled render crashes, normalizes CRLF/LF line endings in exact edits, strips reasoning tags and trailing commas from agent JSON replies, and elevates visual polish across all five themes.
 
 Version 0.7.2 preserves FreeRide setup errors instead of replacing them with generic CORS advice. Previously configured FreeRide gateways reconnect automatically when stopped, and a refused connection is retried once after repair; quota errors and interrupted generation are never replayed by this recovery path.

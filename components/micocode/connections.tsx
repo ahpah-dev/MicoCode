@@ -4,6 +4,7 @@ import {Cpu,Cloud,Monitor,ArrowUpRight,Check,Download,LoaderCircle,ShieldCheck,N
 import {Modal} from './primitives';
 import {ModelPicker} from './model-picker';
 import {browserReady,loadBrowserModel} from '@/lib/mico/agent';
+import {discoverLocalNineKey,pickWorkingCodingModel,rankCodingModels} from '@/lib/mico/auto-connect.mjs';
 import {applyManagedConnection,credentialSlot,discoverProxy,listProxyModels,proxyPresets,readCredential,recallProfile,selectCatalogueModel} from '@/lib/mico/providers.mjs';
 import type {Config,ProxyPreset} from '@/lib/mico/types';
 import {isManagedProvider,type ManagedProvider,type SetupProgress} from '@/lib/mico/desktop';
@@ -26,8 +27,31 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
 
  async function runAutoDetect(){
   if(disabled||autoScanning)return;
-  setAutoScanning(true);setStatus('Scanning localhost for available AI engines…');
+  setAutoScanning(true);setStatus('Scanning localhost for AI routers and coding models…');
   try{
+   for(const router of [{id:'9router',health:'http://127.0.0.1:20128/api/health'},{id:'freeride',health:'http://127.0.0.1:11343/health'}]){
+    try{
+     const res=await fetch(router.health,{signal:AbortSignal.timeout(1500)});
+     if(!res.ok)continue;
+     const preset=proxyPresets.find(p=>p.id===router.id)!;
+     const base:Config={...config,provider:'proxy',proxyPreset:router.id as ProxyPreset,proxyUrl:preset.url,managed:false,freeModels:[],routerFreeOnly:false,model:''};
+     let key=readCredential(base),keyNote='';
+     if(!key&&router.id==='9router'){
+      const found=await discoverLocalNineKey();
+      if(found){key=found.key;keyNote=` using router key “${found.name}”`}
+     }
+     setStatus(`Found ${preset.name}. Loading models and probing the strongest coding route…`);
+     const available:Catalogue=await listProxyModels(base,key,AbortSignal.timeout(15000));
+     receiveCatalogue(available);
+     const chosen=await pickWorkingCodingModel({base:preset.url,key,models:available,signal:AbortSignal.timeout(90000),onProgress:(m:string)=>setStatus(`${preset.name}: ${m}…`)});
+     if(chosen){
+      const next:Config={...base,model:chosen};
+      setConfig(next,key||undefined);setOk(true);onReady('proxy');
+      setStatus(`Auto-configured ${preset.name} with ${chosen}${keyNote} (${available.length} models loaded).`);
+      return;
+     }
+    }catch{}
+   }
    for(const port of [11434,11435]){
     try{
      const url=`http://127.0.0.1:${port}`;
@@ -37,33 +61,16 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
       const names=(d.models||[]).map((m:{name:string})=>m.name);
       if(names.length){
        setLocalModels(names);
-       const best=names.find((s:string)=>/gemma4|qwen3\.[5678]|qwen3-coder|glm-5|deepseek-v4|nemotron-3|devstral|qwen3|coder/i.test(s))||names[0];
+       const best=rankCodingModels(names)[0]||names[0];
        const next:Config={...config,provider:'ollama',ollamaUrl:url,model:best};
        setConfig(next);setOk(true);onReady('ollama');
        setStatus(`Auto-configured: connected to local Ollama (port ${port}) with ${best}.`);
-       setAutoScanning(false);return;
+       return;
       }
      }
     }catch{}
    }
-   try{
-    const res=await fetch('http://127.0.0.1:20128/api/health',{signal:AbortSignal.timeout(1500)});
-    if(res.ok){
-     chooseProxy('9router');
-     setStatus('Auto-detected 9Router on port 20128. If an API key is required, enter it below.');
-     setAutoScanning(false);return;
-    }
-   }catch{}
-   try{
-    const res=await fetch('http://127.0.0.1:11343/health',{signal:AbortSignal.timeout(1500)});
-    if(res.ok){
-     const next=chooseProxy('freeride');
-     void connect(next);
-     setStatus('Auto-detected FreeRide gateway. Connected.');
-     setAutoScanning(false);return;
-    }
-   }catch{}
-   setStatus('No local engines detected on localhost. Ensure Ollama is running ("ollama serve") or choose a provider below.');
+   setStatus('No local engines detected on localhost. Start 9Router or Ollama ("ollama serve"), or choose a provider below.');
   }catch(e){
    setStatus((e as Error).message);
   }finally{
@@ -123,7 +130,7 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
   const p=proxyPresets.find(item=>item.id==='9router')!;
   const saved=recallProfile({...config,provider:'proxy',proxyPreset:'9router' as ProxyPreset,proxyUrl:p.url,model:'',managed:false});
   const next={...saved,provider:'proxy' as const,proxyPreset:'9router' as const,proxyUrl:saved.managed?p.url:(saved.proxyUrl||p.url),model:'',managed:false,freeModels:[],routerFreeOnly:false};
-  setConfig(next);setModels([]);setCatalogueWarning('');setStatus('Using your 9Router. Enter its API key, then connect to load every enabled provider model and combo.');setOk(false);
+  const key=readCredential(next);setConfig(next,key||undefined);setModels([]);setCatalogueWarning('');setOk(false);if(key){void connect(next,key);return}void discoverLocalNineKey().then(found=>{if(found?.key){setConfig(next,found.key);void connect(next,found.key)}else setStatus('Using your 9Router. Enter its API key, then connect to load every enabled provider model and combo.')});
  }
   async function refreshProxyModels(){
    if(disabled||config.provider!=='proxy')return;
@@ -166,7 +173,7 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
     if(!r.ok)throw new Error('Ollama returned '+r.status);
     const d=await r.json();const names=(d.models||[]).map((m:{name:string})=>m.name);setLocalModels(names);
     if(!names.length)throw new Error('No installed model found. Use the local kit or run ollama pull qwen3.5:9b.');
-    setConfig({...candidate,model:names.includes(candidate.model)?candidate.model:names.find((s:string)=>/gemma4|qwen3\.[5678]|qwen3-coder|glm-5|deepseek-v4|nemotron-3|devstral|qwen3|coder/i.test(s))||names[0]});
+    setConfig({...candidate,model:names.includes(candidate.model)?candidate.model:rankCodingModels(names)[0]||names[0]});
     setStatus('Connected. '+names.length+' installed models found.');
    }else if(candidate.provider==='openrouter'){
     const key=connectionKey??(credentialSlot(candidate)===credentialSlot(config)?apiKey:readCredential(candidate));
@@ -175,7 +182,7 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
     const d=await r.json();if(!r.ok)throw new Error(d.error);
     setStatus(d.quota?'Connected. '+d.quota.remaining+' of '+d.quota.limit+' free requests remain today.':'Connected. Only zero-price routes are enabled; provider quotas apply.');
    }else{
-     const key=connectionKey??(credentialSlot(candidate)===credentialSlot(config)?apiKey:readCredential(candidate));
+     let key=connectionKey??(credentialSlot(candidate)===credentialSlot(config)?apiKey:readCredential(candidate));if(!key&&candidate.proxyPreset==='9router'&&!candidate.managed){const found=await discoverLocalNineKey();if(found?.key){key=found.key;setKey(key)}}
       if(candidate.proxyPreset==='opencode'&&!key)throw new Error('Paste your own OpenCode Zen API key. The public model list does not grant access to generation.');
       if(candidate.proxyPreset==='nim'&&!key)throw new Error('Paste your NVIDIA NIM API key from NVIDIA Build to load its live model catalogue.');
      const available:Catalogue=await listProxyModels(candidate,key,abort.signal);
@@ -239,7 +246,7 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
      <div className="auto-detect-title"><Zap size={16}/><span>Zero-Config Auto-Detect</span></div>
      <span className="auto-detect-badge">RECOMMENDED</span>
     </div>
-    <p className="auto-detect-desc">Automatically scan localhost for running Ollama (port 11434/11435), 9Router (20128), or FreeRide and connect with zero manual configuration.</p>
+    <p className="auto-detect-desc">Automatically scan localhost for running 9Router (port 20128), FreeRide (11343), or Ollama (11434/11435), retrieve or generate API keys, and select the strongest working coding model.</p>
     <button type="button" className="primary auto-detect-btn" disabled={disabled||autoScanning} onClick={runAutoDetect}>{autoScanning?<LoaderCircle size={15} className="spin"/>:<Zap size={15}/>}<span>{autoScanning?'Scanning localhost…':'Auto-Detect & Connect Everything'}</span></button>
    </div>
   <div className="provider-grid">

@@ -6,6 +6,7 @@ import {bestCodingModel,freeCatalogue,fullCatalogue,routeSlug} from '../lib/mico
 import {loadOpenCodeModels} from '../lib/mico/opencode.mjs';
 import {managedRouterCatalogue} from './server.mjs';
 import net from 'node:net';
+import os from 'node:os';
 import {randomBytes} from 'node:crypto';
 import {artifacts,versions} from './artifacts.mjs';
 import {downloadVerified,extractVerifiedZip} from './install.mjs';
@@ -33,7 +34,37 @@ export class ProviderManager{
   versionFolder(id){return path.join(this.folder(id),id==='9router'?versions.nine:id==='litellm'?versions.litellm:id==='freeride'?versions.freeride:artifacts[id].version)}
   emit(provider,stage,message,percent){this.notify({provider,stage,message,...(Number.isFinite(percent)?{percent}: {})})}
   async secret(name){let key=await this.vault.get(name);if(!key){key='sk-mico-'+randomBytes(24).toString('hex');await this.vault.set(name,key)}return key}
-  async detectExistingNine(){
+  // Reads, never writes, the local 9Router database so MicoCode can reuse a key
+   // that router already issued to this user. Active, unrestricted keys only.
+   async existingNineKey(){
+    let db;
+    try{
+     const {DatabaseSync}=await import('node:sqlite');
+     const base=process.env.APPDATA||path.join(os.homedir(),'AppData','Roaming');
+     db=new DatabaseSync(path.join(base,'9router','db','data.sqlite'),{readOnly:true});
+     const rows=db.prepare('select key,name,accessRestricted from apiKeys where isActive=1 order by createdAt desc').all();
+     const usable=rows.filter(r=>typeof r.key==='string'&&/^sk-[\w-]{8,}$/.test(r.key)&&!r.accessRestricted);
+     const pick=usable.find(r=>r.name==='MicoCode desktop')||usable.find(r=>r.name==='Default Key')||usable[0];
+     if(pick)return {key:pick.key,name:String(pick.name||'API key').slice(0,60)};
+    }catch{}
+    finally{try{db?.close()}catch{}}
+    try{
+     const r=await this.fetch('http://127.0.0.1:20128/api/keys',{redirect:'error',signal:AbortSignal.timeout(2000)});
+     if(r.ok){
+      const d=await r.json().catch(()=>({}));
+      const usable=(d.keys||[]).filter(k=>k&&typeof k.key==='string'&&/^sk-[\w-]{8,}$/.test(k.key)&&k.isActive!==false&&!k.accessRestricted);
+      const pick=usable.find(k=>k.name==='MicoCode desktop')||usable.find(k=>k.name==='Default Key')||usable[0];
+      if(pick)return {key:pick.key,name:String(pick.name||'API key').slice(0,60)};
+     }
+     const created=await this.fetch('http://127.0.0.1:20128/api/keys',{method:'POST',redirect:'error',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'MicoCode desktop'}),signal:AbortSignal.timeout(2000)});
+     if(created.ok){
+      const d=await created.json().catch(()=>({}));
+      if(typeof d.key==='string'&&/^sk-[\w-]{8,}$/.test(d.key))return {key:d.key,name:'MicoCode desktop'};
+     }
+    }catch{}
+    return null;
+   }
+   async detectExistingNine(){
    try{return (await this.fetch('http://127.0.0.1:20128/api/health',{redirect:'error',signal:AbortSignal.timeout(1500)})).ok}catch{return false}
   }
   async statuses(){return Promise.all(managedProviders.map(async provider=>({provider,installed:await exists(path.join(this.folder(provider),'installed.json')),running:!!this.children.get(provider)&&this.children.get(provider).exitCode===null})))}

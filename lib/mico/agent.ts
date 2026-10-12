@@ -117,7 +117,7 @@ export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|
     conversation.push({role:'assistant',content:raw,...(config.provider==='proxy'&&config.proxyPreset==='9router'&&reasoningContent?{reasoning_content:reasoningContent}:{})});
    if(signal.aborted)throw new DOMException('Stopped','AbortError');
    let reply:AgentReply;
-   try{reply=validateReply(raw);invalid=0}catch(e){if(++invalid>2)throw new Error('This model could not follow the action format after two repairs. Select another free model; staged work is preserved.');onMessage('The response was incomplete or invalid. Asking the model to repair it.','activity');observation=`Your last output could not be parsed: ${String(e)}. Use the exact JSON schema. Prefer one small exact edit per response, keeping output short.`;continue}
+   try{reply=validateReply(raw);invalid=0}catch(e){if(++invalid>4)throw new Error('This model could not follow the action format after several repairs. Pick a stronger coding model in Models (Auto-Configure finds one); staged work is preserved.');onMessage('The response was incomplete or invalid. Asking the model to repair it.','activity');observation=`Your last output could not be parsed: ${String(e)}. It started with: ${JSON.stringify(String(raw).trim().slice(0,160))}. Reply with ONLY one JSON object and no other text, for example {"message":"Reading the page","actions":[{"type":"read_file","path":"index.html"}],"done":false}. Prefer one small exact edit per response, keeping output short.`;continue}
    if(reply.message)onMessage(reply.message,'assistant');
    const results:string[]=[];let failed=false;const delivered:string[]=[];
    for(const action of reply.actions) {
