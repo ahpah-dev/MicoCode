@@ -10,6 +10,11 @@ import {POST as nim} from '../api/nim.ts';
 import {POST as aistudio} from '../api/aistudio.ts';
 import {POST as aihubmix} from '../api/aihubmix.ts';
 import {actionSchema} from '../lib/mico/action-schema.mjs';
+import {managedPresets} from '../lib/mico/providers.mjs';
+
+// Built from the shared list so a new managed router is proxied the moment it is
+// registered. A hand-written alternation here silently 404s every request to it.
+const providerPath=new RegExp('^/providers/('+managedPresets.join('|')+')/v1/(models|chat/completions)$');
 
 const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.zip':'application/zip','.wasm':'application/wasm','.woff2':'font/woff2'};
 const json=(error,status=400)=>Response.json({error},{status});
@@ -25,7 +30,7 @@ export function isLocalRequest(request,origin){return new URL(request.url).origi
 export function managedClientConnection(connection,origin){
  if(!connection||connection.config.provider!=='proxy')return connection;
  const id=connection.config.proxyPreset;
-  if(!['9router','cliproxy','litellm','gptload','octopus','freeride'].includes(id))throw new Error('Unsupported managed router.');
+  if(!managedPresets.includes(id))throw new Error('Unsupported managed router.');
  return {...connection,config:{...connection.config,proxyUrl:origin+'/providers/'+id+'/v1'}};
 }
 export function managedRouterCatalogue(data,connection){
@@ -45,7 +50,7 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
  async function handle(request){
   if(!isLocalRequest(request,origin))return json('Origin is not allowed.',403);
   const url=new URL(request.url),route=url.pathname;
-  const providerRoute=route.match(/^\/providers\/(9router|cliproxy|litellm|freeride)\/v1\/(models|chat\/completions)$/);
+  const providerRoute=route.match(providerPath);
   if(providerRoute){
     const [,id,action]=providerRoute;let connection=getManagedConnection(id);
     if(!connection&&id==='freeride'&&recoverFreeRide&&request.headers.get('authorization')==='Bearer any'){

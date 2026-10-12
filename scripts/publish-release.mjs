@@ -10,31 +10,39 @@ if (!token) {
   process.exit(1);
 }
 
-const tag = 'v0.8.0';
-const name = 'MicoCode 0.8.0 — Two More Free Routers That Set Themselves Up';
+const tag = 'v0.8.1';
+const name = 'MicoCode 0.8.1 — GPT-Load and Octopus Actually Answer';
 const checksums = fs.readFileSync('release/SHA256SUMS.txt', 'utf8').trim();
 
-const body = `## MicoCode v0.8.0 — Two More Free Routers That Set Themselves Up
+const body = `## MicoCode v0.8.1 — GPT-Load and Octopus Actually Answer
 
-MicoCode already installed and configured 9Router, CLIProxyAPI and LiteLLM for you.
-Version 0.8.0 adds two more free-tier routers, and neither one asks you to open a
-terminal, copy a key out of a file, or click through a setup wizard.
+**If you downloaded 0.8.0, replace it with this.** The two routers added in 0.8.0
+installed and configured themselves correctly, but could not be used at all: every
+request to them returned 404 with \`Check the API base URL; it must expose /models\`.
 
-### What's New in v0.8.0
-- **GPT-Load** ([tbphp/gpt-load](https://github.com/tbphp/gpt-load), MIT, v2.0.0-rc.49): built for multi-channel, multi-credential setups, which is exactly what free tiers need. MicoCode downloads the verified 103 MB portable build, starts it on a free loopback port under a management key it generates, creates the channel and its group, and **mints the access key itself** before connecting. Add your own free-provider keys in its dashboard and they rotate behind that one key.
-- **Octopus** ([bestruirui/octopus](https://github.com/bestruirui/octopus), AGPL-3.0, v0.13.10): one hub for every route, addressed by group name. MicoCode starts it, replaces the seeded \`admin/admin\` password with one it generates, then creates the channel, the group and the access key — about two seconds from click to connected.
-- **Every download is pinned and checksum-verified**: each package is matched against the SHA-256 digest the project itself publishes in its release before anything is extracted. A mismatch installs nothing.
-- **Dashboards you can actually get into**: each new router offers an “Open dashboard” button, and because both sign in with a credential rather than a cookie, a companion button copies that credential — written to the clipboard in the main process, so it never reaches the renderer.
-- **Routes that work immediately**: each router's channel points at MicoCode's own free gateway, so the route is live the moment setup finishes, with no provider keys of your own required.
+### What was wrong
+Everything the workspace sends to a managed router goes through MicoCode's own local
+server first. That route was matched against a **hand-written list of router names**,
+and GPT-Load and Octopus were missing from it. So requests reached the app server,
+failed to match, fell through to the static-file handler, and came back 404 while the
+routers themselves were running perfectly. The route is now built from the same list
+the rest of the app already reads, so registering a router is all it takes for it to
+be served — the mistake cannot repeat for the next one.
+
+### Also in this release
+- **Google AI Studio is described by its current model**, Gemini 3.8 Flash.
 
 ### Verification
-- 186 tests pass with no skips (11 new). They fail the build if either router loses its pinned digest or version, if a payload stops matching the contract its router's validator enforces, if a managed router that needs a dashboard credential stops offering one, or if that credential could reach the renderer.
-- Both routers were provisioned end to end against their **real release binaries**, not just checked field by field: install, start, channel, group, key generation, then a real \`POST /v1/chat/completions\` that reached the upstream and returned 200 and the dashboard's own login. GPT-Load's failures were only visible at runtime — it requires an \`Idempotency-Key\` header on every write and rejects a group whose \`priority\` or model \`alias\` fields are absent.
-- TypeScript check clean; production web build clean; Windows installers packaged fresh from this commit and their SHA-256 digests recorded below.
-
-### Notes
-- Both packages are large (103 MB and 21 MB) and are downloaded into MicoCode's private per-version folder on first setup. Octopus is AGPL-3.0: MicoCode downloads the official unmodified binary from its own release at your request; it does not redistribute or modify it.
-- \`new-api\` was evaluated as a third candidate and **left out**: its own first-run setup fails with \`sqlite error 14\` while creating the administrator account. SQLite itself was ruled out as the cause, so rather than ship an integration that could not be verified, it was dropped.
+- 188 tests pass with no skips. The new test walks **every** registered router through
+  the app's proxy route and fails if any one of them is not served \`/v1/models\`, then
+  checks an unregistered name is still refused.
+- Both routers were provisioned end to end through the exact path the workspace uses —
+  app server → router → upstream — with the catalogue returning 200 and a real
+  \`POST /v1/chat/completions\` reaching the upstream for each. The earlier harnesses
+  talked to the routers directly and so never crossed the hop that was broken; that gap
+  is now closed.
+- TypeScript check clean; production web build clean; the packaged app was smoke-tested
+  and the installers below were built fresh from this commit.
 
 ### Checksums
 \`\`\`
@@ -85,8 +93,8 @@ async function publish() {
 
   // Upload assets
   const filesToUpload = [
-    {path: 'release/MicoCode-Setup-0.8.0-x64.exe', name: 'MicoCode-Setup-0.8.0-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
-    {path: 'release/MicoCode-Portable-0.8.0-x64.exe', name: 'MicoCode-Portable-0.8.0-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Setup-0.8.1-x64.exe', name: 'MicoCode-Setup-0.8.1-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Portable-0.8.1-x64.exe', name: 'MicoCode-Portable-0.8.1-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
     {path: 'release/SHA256SUMS.txt', name: 'SHA256SUMS.txt', contentType: 'text/plain'}
   ];
 

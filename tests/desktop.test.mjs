@@ -8,7 +8,7 @@ import {archivePath,extractVerifiedZip,downloadVerified} from '../desktop/instal
 import {assertProvider,assertEngine,cliProxyConfig,liteLLMConfig,gptLoadGroupPayload,gptLoadAccessKeyPayload,gptLoadKeyMask,octopusConfig,octopusChannelPayload,octopusGroupPayload,octopusAccessKeyPayload,managedProviders,ProviderManager} from '../desktop/provider-manager.mjs';
 import {artifacts,versions} from '../desktop/artifacts.mjs';
 import {isLocalRequest,createLocalServer,managedClientConnection} from '../desktop/server.mjs';
-import {applyManagedConnection,discoverProxy,listProxyModels,proxyPresets} from '../lib/mico/providers.mjs';
+import {applyManagedConnection,discoverProxy,listProxyModels,managedPresets,proxyPresets} from '../lib/mico/providers.mjs';
 import {actionSchema} from '../lib/mico/action-schema.mjs';
 
 test('provider automation only accepts supported installer IDs',()=>{for(const id of ['9router','cliproxy','litellm','gptload','octopus','freeride','ollama'])assert.equal(assertProvider(id),id);for(const id of ['../ollama','custom','powershell','9router;whoami',null])assert.throws(()=>assertProvider(id))});
@@ -154,6 +154,23 @@ test('managed renderer transport reaches its real router without requiring upstr
   assert.equal((await fetch(endpoint,{method:'POST',headers:{...headers,Origin:'https://other.example'},body:JSON.stringify(body)})).status,403);
   assert.equal((await fetch(endpoint,{method:'POST',headers:{...headers,Authorization:'Bearer other'},body:JSON.stringify(body)})).status,401);
    assert.equal((await fetch(endpoint)).status,401);assert.equal(calls,2);
+ }finally{await server.close()}
+});
+
+// The renderer only ever reaches a managed router through this route. When the
+// route is matched against a hand-written list, every request to a router that is
+// missing from it 404s while the router itself is perfectly healthy.
+test('every registered managed router is reachable through the app proxy route',async()=>{
+ const server=await createLocalServer({webDir:os.tmpdir(),port:0,gatewayKey:'internal',
+  getManagedConnection:id=>({key:'private-client',config:{provider:'proxy',proxyPreset:id,proxyUrl:'http://127.0.0.1:55001/v1',model:'free-code',freeModels:['free-code']}}),
+  fetchImpl:async()=>Response.json({object:'list',data:[{id:'free-code',object:'model'}]})});
+ try{
+  for(const id of managedPresets){
+   const r=await fetch(server.origin+'/providers/'+id+'/v1/models',{headers:{Authorization:'Bearer private-client',Origin:server.origin}});
+   assert.equal(r.status,200,id+' must be reachable through the app proxy, not a hand-written subset of routers');
+  }
+  const unknown=await fetch(server.origin+'/providers/evil/v1/models',{headers:{Authorization:'Bearer private-client',Origin:server.origin}});
+  assert.equal(unknown.status,404,'an unregistered router id must still be refused');
  }finally{await server.close()}
 });
 

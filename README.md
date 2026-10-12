@@ -19,6 +19,10 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.8.1 fixes the two routers added in 0.8.0, which could not be used at all:
+- **GPT-Load and Octopus now actually answer.** Every request the workspace makes to a router goes through MicoCode's own local server, and that route was matched against a hand-written list of router names that the two new ones were missing. The routers themselves were installed and configured correctly, but every request to them fell through to the static file handler and returned 404 — "Check the API base URL; it must expose `/models`." The route is now built from the same list the rest of the app uses, so registering a router is enough to have it served.
+- **Google AI Studio is described by its current model**, Gemini 3.8 Flash.
+
 Version 0.8.0 adds **two more free routers that install and configure themselves**, so you get a private gateway with its own dashboard, usage accounting and key rotation without touching a terminal:
 - **GPT-Load** ([tbphp/gpt-load](https://github.com/tbphp/gpt-load), MIT, v2.0.0-rc.49): built for multi-channel, multi-credential setups, which is exactly what free tiers need. MicoCode downloads the verified 103 MB portable build, starts it on a free loopback port with a management key it generates, creates the channel and group, and **mints the access key itself** before connecting.
 - **Octopus** ([bestruirui/octopus](https://github.com/bestruirui/octopus), AGPL-3.0, v0.13.10): one hub for every route, addressed by group name. MicoCode starts it, replaces the seeded `admin/admin` password with a generated one, creates the channel, group and access key, and connects — in about two seconds.
