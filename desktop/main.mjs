@@ -1,8 +1,8 @@
-import {app,BrowserWindow,ipcMain,nativeTheme,safeStorage,shell,session,dialog} from 'electron';
+import {app,BrowserWindow,clipboard,ipcMain,nativeTheme,safeStorage,shell,session,dialog} from 'electron';
 import {readFile,writeFile,mkdir,rename,realpath} from 'node:fs/promises';
 import {randomBytes} from 'node:crypto';
 import path from 'node:path';
-import {ProviderManager,assertProvider} from './provider-manager.mjs';
+import {ProviderManager,assertProvider,managedProviders} from './provider-manager.mjs';
 import {createLocalServer,managedClientConnection} from './server.mjs';
 import {applyFolderChanges,scanFolder} from './folders.mjs';
 import {gitStatus,gitInit,gitCommit,gitLog,gitBranch,gitPush,gitPull,gitDiff,isGitAvailable} from './git.mjs';
@@ -108,10 +108,19 @@ async function start(){
    return gitBranch(root);
   });
  ipcMain.handle('mico:dashboard',async(event,provider)=>{
-  validateSender(event);assertProvider(provider);const connection=manager.connections.get(provider);if(!connection?.dashboard)throw new Error('Set up 9Router before opening its dashboard.');
-  const url=new URL(connection.dashboard);const dashboardSession=session.fromPartition('persist:micocode-9router');
+  validateSender(event);assertProvider(provider);const connection=manager.connections.get(provider);
+  const title={gptload:'GPT-Load',octopus:'Octopus',cliproxy:'CLIProxyAPI',litellm:'LiteLLM',freeride:'FreeRide',ollama:'Ollama'}[provider]||'9Router';
+  if(!connection?.dashboard)throw new Error('Set up '+title+' before opening its dashboard.');
+  const url=new URL(connection.dashboard);const dashboardSession=session.fromPartition('persist:micocode-dashboard-'+provider);
   const cookie=manager.cookies.get(provider)?.split('=');if(cookie?.length===2)await dashboardSession.cookies.set({url:url.origin,name:cookie[0],value:cookie[1],httpOnly:true,sameSite:'lax',path:'/'});
-  const win=new BrowserWindow({width:1200,height:800,title:'9Router · MicoCode',autoHideMenuBar:true,webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,session:dashboardSession}});dashboards.add(win);win.on('closed',()=>dashboards.delete(win));secureWindow(win,url.origin);await win.loadURL(url.href);
+  const win=new BrowserWindow({width:1200,height:800,title:title+' · MicoCode',autoHideMenuBar:true,webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,session:dashboardSession}});dashboards.add(win);win.on('closed',()=>dashboards.delete(win));secureWindow(win,url.origin);await win.loadURL(url.href);
+ });
+ // Copies the router's own dashboard key in the main process, so the credential
+ // never has to travel back into the renderer.
+ ipcMain.handle('mico:dashboard-key',async(event,provider)=>{
+  validateSender(event);assertProvider(provider);const key=await manager.dashboardKey(provider);
+  if(!key)throw new Error('This router signs in without a separate credential.');
+  clipboard.writeText(key);return true;
  });
  const errors=[];window.webContents.on('console-message',details=>{if(details.level==='error')errors.push(details.message.slice(0,220))});window.webContents.on('render-process-gone',()=>errors.push('Renderer exited unexpectedly.'));
  await window.loadURL(server.origin+'/app/');
@@ -197,7 +206,7 @@ async function start(){
  }
  const api=await fetch(server.origin+'/api/models');
  const report={version:app.getVersion(),...state,invalidProviderRejected:invalid,statusCount,...(managedSetup?{managedSetup}:{}),apiStatus:api.status,errors};
-  report.passed=state.workspace&&state.bridge&&state.node==='undefined'&&invalid&&statusCount===5&&(!managedSetup||managedSetup.status===200)&&(!managedSetup?.generation||managedSetup.generation.status===200&&managedSetup.generation.hasContent)&&(!managedSetup?.agent||managedSetup.agent.assistant&&!managedSetup.agent.error)&&(!managedSetup?.edit||managedSetup.edit.staged&&managedSetup.edit.applied&&managedSetup.edit.preserved&&managedSetup.edit.preview&&!managedSetup.edit.error)&&api.ok&&errors.length===0;
+  report.passed=state.workspace&&state.bridge&&state.node==='undefined'&&invalid&&statusCount===managedProviders.length&&(!managedSetup||managedSetup.status===200)&&(!managedSetup?.generation||managedSetup.generation.status===200&&managedSetup.generation.hasContent)&&(!managedSetup?.agent||managedSetup.agent.assistant&&!managedSetup.agent.error)&&(!managedSetup?.edit||managedSetup.edit.staged&&managedSetup.edit.applied&&managedSetup.edit.preserved&&managedSetup.edit.preview&&!managedSetup.edit.error)&&api.ok&&errors.length===0;
  const screenshot=process.argv.find(x=>x.startsWith('--smoke-screenshot='))?.slice('--smoke-screenshot='.length);if(screenshot)await writeFile(screenshot,(await window.webContents.capturePage()).toPNG());
  if(smokePath)await writeFile(smokePath,JSON.stringify(report,null,2));await manager.close();await server.close();app.exit(report.passed?0:1);
 }

@@ -131,6 +131,29 @@ test('Escape leaves the innermost surface first', () => {
   assert.ok(/\},\[inspecting,consoleOpen\]\)/.test(preview), 'the handler must re-subscribe when the drawer opens or closes');
 });
 
+// Managed routers install their own dashboard. Every one that needs a credential
+// to sign in has to offer both buttons, and the credential must never be handed
+// back to the renderer.
+// The packaged-app smoke gate asserts one status row per managed provider. A
+// literal there fails the whole release the next time a router is added.
+test('the smoke gate counts providers from the managed list, not a literal', () => {
+  const main = source('desktop/main.mjs');
+  assert.match(main, /statusCount===managedProviders\.length/, 'adding a managed provider must not silently fail the smoke gate');
+  assert.ok(main.includes('managedProviders'), 'the list must be the one the manager actually reports');
+});
+
+test('managed routers expose their dashboard and its sign-in credential', () => {
+  const connections = source('components/micocode/connections.tsx');
+  for (const id of ['gptload', 'octopus']) {
+    assert.ok(connections.includes(`openDashboard('${id}')`), id + ' needs an Open dashboard button');
+    assert.ok(connections.includes(`copyDashboardKey('${id}')`), id + ' needs a way to get its dashboard credential');
+  }
+  const main = source('desktop/main.mjs');
+  assert.ok(main.includes("'mico:dashboard-key'"), 'the main process must expose the dashboard credential');
+  assert.ok(main.includes('clipboard.writeText'), 'the credential must be copied in the main process, not the renderer');
+  assert.ok(source('desktop/preload.cjs').includes('copyDashboardKey'), 'the preload bridge must forward the copy request');
+});
+
 test('typing in a dropdown finds the label and repeats cycle through matches', () => {
   const labels = ['Comfortable', 'Compact', 'Standard', 'Settings', 'Focused · 0.2'];
   assert.equal(typeaheadIndex(labels, 'c', 0), 0, 'from the top, "c" finds the first match');

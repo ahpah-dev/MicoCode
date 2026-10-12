@@ -19,6 +19,13 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.8.0 adds **two more free routers that install and configure themselves**, so you get a private gateway with its own dashboard, usage accounting and key rotation without touching a terminal:
+- **GPT-Load** ([tbphp/gpt-load](https://github.com/tbphp/gpt-load), MIT, v2.0.0-rc.49): built for multi-channel, multi-credential setups, which is exactly what free tiers need. MicoCode downloads the verified 103 MB portable build, starts it on a free loopback port with a management key it generates, creates the channel and group, and **mints the access key itself** before connecting.
+- **Octopus** ([bestruirui/octopus](https://github.com/bestruirui/octopus), AGPL-3.0, v0.13.10): one hub for every route, addressed by group name. MicoCode starts it, replaces the seeded `admin/admin` password with a generated one, creates the channel, group and access key, and connects — in about two seconds.
+- **Both are pinned and checksum-verified**: each download is matched against the SHA-256 digest the project itself publishes in its release, and a mismatch installs nothing.
+- **Dashboards you can actually open**: each router gets an “Open dashboard” button, and because both sign in with a credential rather than a cookie, a companion button copies that credential in the main process — it never reaches the renderer.
+- Under the hood each router's channel points at MicoCode's own free gateway, so the route works the moment setup finishes; add your own free-provider keys in the router's dashboard to rotate more channels behind the same key.
+
 Version 0.7.91 gives every dropdown the model menu's treatment. Native `<select>` controls cannot be themed in the popup, so the workspace no longer uses any:
 - **One dropdown, one surface**: A shared control replaces all eleven native selects — the six in Settings, the three in Models, the preview entry file, and publish visibility. The panel, rows, group headings and empty state are declared once for both this control and the model menu, so the two cannot drift apart.
 - **It knows where it is**: A menu that would be clipped by the dialog around it flips above its trigger, never takes more height than the space it actually has, and lifts above the fields that follow it instead of being painted underneath them.

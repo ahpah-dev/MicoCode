@@ -5,12 +5,110 @@ import os from 'node:os';
 import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
 import JSZip from 'jszip';
 import {archivePath,extractVerifiedZip,downloadVerified} from '../desktop/install.mjs';
-import {assertProvider,assertEngine,cliProxyConfig,liteLLMConfig,ProviderManager} from '../desktop/provider-manager.mjs';
+import {assertProvider,assertEngine,cliProxyConfig,liteLLMConfig,gptLoadGroupPayload,gptLoadAccessKeyPayload,gptLoadKeyMask,octopusConfig,octopusChannelPayload,octopusGroupPayload,octopusAccessKeyPayload,managedProviders,ProviderManager} from '../desktop/provider-manager.mjs';
+import {artifacts,versions} from '../desktop/artifacts.mjs';
 import {isLocalRequest,createLocalServer,managedClientConnection} from '../desktop/server.mjs';
-import {applyManagedConnection,discoverProxy,listProxyModels} from '../lib/mico/providers.mjs';
+import {applyManagedConnection,discoverProxy,listProxyModels,proxyPresets} from '../lib/mico/providers.mjs';
 import {actionSchema} from '../lib/mico/action-schema.mjs';
 
-test('provider automation only accepts supported installer IDs',()=>{for(const id of ['9router','cliproxy','litellm','freeride','ollama'])assert.equal(assertProvider(id),id);for(const id of ['../ollama','custom','powershell','9router;whoami',null])assert.throws(()=>assertProvider(id))});
+test('provider automation only accepts supported installer IDs',()=>{for(const id of ['9router','cliproxy','litellm','gptload','octopus','freeride','ollama'])assert.equal(assertProvider(id),id);for(const id of ['../ollama','custom','powershell','9router;whoami',null])assert.throws(()=>assertProvider(id))});
+
+test('Octopus ships as a pinned, checksum-verified managed router',()=>{
+ assert.ok(managedProviders.includes('octopus'),'Octopus must be a managed provider');
+ assert.ok(proxyPresets.some(p=>p.id==='octopus'&&!p.hidden),'Octopus must be offered in the router list');
+ const a=artifacts.octopus;
+ assert.equal(versions.octopus,a.version,'the artifact and the version table must agree');
+ assert.match(a.url,/^https:\/\/github\.com\/bestruirui\/octopus\/releases\/download\/v[\w.-]+\/octopus-windows-amd64\.zip$/);
+ assert.ok(a.url.includes('v'+a.version),'the pinned URL must carry the pinned version, never "latest"');
+ assert.match(a.sha256,/^[a-f0-9]{64}$/,'the package needs a published SHA-256 digest');
+ assert.ok(a.maxBytes>20000000&&a.maxBytes<60000000,'the download cap must fit the real 21 MB zip');
+});
+
+test('the Octopus channel payload registers models, credentials and grants',()=>{
+ const payload=octopusChannelPayload({name:'MicoCode free routes',baseUrl:'http://127.0.0.1:19286/managed/local/v1',gatewayKey:'sk-mico-gateway',models:['free-code','oc/second']});
+ assert.equal(payload.id,0,'a new channel lets the router assign its id');
+ assert.equal(payload.name,'MicoCode free routes');
+ assert.equal(payload.dialect,'generic');
+ assert.equal(payload.enabled,true);
+ assert.equal(payload.base_url,'http://127.0.0.1:19286/managed/local/v1');
+ assert.equal(payload.openai_chat_completion_path,'/chat/completions');
+ assert.deepEqual(payload.keys,[{name:'mico-gateway',key:'sk-mico-gateway',enabled:true}]);
+ assert.deepEqual(payload.models,['free-code','oc/second']);
+ // Every model needs a grant naming the same credential, or the router rejects the channel.
+ assert.deepEqual(payload.grants,[
+  {model_name:'free-code',key_name:'mico-gateway',protocols:6},
+  {model_name:'oc/second',key_name:'mico-gateway',protocols:6},
+ ]);
+ assert.deepEqual(payload.custom_header,[]);
+});
+
+test('the Octopus group takes the channel grants as its members',()=>{
+ const payload=octopusGroupPayload({name:'mico-free',grants:[{id:7},{id:9}]});
+ assert.equal(payload.name,'mico-free');
+ assert.equal(payload.mode,'failover','several free routes should fail over rather than round-robin');
+ assert.deepEqual(payload.items,[{channel_grant_id:7},{channel_grant_id:9}]);
+});
+
+test('MicoCode chooses the Octopus key and scopes it to its own group',()=>{
+ const payload=octopusAccessKeyPayload({name:'MicoCode',key:'sk-octopus-client',groups:['mico-free']});
+ assert.deepEqual(payload,{name:'MicoCode',api_key:'sk-octopus-client',enabled:true,supported_models:['mico-free']});
+});
+
+test('Octopus is configured on loopback with its database inside the private folder',()=>{
+ const config=octopusConfig(3111,'C:/data/octopus/data.db');
+ assert.deepEqual(config,{server:{host:'127.0.0.1',port:'3111'},database:{type:'sqlite',path:'C:/data/octopus/data.db'},log:{level:'info'}});
+ assert.equal(typeof octopusConfig(1,'x').server.port,'string','the router reads its port from the config file');
+});
+
+test('GPT-Load ships as a pinned, checksum-verified managed router',()=>{
+ assert.ok(managedProviders.includes('gptload'),'GPT-Load must be a managed provider');
+ assert.ok(proxyPresets.some(p=>p.id==='gptload'&&!p.hidden),'GPT-Load must be offered in the router list');
+ const a=artifacts.gptload;
+ assert.equal(versions.gptload,a.version,'the artifact and the version table must agree');
+ assert.match(a.url,/^https:\/\/github\.com\/tbphp\/gpt-load\/releases\/download\/v[\w.-]+\/gpt-load-windows-amd64\.exe$/);
+ assert.ok(a.url.includes('v'+a.version),'the pinned URL must carry the pinned version, never "latest"');
+ assert.match(a.sha256,/^[a-f0-9]{64}$/,'the installer needs a published SHA-256 digest');
+ assert.ok(a.maxBytes>100000000&&a.maxBytes<200000000,'the download cap must fit the real 103 MB binary');
+});
+
+test('the GPT-Load group payload satisfies its validator',()=>{
+ const payload=gptLoadGroupPayload({name:'MicoCode free routes',baseUrl:'http://127.0.0.1:19286/managed/local/v1',gatewayKey:'sk-mico-gateway',models:['free-code','oc/second']});
+ assert.equal(payload.channel_id,'openai_compatible');
+ assert.equal(payload.connection_type,'api_key');
+ assert.deepEqual(payload.params,{base_url:'http://127.0.0.1:19286/managed/local/v1'});
+ assert.equal(payload.credentials,'sk-mico-gateway');
+ // Omitting priority, or the alias fields, is rejected as VALIDATION_FAILED.
+ assert.equal(payload.priority,0);
+ assert.deepEqual(payload.models,[{id:'free-code',alias:'',alias_enabled:false},{id:'oc/second',alias:'',alias_enabled:false}]);
+});
+
+test('MicoCode chooses the GPT-Load access key and scopes it to its own group',()=>{
+ const payload=gptLoadAccessKeyPayload({name:'MicoCode',key:'sk-mico-client',group:7});
+ assert.deepEqual(payload,{name:'MicoCode',key:'sk-mico-client',filters:{groups:[7]}});
+ assert.match(gptLoadKeyMask('sk-mico-client-test'),/^sk-mic\*{4}test$/,'a later setup must recognise its own key from the mask GPT-Load returns');
+ assert.equal(gptLoadKeyMask('short'),'short');
+});
+
+test('the dashboard credential is read from the vault, and only for routers that use one',async()=>{
+ const values=new Map([['gptload-admin','sk-mico-admin-test'],['octopus-admin','MicoCode-dashboard-pw']]);
+ const manager=new ProviderManager({dataDir:'unused',runtimeDir:'unused',gatewayBase:'http://127.0.0.1:1/managed/v1',gatewayKey:'gateway',vault:{get:async k=>values.get(k)??null,set:async()=>{}}});
+ assert.equal(await manager.dashboardKey('gptload'),'sk-mico-admin-test');
+ assert.equal(await manager.dashboardKey('octopus'),'MicoCode-dashboard-pw');
+ assert.equal(await manager.dashboardKey('9router'),null,'a router that signs in with a cookie has no credential to copy');
+ values.clear();
+ assert.equal(await manager.dashboardKey('gptload'),null,'an unconfigured router must not hand out an empty credential');
+ assert.equal(await manager.dashboardKey('octopus'),null);
+});
+
+test('GPT-Load connections are rewritten and restored like every other managed router',()=>{
+ const connection={config:{provider:'proxy',proxyPreset:'gptload',proxyUrl:'http://127.0.0.1:3001/v1',model:'free-code',freeModels:['free-code'],routerFreeOnly:true},key:'sk-mico-client',dashboard:'http://127.0.0.1:3001/'};
+ const rewritten=managedClientConnection(connection,'http://127.0.0.1:19286');
+ assert.equal(rewritten.config.proxyUrl,'http://127.0.0.1:19286/providers/gptload/v1');
+ assert.equal(rewritten.key,'sk-mico-client');
+ assert.throws(()=>managedClientConnection({config:{provider:'proxy',proxyPreset:'evil'}},'http://127.0.0.1:19286'),/Unsupported managed router/);
+ const octopus={config:{provider:'proxy',proxyPreset:'octopus',proxyUrl:'http://127.0.0.1:8080/v1',model:'mico-free',freeModels:['mico-free'],routerFreeOnly:true},key:'sk-octopus-client',dashboard:'http://127.0.0.1:8080/'};
+ assert.equal(managedClientConnection(octopus,'http://127.0.0.1:19286').config.proxyUrl,'http://127.0.0.1:19286/providers/octopus/v1');
+});
 test('managed engines cannot be changed to paid or arbitrary destinations',()=>{assert.equal(assertEngine('local'),'local');assert.equal(assertEngine('community'),'community');for(const value of ['paid','https://other.example','custom',null])assert.throws(()=>assertEngine(value))});
 test('provider archives cannot escape, create links, or overwrite a destination',async()=>{
  const root=await mkdtemp(path.join(os.tmpdir(),'mico-archive-'));

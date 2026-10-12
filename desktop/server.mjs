@@ -25,7 +25,7 @@ export function isLocalRequest(request,origin){return new URL(request.url).origi
 export function managedClientConnection(connection,origin){
  if(!connection||connection.config.provider!=='proxy')return connection;
  const id=connection.config.proxyPreset;
-  if(!['9router','cliproxy','litellm','freeride'].includes(id))throw new Error('Unsupported managed router.');
+  if(!['9router','cliproxy','litellm','gptload','octopus','freeride'].includes(id))throw new Error('Unsupported managed router.');
  return {...connection,config:{...connection.config,proxyUrl:origin+'/providers/'+id+'/v1'}};
 }
 export function managedRouterCatalogue(data,connection){
