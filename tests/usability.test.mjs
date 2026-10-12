@@ -131,6 +131,16 @@ test('Escape leaves the innermost surface first', () => {
   assert.ok(/\},\[inspecting,consoleOpen\]\)/.test(preview), 'the handler must re-subscribe when the drawer opens or closes');
 });
 
+// Octopus and GPT-Load were both removed between releases. A config saved against one
+// dereferenced undefined while rendering and landed the whole workspace on its
+// "display hiccup" recovery screen.
+test('a router removed between releases cannot crash the workspace', () => {
+  const connections = source('components/micocode/connections.tsx');
+  assert.ok(!/proxyPresets\.find\(p=>p\.id===config\.proxyPreset\)!/.test(connections), 'the saved preset must never be asserted to exist');
+  assert.ok(connections.includes('A router can disappear between releases'), 'a config naming a removed router must be repaired');
+  assert.ok(connections.includes('preset?.name') && connections.includes('preset?.docs'), 'preset fields must be read optionally');
+});
+
 // Managed routers install their own dashboard. Every one of them has to offer a way in,
 // and the address must come from the main process rather than the renderer.
 test('managed routers expose their dashboard', () => {
