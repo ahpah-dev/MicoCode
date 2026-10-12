@@ -191,3 +191,62 @@ body,.app-shell{background:
 button.git-file-row{width:100%;min-height:0;text-align:left;border:0;border-radius:0;background:transparent;font:inherit;font-size:11px;letter-spacing:inherit}
 button.git-file-row:hover:not(:disabled){background:var(--surface-hover);color:var(--ink-primary)}
 
+/* ---- Round 4: every dropdown is painted on the model menu's surface ----
+   The surface, rows, group headings and empty state are declared once for both
+   families, so a plain dropdown and the model menu cannot drift apart. Rows are
+   a little shorter here because these lists are single-line. */
+.dropdown-menu,.model-menu{
+  position:absolute;top:calc(100% + 6px);z-index:30;max-height:290px;overflow:auto;padding:6px;
+  background:var(--tone-10);border:1px solid var(--stroke-strong);border-radius:var(--r-sm);
+  box-shadow:var(--shadow-pop);animation:mico-pop .18s var(--ease);
+  /* The panel is opaque, so a blur would cost a backdrop root and change nothing. */
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+}
+.dropdown-menu{left:0;min-width:100%;width:max-content;max-width:min(460px,92vw)}
+.dropdown-menu.above{top:auto;bottom:calc(100% + 6px);transform-origin:bottom}
+.model-menu{left:0;right:0}
+.dropdown-group,.model-group{display:flex;justify-content:space-between;gap:8px;font-size:8px;letter-spacing:1.2px;text-transform:uppercase;color:var(--tone-55);padding:10px 10px 5px}
+.dropdown-group>span:last-child,.model-group>span:last-child{color:var(--tone-40)}
+.dropdown-option,.model-option{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:9px 10px;border-radius:var(--r-xs);min-width:0;transition:background var(--motion-fast)}
+.dropdown-option:hover,.dropdown-option.highlighted,.model-option:hover,.model-option.highlighted,.model-option-row:focus-within{background:var(--tone-20)}
+.dropdown-option>div,.model-option>div{flex:1;min-width:0}
+.dropdown-option strong,.model-option strong{display:block;font-size:11px;font-weight:500;color:var(--tone-85);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dropdown-option small,.model-option small{display:block;font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--tone-55);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:3px}
+.dropdown-option>svg,.model-option>svg{color:var(--tone-80);flex-shrink:0}
+.dropdown-empty,.model-empty{padding:14px 10px;font-size:11px;color:var(--tone-55)}
+.dropdown-option{min-height:34px}
+.dropdown-option[aria-selected="true"] strong{color:var(--mint)}
+
+/* The closed control keeps the look of the form fields around it, so a dropdown
+   reads as a field until it opens. */
+.dropdown{position:relative;width:100%}
+/* An open menu has to sit above the fields that follow it in the dialog. */
+.dropdown.open{z-index:40}
+.dropdown-trigger{display:flex;align-items:center;justify-content:space-between;gap:9px;width:100%;text-align:left;font:inherit;
+  color:var(--text);background-color:var(--surface-panel);border:1px solid var(--stroke-subtle);border-radius:10px;padding:11px 12px;cursor:pointer;
+  transition:border-color var(--motion-fast),background-color var(--motion-fast),box-shadow var(--motion-fast)}
+.dropdown-trigger:hover:not(:disabled){border-color:var(--stroke-strong);background-color:color-mix(in srgb,var(--tone-15) 70%,var(--tone-10))}
+.dropdown-trigger:focus-visible{outline:2px solid var(--mint);outline-offset:2px;border-radius:10px;box-shadow:var(--shadow-focus)}
+.dropdown-trigger:disabled{cursor:not-allowed;opacity:.55}
+.dropdown-value{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dropdown-chevron{flex:none;color:var(--ink-tertiary);transition:transform var(--motion-fast) var(--ease)}
+.dropdown.open .dropdown-chevron{transform:rotate(180deg);color:var(--ink-secondary)}
+.dropdown.open .dropdown-trigger{border-color:color-mix(in srgb,var(--mint) 55%,var(--stroke-strong))}
+
+/* The settings and connections dialogs dress their fields up; the trigger follows. */
+.modal .dropdown-trigger{font-weight:600;border-radius:12px;border-color:var(--stroke-strong);
+  background-color:color-mix(in srgb,var(--surface-raised) 55%,var(--surface-panel));
+  box-shadow:inset 0 1px 0 rgb(255 255 255/.06),0 1px 2px rgb(0 0 0/.25);padding:10px 12px}
+.modal .dropdown-trigger:hover:not(:disabled){border-color:color-mix(in srgb,var(--mint) 45%,var(--stroke-strong));background-color:color-mix(in srgb,var(--surface-raised) 85%,var(--surface-panel))}
+.modal .dropdown-trigger:focus-visible{border-radius:12px;border-color:color-mix(in srgb,var(--mint) 60%,var(--stroke-strong))}
+.two-fields .dropdown-trigger{font-size:11px}
+.connection-body .dropdown-trigger{font-size:12px}
+:root[data-ui-text="large"] .dropdown-trigger{font-size:13px}
+:root[data-ui-density="compact"] .dropdown-trigger{padding-block:8px}
+
+/* The preview address bar has no field chrome; its dropdown is a quiet label. */
+.address .dropdown{width:auto}
+.address .dropdown-trigger{gap:4px;width:auto;border:0;background:transparent;padding:0 2px;font-size:11px;font-weight:500;color:var(--ink-secondary)}
+.address .dropdown-trigger:hover:not(:disabled){background:transparent;color:var(--ink-primary)}
+.address .dropdown-menu{min-width:200px;width:max-content}
+

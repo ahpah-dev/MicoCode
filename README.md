@@ -19,6 +19,12 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.7.91 gives every dropdown the model menu's treatment. Native `<select>` controls cannot be themed in the popup, so the workspace no longer uses any:
+- **One dropdown, one surface**: A shared control replaces all eleven native selects — the six in Settings, the three in Models, the preview entry file, and publish visibility. The panel, rows, group headings and empty state are declared once for both this control and the model menu, so the two cannot drift apart.
+- **It knows where it is**: A menu that would be clipped by the dialog around it flips above its trigger, never takes more height than the space it actually has, and lifts above the fields that follow it instead of being painted underneath them.
+- **Keyboard and typeahead**: Arrow keys, Home/End and Enter drive a highlight that scrolls into view; Escape closes and returns focus to the trigger, and typing a letter jumps to the matching option (pressing it again cycles through the rest). The control exposes `role="combobox"`, `role="listbox"`/`role="option"`, `aria-selected` and `aria-activedescendant`.
+- **It still reads as a field**: The closed control keeps the app's form-field styling in each context — dialog fields, the connections panel, and the quiet preview address bar — including large-text and compact-density preferences.
+
 Version 0.7.9 is a comfort and clarity pass over the whole workspace — calmer dialogs, a keyboard-first quick-action list, and a shortcut reference you can actually read:
 - **Calmer, fully legible dialogs**: The modal scrim is painted instead of blurred. A `backdrop-filter` on `::backdrop` makes Chromium composite the whole top layer through the filter, which washed out the dialog as well as the page behind it; the scrim now vignettes the workspace and leaves the dialog surface opaque, so a dialog looks the same on every graphics stack.
 - **Dialogs that start in the right place**: Opening a dialog focuses the first field you can actually type into — never Close, and never a read-only field — and closing it returns focus to the button that opened it.

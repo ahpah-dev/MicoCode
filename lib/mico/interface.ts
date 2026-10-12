@@ -117,6 +117,37 @@ export function paletteKeyAction(key: string, index: number, count: number): Pal
   return null;
 }
 
+/** Jump to the first option whose label starts with what has been typed.
+ *  Pressing the same letter again cycles through the options that share it, and
+ *  a longer prefix replaces the cycling so "se" can find "Settings". */
+export function typeaheadIndex(labels: string[], query: string, from: number): number {
+  const raw = query.trim();
+  if (!labels.length || !raw) return -1;
+  const cycling = raw.length > 1 && raw.split('').every(char => char === raw[0]);
+  const needle = (cycling ? raw[0] : raw).toLowerCase();
+  const start = from < 0 || from >= labels.length ? 0 : from;
+  for (let step = 0; step < labels.length; step++) {
+    const index = (start + step + (cycling ? 1 : 0)) % labels.length;
+    if (labels[index].toLowerCase().startsWith(needle)) return index;
+  }
+  return -1;
+}
+
+/** Group a flat option list by the segment before the first "/" in its value,
+ *  which is how router catalogues name their providers. Options with no prefix
+ *  land in a trailing "Other" group, in the order they were given. */
+export function groupOptionsByPrefix<T extends {value: string}>(options: T[]): {label: string; options: T[]}[] {
+  const groups: {label: string; options: T[]}[] = [];
+  for (const option of options) {
+    const slash = option.value.indexOf('/');
+    const label = slash > 0 ? option.value.slice(0, slash) : 'Other';
+    const group = groups.find(candidate => candidate.label === label);
+    if (group) group.options.push(option);
+    else groups.push({label, options: [option]});
+  }
+  return groups;
+}
+
 /** The keys the workspace implements, listed in Help so they can be discovered
  *  rather than guessed. Kept next to the prefs so the guide and the handler
  *  cannot drift apart silently. */

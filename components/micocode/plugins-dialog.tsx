@@ -1,6 +1,7 @@
 'use client';
 import {useState} from 'react';
 import {Modal} from './primitives';
+import {Dropdown} from './dropdown';
 import {Blocks,Check,ExternalLink,LoaderCircle,Lock,ShieldCheck,Sparkles,Upload,Globe,Zap,ArrowUpRight,Eye,EyeOff,RefreshCw} from 'lucide-react';
 import {executePublish,loadPluginConfigs,savePluginConfigs,type PluginConfig,type PluginId,type PublishResult} from '@/lib/mico/plugins';
 import type {Project} from '@/lib/mico/types';
@@ -181,13 +182,15 @@ export function PluginsDialog({project, onClose, onNotify, initialPlugin = 'gith
                   </label>
                   <label>
                     <span>Visibility</span>
-                    <select
+                    <Dropdown
+                      label="Visibility"
                       value={activeConfig.options?.isPrivate || 'false'}
-                      onChange={e => updateConfig({}, {isPrivate: e.target.value})}
-                    >
-                      <option value="false">Public repository</option>
-                      <option value="true">Private repository</option>
-                    </select>
+                      onChange={value => updateConfig({}, {isPrivate: value})}
+                      options={[
+                        {value: 'false', label: 'Public repository'},
+                        {value: 'true', label: 'Private repository'},
+                      ]}
+                    />
                   </label>
                 </div>
 

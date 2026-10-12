@@ -1,8 +1,8 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync, readdirSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {moveSelection, paletteKeyAction, workspaceShortcuts} from '../lib/mico/interface.ts';
+import {moveSelection, paletteKeyAction, workspaceShortcuts, typeaheadIndex, groupOptionsByPrefix} from '../lib/mico/interface.ts';
 
 const source = p => readFileSync(fileURLToPath(new URL('../' + p, import.meta.url)), 'utf8');
 const stripComments = css => css.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -129,4 +129,71 @@ test('Escape leaves the innermost surface first', () => {
   assert.ok(handler, 'preview key handler not found');
   assert.ok(handler[1].indexOf('inspecting') < handler[1].indexOf('consoleOpen'), 'element inspection must close before the console drawer');
   assert.ok(/\},\[inspecting,consoleOpen\]\)/.test(preview), 'the handler must re-subscribe when the drawer opens or closes');
+});
+
+test('typing in a dropdown finds the label and repeats cycle through matches', () => {
+  const labels = ['Comfortable', 'Compact', 'Standard', 'Settings', 'Focused · 0.2'];
+  assert.equal(typeaheadIndex(labels, 'c', 0), 0, 'from the top, "c" finds the first match');
+  assert.equal(typeaheadIndex(labels, 'cc', 0), 1, 'a repeated letter advances to the next match');
+  assert.equal(typeaheadIndex(labels, 'st', 0), 2, 'a longer prefix can skip earlier single-letter matches');
+  assert.equal(typeaheadIndex(labels, 'se', 2), 3, 'a long prefix reaches a later option');
+  assert.equal(typeaheadIndex(labels, 'f', 0), 4, 'case does not matter, and searching wraps');
+  assert.equal(typeaheadIndex(labels, 'zz', 0), -1, 'no match reports -1 instead of guessing');
+  assert.equal(typeaheadIndex([], 'c', 0), -1);
+  assert.equal(typeaheadIndex(labels, '', 0), -1);
+  assert.equal(typeaheadIndex(labels, 'c', -5), 0, 'an out-of-range start still searches the whole list');
+});
+
+test('grouping dropdown options follows the provider prefix, like the model menu', () => {
+  const groups = groupOptionsByPrefix([
+    {value: 'openrouter/free', label: 'Auto'},
+    {value: 'google/gemma-4-31b:free', label: 'Gemma 4 31B'},
+    {value: 'google/gemma-4-26b:free', label: 'Gemma 4 26B'},
+    {value: 'meta-llama/llama-4:free', label: 'Llama 4'},
+    {value: 'no-prefix', label: 'Plain'},
+  ]);
+  assert.deepEqual(groups.map(g => g.label), ['openrouter', 'google', 'meta-llama', 'Other']);
+  assert.equal(groups[1].options.length, 2, 'options sharing a prefix share a group');
+  assert.deepEqual(groups[1].options.map(o => o.label), ['Gemma 4 31B', 'Gemma 4 26B'], 'order inside a group is preserved');
+  assert.equal(groups[3].options[0].value, 'no-prefix');
+  assert.deepEqual(groupOptionsByPrefix([]), []);
+});
+
+// The whole point of the shared dropdown is that native selects stop being used,
+// because their popup cannot be themed. This fails the build if one returns.
+test('no native select survives in the workspace; every dropdown is the shared one', () => {
+  const dir = fileURLToPath(new URL('../components/micocode/', import.meta.url));
+  const files = readdirSync(dir).filter(name => name.endsWith('.tsx') && !name.startsWith('dropdown.'));
+  const withSelect = files.filter(name => /<select[\s>]/.test(source('components/micocode/' + name)));
+  assert.deepEqual(withSelect, [], 'native <select> cannot be styled to match the model menu');
+
+  const dropdown = source('components/micocode/dropdown.tsx');
+  for (const token of ['role="combobox"', 'role="listbox"', 'role="option"', 'aria-activedescendant', 'aria-selected', 'paletteKeyAction', 'typeaheadIndex']) {
+    assert.ok(dropdown.includes(token), 'dropdown.tsx is missing ' + token);
+  }
+  for (const name of ['workspace.tsx', 'connections.tsx', 'preview.tsx', 'plugins-dialog.tsx']) {
+    const body = source('components/micocode/' + name);
+    assert.ok(body.includes("from './dropdown'"), name + ' must use the shared Dropdown');
+    assert.ok(/<Dropdown\b/.test(body), name + ' imports Dropdown but never renders one');
+  }
+});
+
+test('the dropdown surface is the model menu surface, shared and opaque', () => {
+  const polish = css('polish.css');
+  const shared = /\.dropdown-menu,\.model-menu\{([^}]*)\}/.exec(polish);
+  assert.ok(shared, 'polish.css must declare the menu surface for both families in one rule');
+  assert.ok(shared[1].includes('background:var(--tone-10)'), 'the menu surface must be an opaque panel');
+  assert.ok(!shared[1].includes('transparent'), 'an opaque menu must not paint a translucent background');
+  assert.ok(shared[1].includes('backdrop-filter:none'), 'the opaque menu must not ask for a backdrop root');
+  assert.ok(shared[1].includes('box-shadow:var(--shadow-pop)'), 'the menu must sit on the app shadow');
+
+  // Rows, group headings and the empty state are shared too, so they cannot drift.
+  for (const pair of ['.dropdown-option,.model-option{', '.dropdown-group,.model-group{', '.dropdown-empty,.model-empty{']) {
+    assert.ok(polish.includes(pair), 'polish.css must share ' + pair);
+  }
+  assert.ok(polish.includes('.dropdown-trigger{'), 'the closed control needs its own field styling');
+  assert.ok(polish.includes('.dropdown-trigger:focus-visible'), 'the trigger needs a visible focus ring');
+  assert.ok(polish.includes('.address .dropdown-trigger'), 'the preview address bar needs its quiet variant');
+  assert.ok(polish.includes(':root[data-ui-text="large"] .dropdown-trigger'), 'text size must reach the dropdown');
+  assert.ok(polish.includes(':root[data-ui-density="compact"] .dropdown-trigger'), 'density must reach the dropdown');
 });

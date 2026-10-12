@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {Monitor,Smartphone,RotateCw,Globe,Crosshair,Terminal,Trash2,ChevronDown,Sparkles} from 'lucide-react';
+import {Dropdown} from './dropdown';
 import type {Files} from '@/lib/mico/types';
 
 export interface PreviewLogItem {
@@ -319,9 +320,7 @@ export default function Preview({files,onLog,revision,pending,onTargetElement,on
     </button>
     <div className="address">
      <Globe size={12}/>
-     <select aria-label="Preview entry file" value={entry} onChange={e=>setSelected(e.target.value)}>
-      {entries.map(p=><option key={p}>{p}</option>)}
-     </select>
+     <Dropdown label="Preview entry file" value={entry} onChange={setSelected} options={entries.map(p=>({value:p,label:p}))}/>
      {pending&&<span className="pending-label">staged</span>}
     </div>
     <button

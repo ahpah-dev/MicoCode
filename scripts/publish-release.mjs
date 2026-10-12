@@ -10,27 +10,26 @@ if (!token) {
   process.exit(1);
 }
 
-const tag = 'v0.7.9';
-const name = 'MicoCode 0.7.9 — Calmer Dialogs & Keyboard-First Quick Actions';
+const tag = 'v0.7.91';
+const name = 'MicoCode 0.7.91 — One Polished Dropdown Everywhere';
 const checksums = fs.readFileSync('release/SHA256SUMS.txt', 'utf8').trim();
 
-const body = `## MicoCode v0.7.9 — Calmer Dialogs, Keyboard-First Quick Actions & an Announced Workspace
+const body = `## MicoCode v0.7.91 — Every Dropdown Shares the Model Menu's Treatment
 
-A comfort and clarity pass over the whole workspace. Nothing about how MicoCode
-talks to models changed; this release is about how the app feels to use.
+Native \`<select>\` popups cannot be themed, so the workspace no longer uses any.
+All eleven are now the same control the model menu is built on.
 
-### What's New in v0.7.9
-- **Calmer, fully legible dialogs**: The modal scrim is painted instead of blurred. A \`backdrop-filter\` on \`::backdrop\` makes Chromium composite the entire top layer through the filter, which washed out the dialog itself as well as the page behind it, so how readable a dialog was depended on the graphics stack. The scrim now vignettes the workspace and the dialog surface stays opaque.
-- **Dialogs that start in the right place**: Opening a dialog focuses the first field you can actually type into — never Close, and never a read-only field — and closing it returns focus to the button that opened it.
-- **Keyboard-first quick actions (Ctrl K)**: Arrow keys, Home, and End move a highlight that scrolls into view, Enter runs it, and the rows carry shortcut chips, listbox semantics (\`role="listbox"\`, \`aria-activedescendant\`), and a real empty state. The list grew from 12 to more than 20 actions with search keywords, covering views, panels, settings, project checks, and the guide.
-- **More shortcuts, and a place to find them**: \`Ctrl B\` toggles the explorer, \`Ctrl J\` the console, \`Ctrl ,\` opens settings, and \`Ctrl Shift M\` the Mico panel. \`Ctrl K\` now toggles quick actions instead of silently replacing whatever dialog is open. Help has a new Keyboard section listing all eleven keys.
-- **Announced, not just drawn**: The message stream, workspace console, preview console, and save state are live regions, the agent panel reports \`aria-busy\` while it works, and twenty icon-only controls across the activity rail, Source Control, Preview, and publishing gained accessible names instead of relying on a tooltip.
-- **Smaller fixes**: Changed-file rows in Source Control are real buttons and are reachable by keyboard; Escape closes the preview console drawer after element inspection is cancelled.
+### What's New in v0.7.91
+- **One dropdown, one surface**: A shared control replaces the six dropdowns in Settings, the three in Models, the preview entry file, and publish visibility. The panel, rows, group headings and empty state are declared once for both this control and the model menu, so the two cannot drift apart.
+- **It knows where it is**: A menu that would be clipped by the dialog around it flips above its trigger, never takes more height than the space it actually has, and lifts above the fields that follow it instead of being painted underneath them. Previously a long list near the bottom of a dialog was cut off mid-row.
+- **Keyboard and typeahead**: Arrow keys, Home/End and Enter drive a highlight that scrolls into view; Escape closes and returns focus to the trigger; typing a letter jumps to the matching option and pressing it again cycles through the rest. The control exposes \`role="combobox"\`, \`role="listbox"\`/\`role="option"\`, \`aria-selected\` and \`aria-activedescendant\`.
+- **It still reads as a field**: The closed control keeps the app's form-field styling in each context — dialog fields, the connections panel, and the quiet preview address bar — and follows the large-text and compact-density preferences.
+- **The free-model list is grouped like the catalogue it comes from**, by provider prefix, instead of one flat run of model IDs.
 
 ### Verification
-- 171 tests pass with no skips (9 new), including checks that fail the build if a shortcut documented in Help stops being handled, if a blur returns to the dialog scrim, if a changed-file row goes back to being a click-only \`div\`, or if a tooltip-only control loses its accessible name.
+- 175 tests pass with no skips (4 new). They fail the build if a native \`<select>\` returns, if the dropdown surface stops being declared together with the model menu, if the menu becomes translucent or asks for a backdrop root, or if the trigger loses its focus ring or its large-text/compact-density variants.
+- Every dropdown was rendered in Electron and inspected: the settings panel, the connections free-model list, publish visibility, and the preview entry file — including a 29-option list near the bottom of the viewport and a menu too short on space below its trigger. Keyboard behaviour (arrows, wrap, Enter, focus return) was measured from the DOM rather than inferred from a screenshot.
 - TypeScript check clean; production web build clean; Windows installers packaged fresh from this commit and their SHA-256 digests recorded below.
-- The new dialog scrim, the quick-action listbox, the keyboard reference in Help, and Source Control were each rendered in Electron and inspected, not assumed.
 
 ### Checksums
 \`\`\`
@@ -81,8 +80,8 @@ async function publish() {
 
   // Upload assets
   const filesToUpload = [
-    {path: 'release/MicoCode-Setup-0.7.9-x64.exe', name: 'MicoCode-Setup-0.7.9-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
-    {path: 'release/MicoCode-Portable-0.7.9-x64.exe', name: 'MicoCode-Portable-0.7.9-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Setup-0.7.91-x64.exe', name: 'MicoCode-Setup-0.7.91-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Portable-0.7.91-x64.exe', name: 'MicoCode-Portable-0.7.91-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
     {path: 'release/SHA256SUMS.txt', name: 'SHA256SUMS.txt', contentType: 'text/plain'}
   ];
 
