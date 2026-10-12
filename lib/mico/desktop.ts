@@ -59,3 +59,14 @@ export type DesktopAPI={
 };
 declare global{interface Window{micoDesktop?:DesktopAPI}}
 export function isManagedProvider(id:string):id is ManagedProvider{return ['9router','cliproxy','litellm','omniroute','freeride','ollama'].includes(id)}
+
+// Display names for the routers MicoCode manages. Kept here so a screen that
+// names a router cannot silently fall through to the wrong one.
+export const MANAGED_NAMES:Record<ManagedProvider,string>={
+ '9router':'9Router',
+ cliproxy:'CLIProxyAPI',
+ litellm:'LiteLLM',
+ omniroute:'OmniRoute',
+ freeride:'FreeRide',
+ ollama:'Ollama',
+};

@@ -478,12 +478,15 @@ export class ProviderManager{
    const bin=path.join(dir,'node_modules','omniroute','bin','omniroute.mjs');
    await mkdir(dir,{recursive:true});
    if(!await exists(bin)){
-    this.emit(id,'install','Installing OmniRoute '+versions.omniroute+' with MicoCode’s bundled Node runtime…');
+    this.emit(id,'install','Installing OmniRoute '+versions.omniroute+' with MicoCode’s bundled Node runtime. This is a one-time download of about 520 MB and takes a few minutes…');
+    const heartbeat=setInterval(()=>this.emit(id,'install','Still installing OmniRoute. The download is large; this can take a few minutes…'),20000);
+    try{
     await writeFile(path.join(dir,'package.json'),JSON.stringify({name:'mico-managed-omniroute',private:true,dependencies:{omniroute:versions.omniroute}}));
     const npmDir=path.join(this.root,'runtime','node-'+versions.node),npmCLI=path.join(npmDir,'npm','bin','npm-cli.js');
     if(!await exists(npmCLI))await extractVerifiedZip(path.join(this.runtime,'npm-runtime.zip'),npmDir,signal);
     const npmConfig=path.join(this.root,'npmrc');await writeFile(npmConfig,'registry=https://registry.npmjs.org/\nignore-scripts=true\n');
     await this.run(node,[npmCLI,'install','--ignore-scripts','--omit=dev','--no-audit','--no-fund','--registry=https://registry.npmjs.org/'],{cwd:dir,signal,timeout:1800000,env:{PATH:this.runtime+path.delimiter+process.env.PATH,npm_config_cache:path.join(this.root,'npm-cache'),npm_config_userconfig:npmConfig}});
+    }finally{clearInterval(heartbeat)}
    }
    const port=await freePort(),base='http://127.0.0.1:'+port,dataDir=path.join(this.folder(id),'data');
    await mkdir(dataDir,{recursive:true});

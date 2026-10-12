@@ -134,6 +134,23 @@ test('Escape leaves the innermost surface first', () => {
 // Octopus and GPT-Load were both removed between releases. A config saved against one
 // dereferenced undefined while rendering and landed the whole workspace on its
 // "display hiccup" recovery screen.
+// The setup screen named routers with a fallthrough chain that ended in "Ollama", so
+// setting up OmniRoute announced "Preparing Ollama…" while npm ran for three minutes.
+test('every managed router has a display name for the setup screen', () => {
+  const names = source('lib/mico/desktop.ts');
+  for (const id of ['9router', 'cliproxy', 'litellm', 'omniroute', 'freeride', 'ollama']) {
+    assert.ok(names.includes(`'${id}'`) || names.includes(`${id}:`), id + ' needs a display name');
+  }
+  assert.ok(source('components/micocode/connections.tsx').includes('MANAGED_NAMES[provider]'), 'the setup screen must use the shared name table, not a fallthrough chain');
+});
+
+// A long install that says nothing between start and finish reads as a hang.
+test('a long provider install reports that it is still working', () => {
+  const manager = source('desktop/provider-manager.mjs');
+  assert.ok(manager.includes('Still installing OmniRoute'), 'the install must keep reporting progress');
+  assert.ok(manager.includes('clearInterval(heartbeat)'), 'the progress ticker must always be stopped');
+});
+
 test('a router removed between releases cannot crash the workspace', () => {
   const connections = source('components/micocode/connections.tsx');
   assert.ok(!/proxyPresets\.find\(p=>p\.id===config\.proxyPreset\)!/.test(connections), 'the saved preset must never be asserted to exist');

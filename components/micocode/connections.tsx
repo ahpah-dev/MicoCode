@@ -9,7 +9,7 @@ import {browserReady,loadBrowserModel} from '@/lib/mico/agent';
 import {discoverLocalNineKey,pickWorkingCodingModel,rankCodingModels} from '@/lib/mico/auto-connect.mjs';
 import {applyManagedConnection,credentialSlot,discoverProxy,listProxyModels,proxyPresets,readCredential,recallProfile,selectCatalogueModel} from '@/lib/mico/providers.mjs';
 import type {Config,ProxyPreset} from '@/lib/mico/types';
-import {isManagedProvider,type ManagedProvider,type SetupProgress} from '@/lib/mico/desktop';
+import {MANAGED_NAMES,isManagedProvider,type ManagedProvider,type SetupProgress} from '@/lib/mico/desktop';
 
 type Model={id:string;name:string;verified?:boolean;paid?:boolean;provider?:string;contextLength?:number;maxOutput?:number;catalogueSource?:string;accessUnchecked?:boolean};
 type Catalogue=Model[]&{catalogueWarning?:string};
@@ -229,7 +229,7 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
   async function setupNative(provider:ManagedProvider){
    if(disabled||!desktop)return;
    catalogueController.current?.abort();setRefreshingModels(false);
-   const name=provider==='9router'?'9Router':provider==='cliproxy'?'CLIProxyAPI':provider==='litellm'?'LiteLLM':provider==='freeride'?'FreeRide':'Ollama';
+   const name=MANAGED_NAMES[provider]||provider;
    setBusy(true);setOk(false);setStatus('Preparing '+name+'…');setProgress({provider,stage:'install',message:'Preparing your private provider setup…'});
    try{
     const nimPreset=proxyPresets.find(p=>p.id==='nim')!;
