@@ -137,3 +137,32 @@ body,.app-shell{background:
 
 .explorer-actions .import-link{margin:0!important;box-sizing:border-box;max-width:100%!important}
 .explorer-actions{box-sizing:border-box;width:100%}
+
+/* Zero-Config & Auto-Configure micro-polish */
+.auto-detect-card{
+  background:linear-gradient(135deg,color-mix(in srgb,var(--mint) 12%,var(--surface-raised)),color-mix(in srgb,var(--surface-panel) 90%,transparent));
+  backdrop-filter:blur(14px);
+  box-shadow:var(--shadow-lift);
+}
+.auto-detect-card:before{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(280px 140px at 100% 0,color-mix(in srgb,var(--mint) 16%,transparent),transparent 75%);
+  pointer-events:none;
+}
+.auto-detect-btn{
+  border-radius:999px;
+  box-shadow:0 8px 24px -8px var(--glow),inset 0 1px 0 #fff4;
+}
+.auto-config-btn{
+  box-shadow:0 4px 14px -6px var(--glow);
+}
+.welcome-first-use{
+  backdrop-filter:blur(12px);
+  box-shadow:var(--shadow-lift);
+  border:1px solid color-mix(in srgb,var(--mint) 25%,var(--stroke-subtle));
+}
+.welcome-first-use.connected{
+  background:linear-gradient(135deg,color-mix(in srgb,var(--mint) 14%,var(--surface-raised)),var(--surface-raised));
+  border-color:color-mix(in srgb,var(--mint) 45%,var(--stroke-subtle));
+}
+

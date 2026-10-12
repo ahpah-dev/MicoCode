@@ -22,6 +22,54 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
   const [freeRideKeys,setFreeRideKeys]=useState({nvidiaApiKey:'',openRouterApiKey:'',groqApiKey:'',huggingFaceToken:'',cerebrasApiKey:'',cloudflareApiToken:'',cloudflareAccountId:''});
  const [progress,setProgress]=useState<SetupProgress|null>(null);
  const desktop=window.micoDesktop;
+ const [autoScanning,setAutoScanning]=useState(false);
+
+ async function runAutoDetect(){
+  if(disabled||autoScanning)return;
+  setAutoScanning(true);setStatus('Scanning localhost for available AI engines…');
+  try{
+   for(const port of [11434,11435]){
+    try{
+     const url=`http://127.0.0.1:${port}`;
+     const res=await fetch(`${url}/api/tags`,{signal:AbortSignal.timeout(2000)});
+     if(res.ok){
+      const d=await res.json();
+      const names=(d.models||[]).map((m:{name:string})=>m.name);
+      if(names.length){
+       setLocalModels(names);
+       const best=names.find((s:string)=>/gemma4|qwen3\.[5678]|qwen3-coder|glm-5|deepseek-v4|nemotron-3|devstral|qwen3|coder/i.test(s))||names[0];
+       const next:Config={...config,provider:'ollama',ollamaUrl:url,model:best};
+       setConfig(next);setOk(true);onReady('ollama');
+       setStatus(`Auto-configured: connected to local Ollama (port ${port}) with ${best}.`);
+       setAutoScanning(false);return;
+      }
+     }
+    }catch{}
+   }
+   try{
+    const res=await fetch('http://127.0.0.1:20128/api/health',{signal:AbortSignal.timeout(1500)});
+    if(res.ok){
+     chooseProxy('9router');
+     setStatus('Auto-detected 9Router on port 20128. If an API key is required, enter it below.');
+     setAutoScanning(false);return;
+    }
+   }catch{}
+   try{
+    const res=await fetch('http://127.0.0.1:11343/health',{signal:AbortSignal.timeout(1500)});
+    if(res.ok){
+     const next=chooseProxy('freeride');
+     void connect(next);
+     setStatus('Auto-detected FreeRide gateway. Connected.');
+     setAutoScanning(false);return;
+    }
+   }catch{}
+   setStatus('No local engines detected on localhost. Ensure Ollama is running ("ollama serve") or choose a provider below.');
+  }catch(e){
+   setStatus((e as Error).message);
+  }finally{
+   setAutoScanning(false);
+  }
+ }
  const controller=useRef<AbortController|null>(null);
  const catalogueController=useRef<AbortController|null>(null);
  const customSelection=useRef<{scope:string;id:string}|null>(null);
@@ -113,7 +161,8 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
     setStatus('Ready. Inference runs on this device.');
    }else if(candidate.provider==='ollama'){
     const url=new URL(candidate.ollamaUrl);if(!['localhost','127.0.0.1','[::1]'].includes(url.hostname))throw new Error('Use a loopback address for local Ollama.');
-    const r=await fetch(candidate.ollamaUrl.replace(/\/$/,'')+'/api/tags',{signal:abort.signal});
+    let r:Response;
+    try{r=await fetch(candidate.ollamaUrl.replace(/\/$/,'')+'/api/tags',{signal:abort.signal})}catch{throw new Error(`Could not connect to Ollama at ${candidate.ollamaUrl}. Make sure Ollama is running ('ollama serve') or click Zero-Config Auto-Detect above.`)}
     if(!r.ok)throw new Error('Ollama returned '+r.status);
     const d=await r.json();const names=(d.models||[]).map((m:{name:string})=>m.name);setLocalModels(names);
     if(!names.length)throw new Error('No installed model found. Use the local kit or run ollama pull qwen3.5:9b.');
@@ -185,6 +234,14 @@ export function Connections({config,setConfig,apiKey,setKey,onClose,onReady,lock
 
   return <Modal title="Connect a model." subtitle="Use a local model or connect your own router to choose from its live model catalogue." onClose={()=>{if(busy&&progress&&desktop)void desktop.cancelSetup();onClose()}} wide>
    <div className="connection-summary"><span><ShieldCheck size={14}/> Your providers, your keys</span><span><Zap size={14}/> Smart limit handling</span><span><SlidersHorizontal size={14}/> Review before applying</span></div>
+   <div className="auto-detect-card">
+    <div className="auto-detect-header">
+     <div className="auto-detect-title"><Zap size={16}/><span>Zero-Config Auto-Detect</span></div>
+     <span className="auto-detect-badge">RECOMMENDED</span>
+    </div>
+    <p className="auto-detect-desc">Automatically scan localhost for running Ollama (port 11434/11435), 9Router (20128), or FreeRide and connect with zero manual configuration.</p>
+    <button type="button" className="primary auto-detect-btn" disabled={disabled||autoScanning} onClick={runAutoDetect}>{autoScanning?<LoaderCircle size={15} className="spin"/>:<Zap size={15}/>}<span>{autoScanning?'Scanning localhost…':'Auto-Detect & Connect Everything'}</span></button>
+   </div>
   <div className="provider-grid">
     {([{id:'browser',name:'On device',sub:'No key · no service quota',Icon:Cpu},{id:'ollama',name:'Ollama',sub:'Your installed models',Icon:Monitor},{id:'openrouter',name:'OpenRouter',sub:'Free-tier models · provider limits apply',Icon:Cloud},{id:'proxy',name:'Your routers',sub:'9Router · LiteLLM · compatible APIs',Icon:Network}] as const).map(p=><button disabled={disabled} aria-pressed={config.provider===p.id} className={'provider-card '+(config.provider===p.id?'active':'')} key={p.id} onClick={()=>chooseProvider(p.id)}><p.Icon size={21}/><strong>{p.name}</strong><small>{p.sub}</small>{config.provider===p.id&&<Check className="provider-check" size={15}/>}</button>)}
   </div>
