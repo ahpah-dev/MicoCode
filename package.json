@@ -15,6 +15,7 @@
     "package:kit": "node scripts/package-kit.mjs",
     "build:desktop": "npm run build:web && node scripts/prepare-desktop.mjs",
     "package:windows": "npm run build:desktop && electron-builder --config electron-builder.yml --win --publish never",
+    "release:publish": "node scripts/publish-release.mjs",
     "desktop": "electron build/desktop-app"
   },
   "dependencies": {
