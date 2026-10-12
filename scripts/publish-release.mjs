@@ -10,37 +10,44 @@ if (!token) {
   process.exit(1);
 }
 
-const tag = 'v0.8.1';
-const name = 'MicoCode 0.8.1 — GPT-Load and Octopus Actually Answer';
+const tag = 'v0.8.2';
+const name = 'MicoCode 0.8.2 — Never Falls Back to an Outdated Model';
 const checksums = fs.readFileSync('release/SHA256SUMS.txt', 'utf8').trim();
 
-const body = `## MicoCode v0.8.1 — GPT-Load and Octopus Actually Answer
+const body = `## MicoCode v0.8.2 — Never Falls Back to an Outdated Model
 
-**If you downloaded 0.8.0, replace it with this.** The two routers added in 0.8.0
-installed and configured themselves correctly, but could not be used at all: every
-request to them returned 404 with \`Check the API base URL; it must expose /models\`.
+### The fallback chain can no longer name a stale model
+When a provider hit its limit, MicoCode switched to the next configured one and
+announced the model it was switching to. Those models were hardcoded — **AIHubMix fell
+back to \`gpt-4o-mini\`**, AI Studio to \`gemini-2.5-flash\`, NVIDIA NIM to a Llama 3.3
+build. Every one of them was a name that ages badly, and the workspace would quietly
+keep using it long after something far better was available.
 
-### What was wrong
-Everything the workspace sends to a managed router goes through MicoCode's own local
-server first. That route was matched against a **hand-written list of router names**,
-and GPT-Load and Octopus were missing from it. So requests reached the app server,
-failed to match, fell through to the static-file handler, and came back 404 while the
-routers themselves were running perfectly. The route is now built from the same list
-the rest of the app already reads, so registering a router is all it takes for it to
-be served — the mistake cannot repeat for the next one.
+Now a provider is only used with the model **you** already chose for it. If you never
+chose one, MicoCode asks that provider for its current catalogue and picks the strongest
+model it actually offers at that moment. There is no longer a model name sitting in the
+code to fall back to.
 
-### Also in this release
-- **Google AI Studio is described by its current model**, Gemini 3.8 Flash.
+### Superseded models can no longer win
+The auto-picker ranked \`gpt-4.1\` and \`gemini-2.5-pro\` as top-tier, so an older model
+could outrank a current one — and a plain fall-through scored 50, above genuinely small
+models. Families such as GPT-4o, GPT-4.1, GPT-4, GPT-3.5, o1, Claude 3, Gemini
+1.x/2.0/2.5, Llama 2/3, Mixtral, Phi-3 and Qwen 2 now score below every current model.
+They stay selectable when they are genuinely all a provider offers — nothing is taken
+away — but they can never be preferred.
+
+### Every router you set up comes back
+Only the most recently used router was restarted, so a second one you had configured
+showed as stopped and produced errors until you set it up again. MicoCode now remembers
+every router you set up and brings them all back on launch, in the background, without
+competing with a setup you are waiting on.
 
 ### Verification
-- 188 tests pass with no skips. The new test walks **every** registered router through
-  the app's proxy route and fails if any one of them is not served \`/v1/models\`, then
-  checks an unregistered name is still refused.
-- Both routers were provisioned end to end through the exact path the workspace uses —
-  app server → router → upstream — with the catalogue returning 200 and a real
-  \`POST /v1/chat/completions\` reaching the upstream for each. The earlier harnesses
-  talked to the routers directly and so never crossed the hop that was broken; that gap
-  is now closed.
+- 189 tests pass with no skips. One test asserts a current model always outranks a
+  superseded one while a superseded model still works when it is all that exists;
+  another drives a real fallback where the provider offers both \`gpt-4o-mini\` and
+  \`gpt-5.1\` and asserts the workspace lands on \`gpt-5.1\`; a third covers remembering
+  and restoring more than one router.
 - TypeScript check clean; production web build clean; the packaged app was smoke-tested
   and the installers below were built fresh from this commit.
 
@@ -93,8 +100,8 @@ async function publish() {
 
   // Upload assets
   const filesToUpload = [
-    {path: 'release/MicoCode-Setup-0.8.1-x64.exe', name: 'MicoCode-Setup-0.8.1-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
-    {path: 'release/MicoCode-Portable-0.8.1-x64.exe', name: 'MicoCode-Portable-0.8.1-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Setup-0.8.2-x64.exe', name: 'MicoCode-Setup-0.8.2-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Portable-0.8.2-x64.exe', name: 'MicoCode-Portable-0.8.2-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
     {path: 'release/SHA256SUMS.txt', name: 'SHA256SUMS.txt', contentType: 'text/plain'}
   ];
 

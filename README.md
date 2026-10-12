@@ -19,6 +19,11 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.8.2 makes it impossible for MicoCode to quietly settle on an outdated model, and keeps every router you set up running:
+- **The instant-fallback chain no longer names a model.** It used to hardcode third-party names — AIHubMix fell back to `gpt-4o-mini`, AI Studio to `gemini-2.5-flash`, NVIDIA NIM to a Llama 3.3 build — and it announced that choice in the status line as it switched. Now a provider is only used with the model *you* already chose for it; if you never chose one, MicoCode asks that provider for its current catalogue and picks the strongest model it actually offers. A stale name can no longer be sitting in the code to fall back to.
+- **Superseded model families can no longer win.** The auto-picker ranked `gpt-4.1` and `gemini-2.5-pro` as top-tier, so an older model could outrank a current one. Families like GPT-4o, GPT-4.1, GPT-4, GPT-3.5, o1, Claude 3, Gemini 1.x/2.0/2.5, Llama 2/3, Mixtral, Phi-3 and Qwen 2 now score below every current model, while staying selectable if they are genuinely all a provider offers.
+- **Every router you set up comes back on launch**, not just the most recent one. Previously only the last router used was restarted, so a second one you had configured showed as stopped and produced errors until you set it up again.
+
 Version 0.8.1 fixes the two routers added in 0.8.0, which could not be used at all:
 - **GPT-Load and Octopus now actually answer.** Every request the workspace makes to a router goes through MicoCode's own local server, and that route was matched against a hand-written list of router names that the two new ones were missing. The routers themselves were installed and configured correctly, but every request to them fell through to the static file handler and returned 404 — "Check the API base URL; it must expose `/models`." The route is now built from the same list the rest of the app uses, so registering a router is enough to have it served.
 - **Google AI Studio is described by its current model**, Gemini 3.8 Flash.

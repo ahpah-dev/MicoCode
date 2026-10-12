@@ -1,6 +1,7 @@
 import {checkProject,exactEdit,isPrivatePath,mergeFiles,qualityReview,validateReply} from './core.mjs';
 import {listProxyModels,normalizeEndpoint,proxyPresets,readCredential} from './providers.mjs';
 import {getFallbackCandidates,isRecoverableProviderError} from './fallback.ts';
+import {rankCodingModels} from './auto-connect.mjs';
 import {resilientRequest} from './resilience.mjs';
 import {readModelText} from './response-reader.mjs';
 import {actionSchema} from './action-schema.mjs';
@@ -85,10 +86,22 @@ export async function complete(messages:Chat[],config:Config,key:string,signal:A
   let lastError:unknown=error;
   for(const candidate of candidates) {
    if(signal.aborted)throw signal.reason||new DOMException('Stopped','AbortError');
+   let target=candidate;
+   if(!target.config.model) {
+    // The user never picked a model for this provider, so ask it what it offers
+    // right now and take the strongest current one. Falling back to a hardcoded
+    // name here is how a workspace ends up on a model two generations old.
+    try {
+     const available=await listProxyModels(target.config,target.key,signal);
+     const best=rankCodingModels(available)[0];
+     if(!best)continue;
+     target={...target,config:{...target.config,model:best}};
+    } catch { continue; }
+   }
    try {
     const errorMsg=(error as Error)?.message?.slice(0,100)||'Rate limit or service error';
-    onStatus(`⚡ ${primaryName} reached a limit (${errorMsg}). Instant fallback to ${candidate.name} (${candidate.config.model})…`);
-    return await executeSingleProvider(messages,candidate.config,candidate.key,signal,onToken,onStatus,onReasoning);
+    onStatus(`⚡ ${primaryName} reached a limit (${errorMsg}). Instant fallback to ${target.name} (${target.config.model})…`);
+    return await executeSingleProvider(messages,target.config,target.key,signal,onToken,onStatus,onReasoning);
    } catch(fallbackError) {
     if(signal.aborted)throw fallbackError;
     lastError=fallbackError;

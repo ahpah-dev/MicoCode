@@ -262,12 +262,39 @@ export class ProviderManager{
     await writeFile(path.join(this.folder(id),'installed.json'),JSON.stringify({version:id==='9router'?versions.nine:id==='litellm'?versions.litellm:id==='freeride'?versions.freeride:artifacts[id].version}),{mode:0o600});
     connection.config.routerEngine=id==='ollama'?'local':selectedEngine;connection.config.managed=true;
     await writeFile(path.join(this.root,'last-provider.json'),JSON.stringify({provider:id,engine:selectedEngine}),{mode:0o600});
+    await this.rememberRouter(id,selectedEngine);
     this.connections.set(id,connection);this.emit(id,'ready',id==='ollama'?'Local coding model connected. No account or service quota.':id==='freeride'?'FreeRide connected. Automatic provider failover is ready.':'Connected through '+(id==='9router'?'9Router':id==='cliproxy'?'CLIProxyAPI':id==='gptload'?'GPT-Load':id==='octopus'?'Octopus':'LiteLLM')+'. Your free '+selectedEngine+' route is ready.');return connection;
   }catch(e){if(this.children.get(id)!==hadChild)await this.stop(id);this.emit(id,signal.aborted?'cancelled':'error',signal.aborted?'Setup cancelled. You can resume with the same button.':e.message);throw e}
   finally{this.active=null}
  }
   async restore(){
   try{const {provider,engine='local'}=JSON.parse(await readFile(path.join(this.root,'last-provider.json'),'utf8'));assertProvider(provider);if(!await exists(path.join(this.folder(provider),'installed.json')))return null;return await this.setup(provider,engine)}catch{return null}
+ }
+ // Every router the user has set up, so the ones that are not the most recent can
+ // be brought back too instead of looking broken after MicoCode restarts.
+ async connectedRouters(){
+  try{const list=JSON.parse(await readFile(path.join(this.root,'connected.json'),'utf8'));return Array.isArray(list)?list.filter(entry=>entry&&managedProviders.includes(entry.provider)):[]}catch{return []}
+ }
+ async rememberRouter(id,engine){
+  try{
+   const list=(await this.connectedRouters()).filter(entry=>entry.provider!==id);
+   list.push({provider:id,engine});
+   await mkdir(this.root,{recursive:true});
+   await writeFile(path.join(this.root,'connected.json'),JSON.stringify(list),{mode:0o600});
+  }catch{}
+ }
+ // Background only: never competes with a setup the user is waiting on, and a
+ // router that cannot come back simply stays stopped with its card still offering
+ // Set up & connect.
+ async restoreOthers(){
+  const restored=[];
+  for(const entry of await this.connectedRouters()){
+   if(this.closing||this.active)break;
+   if(this.children.get(entry.provider)?.exitCode===null)continue;
+   if(!await exists(path.join(this.folder(entry.provider),'installed.json')))continue;
+   try{restored.push(await this.setup(entry.provider,entry.engine==='local'?'local':'community'))}catch{}
+  }
+  return restored;
  }
  async verifyLocalEngine(signal){
   if(!this.ollamaUpstream||!this.ollamaModel||!Array.isArray(this.ollamaModels)||!this.ollamaModels.length)throw new Error('The local coding engine must be reconnected.');

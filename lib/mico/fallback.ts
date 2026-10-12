@@ -8,12 +8,24 @@ export type FallbackCandidate = {
   key: string;
 };
 
+// The instant-fallback chain. A candidate's model is only ever one of two things:
+// a route MicoCode itself owns (a stable alias that cannot go stale), or the model
+// the user already chose for that provider. An empty defaultModel means "only use
+// this provider if the user has used it before" — the chain must never name a
+// third-party model on the user's behalf, because that is how a workspace ends up
+// quietly falling back to a model two generations old.
 export const CASCADE_PRESETS: Array<{id: string; name: string; defaultModel: string; preset?: Config['proxyPreset']}> = [
-  {id:'opencode', name:'OpenCode Zen', defaultModel:'muse-spark-1.3', preset:'opencode'},
-  {id:'aihubmix', name:'AIHubMix', defaultModel:'gpt-4o-mini', preset:'aihubmix'},
-  {id:'aistudio', name:'Google AI Studio', defaultModel:'gemini-2.5-flash', preset:'aistudio'},
-  {id:'nim', name:'NVIDIA NIM', defaultModel:'meta/llama-3.3-70b-instruct', preset:'nim'},
+  {id:'opencode', name:'OpenCode Zen', defaultModel:'', preset:'opencode'},
+  {id:'aihubmix', name:'AIHubMix', defaultModel:'', preset:'aihubmix'},
+  {id:'aistudio', name:'Google AI Studio', defaultModel:'', preset:'aistudio'},
+  {id:'nim', name:'NVIDIA NIM', defaultModel:'', preset:'nim'},
+  // MicoCode's own managed routes: these aliases always resolve to whatever the
+  // router currently offers, so they stay current without naming a model.
   {id:'9router', name:'9Router', defaultModel:'mico-free/free-code', preset:'9router'},
+  {id:'gptload', name:'GPT-Load', defaultModel:'', preset:'gptload'},
+  {id:'octopus', name:'Octopus', defaultModel:'', preset:'octopus'},
+  {id:'litellm', name:'LiteLLM', defaultModel:'', preset:'litellm'},
+  {id:'cliproxy', name:'CLIProxyAPI', defaultModel:'', preset:'cliproxy'},
   {id:'openrouter', name:'OpenRouter', defaultModel:'openrouter/free'},
   {id:'ollama', name:'Local Ollama', defaultModel:'qwen3.5:9b'},
 ];
@@ -43,6 +55,9 @@ export function getFallbackCandidates(currentConfig: Config, currentKey?: string
       const saved = recallProfile(base, storage);
       let model = (typeof saved?.model === 'string' && saved.model.trim()) ? saved.model.trim() : item.defaultModel;
       if (item.preset === 'opencode' && model.startsWith('oc/')) model = model.slice(3);
+      // An empty model is deliberate: the caller asks the provider for its current
+      // catalogue when it reaches it. Guessing a name here is how a workspace ends
+      // up quietly falling back to a model two generations old.
       candidates.push({
         id: item.id,
         name: item.name,

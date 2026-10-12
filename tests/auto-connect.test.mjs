@@ -7,8 +7,15 @@ test('strong coding models outrank small local and non-chat models',()=>{
   assert.ok(codingRank('kc/anthropic/claude-sonnet-4-20250514')>codingRank('kimchi/kimi-k3'));
   assert.ok(codingRank('kimchi/kimi-k3')>codingRank('gemma4:gpu'));
   assert.equal(codingRank('nvidia/parakeet-ctc-1.1b-asr'),-1);
+  // A current model must always beat a superseded one, however flagship it once was.
+  assert.ok(codingRank('kimchi/glm-5.3')>codingRank('kc/openai/gpt-4.1'));
+  assert.ok(codingRank('kc/openai/gpt-5')>codingRank('kc/openai/gpt-4o'));
+  assert.ok(codingRank('google/gemini-3.8-flash')>codingRank('google/gemini-2.5-pro'));
+  assert.ok(codingRank('anthropic/claude-sonnet-4')>codingRank('anthropic/claude-3-5-sonnet'));
   const ranked=rankCodingModels(['gemma4:gpu','nvidia/parakeet-ctc-1.1b-asr','kimchi/glm-5.3','kc/openai/gpt-4.1']);
-  assert.deepEqual(ranked,['kc/openai/gpt-4.1','kimchi/glm-5.3','gemma4:gpu']);
+  assert.deepEqual(ranked,['kimchi/glm-5.3','gemma4:gpu','kc/openai/gpt-4.1']);
+  // Superseded models stay usable when they are genuinely all that is on offer.
+  assert.deepEqual(rankCodingModels(['kc/openai/gpt-4o']),['kc/openai/gpt-4o']);
 });
 
 test('auto-connect returns the highest-ranked model that follows the action format',async()=>{

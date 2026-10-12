@@ -89,6 +89,27 @@ test('MicoCode chooses the GPT-Load access key and scopes it to its own group',(
  assert.equal(gptLoadKeyMask('short'),'short');
 });
 
+// Only the most recent router used to come back, so a second one the user had set
+// up looked broken after a restart.
+test('every router the user set up is remembered and can be brought back',async()=>{
+ const dir=await mkdtemp(path.join(os.tmpdir(),'mico-routers-'));
+ const manager=new ProviderManager({dataDir:dir,runtimeDir:dir,gatewayBase:'http://127.0.0.1:1/managed/v1',gatewayKey:'gateway',vault:{get:async()=>null,set:async()=>{}}});
+ try{
+  assert.deepEqual(await manager.connectedRouters(),[],'a fresh install remembers nothing');
+  await manager.rememberRouter('gptload','community');
+  await manager.rememberRouter('octopus','community');
+  assert.deepEqual(await manager.connectedRouters(),[{provider:'gptload',engine:'community'},{provider:'octopus',engine:'community'}],'both routers are remembered, most recent last');
+  // Re-remembering replaces the entry instead of duplicating it.
+  await manager.rememberRouter('gptload','local');
+  assert.deepEqual(await manager.connectedRouters(),[{provider:'octopus',engine:'community'},{provider:'gptload',engine:'local'}],'a router is stored once, with its latest engine');
+  // Names that are not managed routers are ignored rather than acted on.
+  await writeFile(path.join(dir,'providers','connected.json'),JSON.stringify([{provider:'evil',engine:'community'},{provider:'octopus',engine:'community'}]));
+  assert.deepEqual((await manager.connectedRouters()).map(entry=>entry.provider),['octopus']);
+  // Nothing is started for a router whose package is not installed.
+  assert.deepEqual(await manager.restoreOthers(),[]);
+ }finally{await rm(dir,{recursive:true,force:true})}
+});
+
 test('the dashboard credential is read from the vault, and only for routers that use one',async()=>{
  const values=new Map([['gptload-admin','sk-mico-admin-test'],['octopus-admin','MicoCode-dashboard-pw']]);
  const manager=new ProviderManager({dataDir:'unused',runtimeDir:'unused',gatewayBase:'http://127.0.0.1:1/managed/v1',gatewayKey:'gateway',vault:{get:async k=>values.get(k)??null,set:async()=>{}}});

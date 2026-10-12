@@ -69,6 +69,11 @@ test('complete() cascades automatically on 429 rate limit or quota errors across
       return Response.json({error: 'OpenCode Zen rate limit reached (429). Wait for reset or try another model.'}, {status: 429});
     }
     if (url === '/api/aihubmix') {
+      // The user never chose a model here, so the fallback asks the provider what
+      // it offers now instead of trusting a hardcoded name.
+      if (JSON.parse(options?.body || '{}').action === 'models') {
+        return Response.json({models:['kc/openai/gpt-4o-mini','kc/openai/gpt-5.1']});
+      }
       return Response.json({choices:[{message:{content:'{"message":"Saved via AIHubMix fallback","actions":[],"done":true}'},finish_reason:'stop'}]});
     }
     return Response.json({error:'Not found'}, {status: 404});
@@ -95,8 +100,11 @@ test('complete() cascades automatically on 429 rate limit or quota errors across
     );
 
     assert.match(result, /Saved via AIHubMix fallback/);
-    assert.deepEqual(calls, ['/api/opencode', '/api/aihubmix']);
+    assert.deepEqual(calls, ['/api/opencode', '/api/aihubmix', '/api/aihubmix']);
     assert.ok(statusUpdates.some(s => s.includes('OpenCode Zen reached a limit') && s.includes('Instant fallback to AIHubMix')));
+    // It must land on the strongest model the provider currently offers, never the
+    // superseded one that happens to sit first in the list.
+    assert.ok(statusUpdates.some(s => s.includes('Instant fallback to AIHubMix (kc/openai/gpt-5.1)')), 'expected the fallback to announce the current model');
   } finally {
     globalThis.fetch = priorFetch;
     writeCredential({provider:'proxy',proxyPreset:'aihubmix',proxyUrl:aihubmixPreset.url}, '');

@@ -47,7 +47,7 @@ async function start(){
   ipcMain.handle('mico:existing-9router-key',event=>{validateSender(event);return manager.existingNineKey()});
  ipcMain.handle('mico:refresh-models',async event=>{validateSender(event);return managedClientConnection(await manager.refreshNineCatalogue(),server.origin)});
  let restoration;
- ipcMain.handle('mico:restore',event=>{validateSender(event);return restoration||(restoration=manager.restore().then(result=>managedClientConnection(result,server.origin)))});
+ ipcMain.handle('mico:restore',event=>{validateSender(event);return restoration||(restoration=manager.restore().then(result=>{void manager.restoreOthers().catch(()=>{});return managedClientConnection(result,server.origin)}))});
  ipcMain.handle('mico:stop',(event,provider)=>{validateSender(event);return manager.stop(assertProvider(provider))});
   ipcMain.handle('mico:appearance',(event,theme)=>{validateSender(event);if(!Object.hasOwn(backgrounds,theme))throw new Error('Unknown theme.');window.setBackgroundColor(backgrounds[theme]);nativeTheme.themeSource=theme==='paper'?'light':'dark'});
   ipcMain.handle('mico:open-folder',async event=>{
