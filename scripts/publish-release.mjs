@@ -10,39 +10,52 @@ if (!token) {
   process.exit(1);
 }
 
-const tag = 'v0.8.5';
-const name = 'MicoCode 0.8.5 — Octopus Removed';
+const tag = 'v0.8.6';
+const name = 'MicoCode 0.8.6 — OmniRoute, Free Models Only';
 const checksums = fs.readFileSync('release/SHA256SUMS.txt', 'utf8').trim();
 
-const body = `## MicoCode v0.8.5 — Octopus Removed
+const body = `## MicoCode v0.8.6 — OmniRoute, Free Models Only
 
-### Octopus is gone
-It was the least-used project of everything considered — 2,702 GitHub stars against
-LiteLLM's 61,082 — and it never ran reliably here. Rather than leave a router in the
-list that answers with errors, it has been removed outright: installer, pinned
-artifact, admin-API client, dashboard entry, card and settings.
+### OmniRoute is in, and it is locked to free models
+[OmniRoute](https://github.com/diegosouzapw/OmniRoute) (MIT, ~76k stars) puts one endpoint in
+front of hundreds of providers. MicoCode now installs it over npm with the Node runtime it
+already bundles for 9Router, runs it headless on a free loopback port with its own private data
+directory, and mints an access key for it.
 
-Its 51 MB install is left behind in \`%APPDATA%\\MicoCode\\providers\\octopus\`. Nothing
-uses it now, so it can be deleted.
+**That key is restricted to the free catalogue.** MicoCode reads OmniRoute's own free-model
+catalogue, keeps only the models whose provider publishes a free tier, drops the ones gated
+upstream, and hands exactly that set to the key. Anything else is invisible to it:
 
-### The rest of the list is unchanged
-**9Router, LiteLLM, CLIProxyAPI and FreeRide** still install, start and key themselves,
-and **Ollama** still runs models on your own machine. The accepted-installer test now
-asserts \`octopus\` is *rejected*, so it cannot return by accident.
+\`\`\`
+models visible to the key     171
+request for a paid combo      403
+\`\`\`
 
-### What I evaluated as its replacement
-**OmniRoute** (\`diegosouzapw/OmniRoute\`, MIT, **75,693 stars**, actively maintained)
-installs over npm with the Node runtime MicoCode already bundles, and
-\`omniroute serve --daemon --port N --no-open\` starts headlessly and binds loopback.
-**It is not in this release** because I could not get past its own authentication:
-\`/v1/models\` answers \`Authentication required\` with no key, the same with
-\`REQUIRE_API_KEY=false\`, and \`keys list\` exposes only upstream provider keys — no client
-key. Shipping a router I cannot drive would repeat the failures this release cleans up.
+So this route cannot spend money — the restriction is enforced by the router itself, not by a
+list in the interface that could drift.
+
+Free routes measured on a clean install include GPT-5.4 Mini, GPT-5.6 Luna, Claude Haiku 4.5,
+Mistral Small, gpt-oss-120b and Gemma 4, alongside AI Horde's community models.
+
+### Why some providers are excluded
+OpenCode's free tier only answers from inside OpenCode — it returns
+\`403: can only be used from within OpenCode\` to anything else. Offering it would hand you a
+route that always fails, so it is filtered out of the free set.
 
 ### Verification
-- 180 tests pass with no skips. No Octopus reference remains in any shipping file.
+- 182 tests pass with no skips. Two are new: one asserts OmniRoute is a managed router pinned to
+  an npm version with no downloadable artifact to pin, the other proves the free filter keeps
+  free providers, drops gated ones, and allows nothing when a provider has no free tier.
+- The whole path was run against the real 520 MB package: install, headless start, key creation,
+  free-only restriction, and a \`GET /v1/models\` through MicoCode's own server returning the same
+  set of models. A paid combo was refused with 403.
 - TypeScript check clean; production web build clean; packaged app smoke-tested, and the
   installers below were built fresh from this commit.
+
+### A note on the install
+OmniRoute is delivered over npm rather than a pinned download, the same way 9Router is. The
+version is pinned in the app, the install is the first thing setup does, and it takes a few
+minutes and about 520 MB.
 
 ### Checksums
 \`\`\`
@@ -93,8 +106,8 @@ async function publish() {
 
   // Upload assets
   const filesToUpload = [
-    {path: 'release/MicoCode-Setup-0.8.5-x64.exe', name: 'MicoCode-Setup-0.8.5-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
-    {path: 'release/MicoCode-Portable-0.8.5-x64.exe', name: 'MicoCode-Portable-0.8.5-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Setup-0.8.6-x64.exe', name: 'MicoCode-Setup-0.8.6-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Portable-0.8.6-x64.exe', name: 'MicoCode-Portable-0.8.6-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
     {path: 'release/SHA256SUMS.txt', name: 'SHA256SUMS.txt', contentType: 'text/plain'}
   ];
 

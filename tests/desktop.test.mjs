@@ -5,7 +5,7 @@ import os from 'node:os';
 import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import JSZip from 'jszip';
 import {archivePath,extractVerifiedZip,downloadVerified} from '../desktop/install.mjs';
-import {assertProvider,assertEngine,cliProxyConfig,liteLLMConfig,managedProviders,ProviderManager} from '../desktop/provider-manager.mjs';
+import {assertProvider,assertEngine,cliProxyConfig,liteLLMConfig,managedProviders,omniRouteFreeIds,ProviderManager} from '../desktop/provider-manager.mjs';
 import {artifacts,versions} from '../desktop/artifacts.mjs';
 import {isLocalRequest,createLocalServer,managedClientConnection} from '../desktop/server.mjs';
 import {applyManagedConnection,discoverProxy,listProxyModels,managedPresets,proxyPresets} from '../lib/mico/providers.mjs';
@@ -69,6 +69,24 @@ test('every router the user set up is remembered and can be brought back',async(
  }finally{await rm(dir,{recursive:true,force:true})}
 });
 
+test('OmniRoute is a managed router installed from npm at a pinned version',()=>{
+ assert.equal(assertProvider('omniroute'),'omniroute');
+ assert.ok(managedProviders.includes('omniroute'),'OmniRoute must be a managed provider');
+ assert.ok(proxyPresets.some(p=>p.id==='omniroute'&&!p.hidden),'OmniRoute must be offered in the router list');
+ assert.match(versions.omniroute,/^\d+\.\d+\.\d+$/,'the npm version must be pinned, never "latest"');
+ assert.equal(artifacts.omniroute,undefined,'OmniRoute ships over npm, so it has no downloadable artifact to pin');
+});
+
+// The whole point of the OmniRoute integration: its access key may only reach free
+// models, so the workspace cannot spend money through it.
+test('the OmniRoute access key is restricted to free models only',()=>{
+ const catalogue={data:[{id:'free-a',owned_by:'duckduckgo-web'},{id:'free-b',owned_by:'aihorde'},{id:'paid',owned_by:'openai'},{id:'gated',owned_by:'opencode'}]};
+ const free=new Set(['duckduckgo-web','aihorde','opencode']);
+ assert.deepEqual(omniRouteFreeIds(catalogue,free),['free-a','free-b'],'only providers with a free tier, and never one gated upstream');
+ assert.deepEqual(omniRouteFreeIds({data:[]},free),[],'an empty catalogue allows nothing');
+ assert.deepEqual(omniRouteFreeIds(undefined,free),[],'a missing catalogue allows nothing');
+ assert.deepEqual(omniRouteFreeIds({data:[{id:'x',owned_by:'openai'}]},new Set()),[],'a provider with no free tier is never allowed');
+});
 test('managed engines cannot be changed to paid or arbitrary destinations',()=>{assert.equal(assertEngine('local'),'local');assert.equal(assertEngine('community'),'community');for(const value of ['paid','https://other.example','custom',null])assert.throws(()=>assertEngine(value))});
 test('provider archives cannot escape, create links, or overwrite a destination',async()=>{
  const root=await mkdtemp(path.join(os.tmpdir(),'mico-archive-'));

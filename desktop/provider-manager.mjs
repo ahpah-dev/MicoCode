@@ -11,7 +11,7 @@ import {randomBytes,randomUUID} from 'node:crypto';
 import {artifacts,versions} from './artifacts.mjs';
 import {downloadVerified,extractVerifiedZip} from './install.mjs';
 
-export const managedProviders=['9router','cliproxy','litellm','freeride','ollama'];
+export const managedProviders=['9router','cliproxy','litellm','omniroute','freeride','ollama'];
 export function assertProvider(id){if(!managedProviders.includes(id))throw new Error('Unsupported managed provider.');return id}
 export function assertEngine(engine){if(!['local','community'].includes(engine))throw new Error('Unsupported free engine.');return engine}
 const exists=async file=>{try{await access(file,constants.F_OK);return true}catch{return false}};
@@ -25,13 +25,20 @@ export function cliProxyConfig(port,key,base,upstreamKey,authDir,routes=['free-c
  const models=routes.map(id=>`        - name: ${JSON.stringify(id)}\n          alias: ${JSON.stringify(id)}\n          input-modalities: [text]`).join('\n');
  return `server:\n  host: 127.0.0.1\n  port: ${port}\naccess:\n  api-keys:\n    - ${JSON.stringify(key)}\nmanagement:\n  allow-remote: false\n  secret-key: ""\n  disable-control-panel: true\noauth:\n  auth-dir: ${JSON.stringify(authDir.replace(/\\/g,'/'))}\napi-keys:\n  openai-compatibility:\n    - name: micocode-community\n      base-url: ${JSON.stringify(base)}\n      keys:\n        - api-key: ${JSON.stringify(upstreamKey)}\n      models:\n${models}\nrequests:\n  passthrough-headers: false\nobservability:\n  logs:\n    request-log: false\n    debug: false\n`;
 }
+// Only models whose provider publishes a free tier, minus the ones gated upstream:
+// OpenCode's free tier only answers from inside OpenCode, so offering it would hand
+// the workspace a route that always fails. This is what keeps MicoCode on free
+// models only — the access key is restricted to exactly this list.
+export function omniRouteFreeIds(catalogue,freeProviders,gated=new Set(['opencode'])){
+ return (catalogue?.data||[]).filter(model=>model&&model.id&&freeProviders.has(model.owned_by)&&!gated.has(model.owned_by)).map(model=>model.id);
+}
 export class ProviderManager{
  constructor({dataDir,runtimeDir,gatewayBase,gatewayKey,onProgress=()=>{},vault,fetchImpl=fetch,onDiagnostic=()=>{},loadOpenCodeModelsImpl=loadOpenCodeModels}){
   this.root=path.join(dataDir,'providers');this.runtime=runtimeDir;this.gatewayBase=gatewayBase;this.gatewayKey=gatewayKey;
    this.notify=onProgress;this.vault=vault;this.fetch=fetchImpl;this.diagnostic=onDiagnostic;this.loadOpenCodeModels=loadOpenCodeModelsImpl;this.children=new Map();this.connections=new Map();this.active=null;this.cookies=new Map();this.ollamaUpstream=null;this.ollamaModel=null;this.ollamaModels=null;this.closing=false;
  }
  folder(id){return path.join(this.root,assertProvider(id))}
-  versionFolder(id){return path.join(this.folder(id),id==='9router'?versions.nine:id==='litellm'?versions.litellm:id==='freeride'?versions.freeride:artifacts[id].version)}
+  versionFolder(id){return path.join(this.folder(id),id==='9router'?versions.nine:id==='litellm'?versions.litellm:id==='freeride'?versions.freeride:id==='omniroute'?versions.omniroute:artifacts[id].version)}
   emit(provider,stage,message,percent){this.notify({provider,stage,message,...(Number.isFinite(percent)?{percent}: {})})}
   async secret(name){let key=await this.vault.get(name);if(!key){key='sk-mico-'+randomBytes(24).toString('hex');await this.vault.set(name,key)}return key}
   // Reads, never writes, the local 9Router database so MicoCode can reuse a key
@@ -71,7 +78,7 @@ export class ProviderManager{
  async run(exe,args,{cwd,env={},signal,timeout=900000}={}){
   if(signal?.aborted)throw new Error('Setup cancelled.');
   // No shell, global installation, user-controlled command, or provider output in the UI.
-  const child=spawn(exe,args,{cwd,env:{...process.env,...env},windowsHide:true,stdio:['ignore','pipe','pipe'],shell:false});
+  const child=spawn(exe,args,{cwd,env:{...process.env,...env},windowsHide:true,stdio:[options.stdin==='pipe'?'pipe':'ignore','pipe','pipe'],shell:false});
   const finish=()=>{signal?.removeEventListener('abort',cancel);clearTimeout(timer)};
   const cancel=()=>{void this.killChild(child)};signal?.addEventListener('abort',cancel,{once:true});
   const timer=setTimeout(cancel,timeout);let output='';
@@ -81,7 +88,7 @@ export class ProviderManager{
  start(id,exe,args,options={}){
   if(this.closing)throw new Error('MicoCode is closing.');
   const previous=this.children.get(id);if(previous?.exitCode===null)return previous;
-  const child=spawn(exe,args,{...options,env:{...process.env,...options.env},windowsHide:true,shell:false,stdio:['ignore','pipe','pipe']});
+  const child=spawn(exe,args,{...options,env:{...process.env,...options.env},windowsHide:true,shell:false,stdio:[options.stdin==='pipe'?'pipe':'ignore','pipe','pipe']});
   // Consume output without persisting prompts or credentials.
    const envSecrets=Object.entries(options.env||{}).filter(([name,value])=>/(KEY|TOKEN|SECRET|PASSWORD)/i.test(name)&&typeof value==='string'&&value.length>8).map(([,value])=>value);
    const log=chunk=>{let text=chunk.toString().replace(/sk-mico-[\w-]+|sk-[a-zA-Z0-9_-]{20,}|AIza[\w-]{20,}|nvapi-[\w-]{16,}|gsk_[\w-]{16,}|hf_[\w-]{16,}|integration-only-free-route/g,'[redacted]');for(const secret of envSecrets)text=text.replaceAll(secret,'[redacted]');this.diagnostic(id,text.slice(-3000))};
@@ -215,15 +222,16 @@ export class ProviderManager{
     if(id==='9router')connection=await this.setupNine(signal,base);
     else if(id==='cliproxy')connection=await this.setupCLI(signal,base);
     else if(id==='litellm')connection=await this.setupLite(signal,base);
+    else if(id==='omniroute')connection=await this.setupOmniRoute(signal,base);
      else if(id==='freeride')connection=await this.setupFreeRide(signal,{verifyGeneration:credentialsChanged||!freeRideVerified});
     else connection=await this.setupOllama(signal);
    if(id==='9router')await this.syncOpenCodeCatalogue(connection,signal);
    this.emit(id,'verify','Verifying the model catalogue and free route…');await this.verify(connection,signal);
-    await writeFile(path.join(this.folder(id),'installed.json'),JSON.stringify({version:id==='9router'?versions.nine:id==='litellm'?versions.litellm:id==='freeride'?versions.freeride:artifacts[id].version}),{mode:0o600});
+    await writeFile(path.join(this.folder(id),'installed.json'),JSON.stringify({version:id==='9router'?versions.nine:id==='litellm'?versions.litellm:id==='freeride'?versions.freeride:id==='omniroute'?versions.omniroute:artifacts[id].version}),{mode:0o600});
     connection.config.routerEngine=id==='ollama'?'local':selectedEngine;connection.config.managed=true;
     await writeFile(path.join(this.root,'last-provider.json'),JSON.stringify({provider:id,engine:selectedEngine}),{mode:0o600});
     await this.rememberRouter(id,selectedEngine);
-    this.connections.set(id,connection);this.emit(id,'ready',id==='ollama'?'Local coding model connected. No account or service quota.':id==='freeride'?'FreeRide connected. Automatic provider failover is ready.':'Connected through '+(id==='9router'?'9Router':id==='cliproxy'?'CLIProxyAPI':'LiteLLM')+'. Your free '+selectedEngine+' route is ready.');return connection;
+    this.connections.set(id,connection);this.emit(id,'ready',id==='ollama'?'Local coding model connected. No account or service quota.':id==='freeride'?'FreeRide connected. Automatic provider failover is ready.':'Connected through '+(id==='9router'?'9Router':id==='cliproxy'?'CLIProxyAPI':id==='omniroute'?'OmniRoute':'LiteLLM')+'. Your free '+selectedEngine+' route is ready.');return connection;
   }catch(e){if(this.children.get(id)!==hadChild)await this.stop(id);this.emit(id,signal.aborted?'cancelled':'error',signal.aborted?'Setup cancelled. You can resume with the same button.':e.message);throw e}
   finally{this.active=null}
  }
@@ -451,6 +459,50 @@ export class ProviderManager{
   this.emit(id,'start','Starting LiteLLM on localhost…');this.start(id,path.join(dir,'Scripts','litellm.exe'),['--config',configFile,'--host','127.0.0.1','--port',String(port)],{cwd:dir,env:{PYTHONNOUSERSITE:'1',PYTHONUTF8:'1',PYTHONIOENCODING:'utf-8',LITELLM_TELEMETRY:'False',DO_NOT_TRACK:'1',LITELLM_MODE:'PRODUCTION'}});
   const base='http://127.0.0.1:'+port+'/v1';await this.ready(base+'/models',id,signal,{Authorization:'Bearer '+key});return {config:{provider:'proxy',proxyPreset:id,proxyUrl:base,model:preferred,freeModels:routes.map(r=>r.id),routerFreeOnly:true},key};
  }
+  // OmniRoute (MIT, ~76k stars) is installed from npm with the same bundled Node
+  // runtime 9Router uses, then run headless on a free loopback port with its own
+  // private data directory. Its inference plane is only reachable with an API key,
+  // so MicoCode mints one and restricts it to free models before connecting: the
+  // key can then reach nothing else, whatever the workspace asks for.
+  async setupOmniRoute(signal,gatewayBase){
+   const id='omniroute',dir=this.versionFolder(id),node=path.join(this.runtime,'node.exe');
+   const bin=path.join(dir,'node_modules','omniroute','bin','omniroute.mjs');
+   await mkdir(dir,{recursive:true});
+   if(!await exists(bin)){
+    this.emit(id,'install','Installing OmniRoute '+versions.omniroute+' with MicoCode’s bundled Node runtime…');
+    await writeFile(path.join(dir,'package.json'),JSON.stringify({name:'mico-managed-omniroute',private:true,dependencies:{omniroute:versions.omniroute}}));
+    const npmDir=path.join(this.root,'runtime','node-'+versions.node),npmCLI=path.join(npmDir,'npm','bin','npm-cli.js');
+    if(!await exists(npmCLI))await extractVerifiedZip(path.join(this.runtime,'npm-runtime.zip'),npmDir,signal);
+    const npmConfig=path.join(this.root,'npmrc');await writeFile(npmConfig,'registry=https://registry.npmjs.org/\nignore-scripts=true\n');
+    await this.run(node,[npmCLI,'install','--ignore-scripts','--omit=dev','--no-audit','--no-fund','--registry=https://registry.npmjs.org/'],{cwd:dir,signal,timeout:1800000,env:{PATH:this.runtime+path.delimiter+process.env.PATH,npm_config_cache:path.join(this.root,'npm-cache'),npm_config_userconfig:npmConfig}});
+   }
+   const port=await freePort(),base='http://127.0.0.1:'+port,dataDir=path.join(this.folder(id),'data');
+   await mkdir(dataDir,{recursive:true});
+   this.emit(id,'start','Starting OmniRoute on localhost…');
+   this.start(id,node,[bin,'serve','--port',String(port),'--no-open','--no-tray','--no-recovery'],{cwd:dir,stdin:'pipe',env:{DATA_DIR:dataDir,OMNIROUTE_SERVER_HOST:'127.0.0.1',NODE_ENV:'production',PRICING_SYNC_ENABLED:'false'}});
+   await this.ready(base+'/v1/models',id,signal);
+   this.emit(id,'configure','Locking this router to free models only…');
+   const free=await this.omniRouteJson(base+'/api/free-models',signal);
+   const freeProviders=new Set((free?.models||[]).map(entry=>entry.provider));
+   const catalogue=await this.omniRouteJson(base+'/v1/models',signal);
+   const freeIds=omniRouteFreeIds(catalogue,freeProviders);
+   if(!freeIds.length)throw new Error('OmniRoute reported no free models yet. Retry setup in a moment.');
+   const created=await this.omniRouteJson(base+'/api/keys',signal,{method:'POST',body:{name:'MicoCode',scopes:['manage','self:usage'],allowedModels:freeIds,allowedCombos:['combo/auto/best-free','combo/auto/coding:free'],modelAccessMode:'restricted'}});
+   const clientKey=created?.key;
+   if(typeof clientKey!=='string'||!clientKey)throw new Error('OmniRoute did not return an access key. Retry setup.');
+   await this.ready(base+'/v1/models',id,signal,{Authorization:'Bearer '+clientKey});
+   const allowed=await this.omniRouteJson(base+'/v1/models',signal,{headers:{Authorization:'Bearer '+clientKey}});
+   const models=(allowed?.data||[]).map(model=>model.id);
+   if(!models.length)throw new Error('OmniRoute exposed no free models to its new key. Retry setup.');
+   const preferred=models.includes('auto/best-free')?'auto/best-free':models[0];
+   return {config:{provider:'proxy',proxyPreset:id,proxyUrl:base+'/v1',model:preferred,freeModels:models,routerFreeOnly:true},key:clientKey,dashboard:base+'/'};
+  }
+  async omniRouteJson(url,signal,{method='GET',body,headers={}}={}){
+   const r=await this.fetch(url,{method,headers:{...(body?{'Content-Type':'application/json'}:{}),...headers},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.any([signal,AbortSignal.timeout(60000)])});
+   const data=await r.json().catch(()=>null);
+   if(!r.ok)throw new Error('OmniRoute setup could not finish ('+r.status+'). Retry setup.');
+   return data;
+  }
  async setupOllama(signal){
   const id='ollama';await mkdir(this.folder(id),{recursive:true});let base=this.ollamaUpstream||'http://127.0.0.1:11434';let reusable=false;
   try{const r=await this.fetch(base+'/api/version',{signal:AbortSignal.any([signal,AbortSignal.timeout(2000)])});reusable=r.ok}catch{}
