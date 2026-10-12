@@ -19,6 +19,14 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.7.9 is a comfort and clarity pass over the whole workspace — calmer dialogs, a keyboard-first quick-action list, and a shortcut reference you can actually read:
+- **Calmer, fully legible dialogs**: The modal scrim is painted instead of blurred. A `backdrop-filter` on `::backdrop` makes Chromium composite the whole top layer through the filter, which washed out the dialog as well as the page behind it; the scrim now vignettes the workspace and leaves the dialog surface opaque, so a dialog looks the same on every graphics stack.
+- **Dialogs that start in the right place**: Opening a dialog focuses the first field you can actually type into — never Close, and never a read-only field — and closing it returns focus to the button that opened it.
+- **Keyboard-first quick actions (Ctrl K)**: Arrow keys, Home, and End move a highlight that scrolls into view, Enter runs it, and the rows carry shortcut chips, listbox semantics, and a real empty state. The list grew from 12 to 20+ actions with search keywords, covering views, panels, settings, checks, and the guide.
+- **More shortcuts, and a place to find them**: Ctrl B toggles the explorer, Ctrl J the console, Ctrl , opens settings, and Ctrl Shift M the Mico panel; Ctrl K now toggles quick actions instead of replacing whatever dialog is open. Help has a new Keyboard section listing all eleven keys.
+- **Announced, not just drawn**: The message stream, workspace console, preview console, and save state are live regions, the agent panel reports `aria-busy` while it works, and twenty icon-only controls across the rail, Source Control, Preview, and publishing gained accessible names instead of relying on a tooltip.
+- **Smaller fixes**: Changed-file rows in Source Control are real buttons and are reachable by keyboard; Escape closes the preview console drawer after element inspection is cancelled.
+
 Version 0.7.8 enhances router resilience and brings instant multi-provider cascade failover to 9Router and local proxies:
 - **Resilient 9Router & Proxy Cascade Fallback**: 9Router and custom OpenAI-compatible proxy presets now seamlessly cascade to all configured cloud providers (OpenCode, AIHubMix, Google AI Studio, NVIDIA NIM, OpenRouter) and local Ollama (`gemma4:gpu`) when an upstream router model hits quota exhaustion (503/402) or connection drops, preventing unexpected halts.
 - **Transparent Diagnostics & Mixed Content Detection**: Replaced generic CORS masking errors with detailed diagnostic messages that surface underlying system codes (`ECONNREFUSED`, network drops) while explicitly detecting HTTPS-to-HTTP mixed content blocks in web browsers and guiding users to the native desktop app or HTTPS proxies.

@@ -174,7 +174,7 @@ export function GitPanel({sourceFolder,onOpenFolder,onOpenPlugins,onOpenHistory,
         <div className="git-section-header">
           <GitBranch size={16} />
           <strong>Source Control</strong>
-          <button className="icon-button" title="Refresh" onClick={() => void refresh()} disabled={loading}>
+          <button className="icon-button" title="Refresh" aria-label="Refresh git status" onClick={() => void refresh()} disabled={loading}>
             <RefreshCw size={13} className={loading ? 'spin' : ''} />
           </button>
         </div>
@@ -206,13 +206,13 @@ export function GitPanel({sourceFolder,onOpenFolder,onOpenPlugins,onOpenHistory,
           )}
         </div>
         <div className="git-header-actions">
-          <button className="icon-button" title="Pull from remote" onClick={() => void handlePull()} disabled={pulling || loading}>
+          <button className="icon-button" title="Pull from remote" aria-label="Pull from remote" onClick={() => void handlePull()} disabled={pulling || loading}>
             <ArrowDown size={13} className={pulling ? 'spin' : ''} />
           </button>
-          <button className="icon-button" title="Push to remote" onClick={() => void handlePush()} disabled={pushing || loading}>
+          <button className="icon-button" title="Push to remote" aria-label="Push to remote" onClick={() => void handlePush()} disabled={pushing || loading}>
             <ArrowUp size={13} className={pushing ? 'spin' : ''} />
           </button>
-          <button className="icon-button" title="Refresh git status" onClick={() => void refresh()} disabled={loading}>
+          <button className="icon-button" title="Refresh git status" aria-label="Refresh git status" onClick={() => void refresh()} disabled={loading}>
             <RefreshCw size={13} className={loading ? 'spin' : ''} />
           </button>
         </div>
@@ -268,14 +268,15 @@ export function GitPanel({sourceFolder,onOpenFolder,onOpenPlugins,onOpenHistory,
                 <div className="git-group">
                   <span className="git-group-title">Staged Changes ({status.staged.length})</span>
                   {status.staged.map(s => (
-                    <div
+                    <button
                       key={s.file}
+                      type="button"
                       className="git-file-row"
                       onClick={() => onSelectFile?.(s.file)}
                     >
                       <span className="git-status-tag tag-staged">{s.status}</span>
                       <span className="git-file-path">{s.file}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -283,14 +284,15 @@ export function GitPanel({sourceFolder,onOpenFolder,onOpenPlugins,onOpenHistory,
                 <div className="git-group">
                   <span className="git-group-title">Modified ({status.modified.length})</span>
                   {status.modified.map(m => (
-                    <div
+                    <button
                       key={m.file}
+                      type="button"
                       className="git-file-row"
                       onClick={() => onSelectFile?.(m.file)}
                     >
                       <span className="git-status-tag tag-modified">{m.status}</span>
                       <span className="git-file-path">{m.file}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -298,14 +300,15 @@ export function GitPanel({sourceFolder,onOpenFolder,onOpenPlugins,onOpenHistory,
                 <div className="git-group">
                   <span className="git-group-title">Untracked ({status.untracked.length})</span>
                   {status.untracked.map(u => (
-                    <div
+                    <button
                       key={u}
+                      type="button"
                       className="git-file-row"
                       onClick={() => onSelectFile?.(u)}
                     >
                       <span className="git-status-tag tag-untracked">?</span>
                       <span className="git-file-path">{u}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}

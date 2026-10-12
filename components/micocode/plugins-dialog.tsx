@@ -153,6 +153,7 @@ export function PluginsDialog({project, onClose, onNotify, initialPlugin = 'gith
                       className="icon-button token-eye"
                       onClick={() => setShowToken(!showToken)}
                       title={showToken ? 'Hide token' : 'Show token'}
+                      aria-label={showToken ? 'Hide the token' : 'Show the token'}
                     >
                       {showToken ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
@@ -219,6 +220,7 @@ export function PluginsDialog({project, onClose, onNotify, initialPlugin = 'gith
                       className="icon-button token-eye"
                       onClick={() => setShowToken(!showToken)}
                       title={showToken ? 'Hide token' : 'Show token'}
+                      aria-label={showToken ? 'Hide the token' : 'Show the token'}
                     >
                       {showToken ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
@@ -260,6 +262,7 @@ export function PluginsDialog({project, onClose, onNotify, initialPlugin = 'gith
                       className="icon-button token-eye"
                       onClick={() => setShowToken(!showToken)}
                       title={showToken ? 'Hide token' : 'Show token'}
+                      aria-label={showToken ? 'Hide the token' : 'Show the token'}
                     >
                       {showToken ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>

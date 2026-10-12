@@ -231,13 +231,14 @@ export default function Preview({files,onLog,revision,pending,onTargetElement,on
 
  useEffect(()=>{
   const handleKey=(e:KeyboardEvent)=>{
-   if(e.key==='Escape'&&inspecting){
-    toggleInspect(false);
-   }
+   if(e.key!=='Escape')return;
+   if(inspecting){toggleInspect(false);return}
+   // The drawer is the innermost surface, so it closes before anything behind it.
+   if(consoleOpen)setConsoleOpen(false);
   };
   window.addEventListener('keydown',handleKey);
   return()=>window.removeEventListener('keydown',handleKey);
- },[inspecting]);
+ },[inspecting,consoleOpen]);
 
  useEffect(()=>{
   if(!toastNotice)return;
@@ -304,12 +305,14 @@ export default function Preview({files,onLog,revision,pending,onTargetElement,on
  return (
   <div className="preview">
    <div className="preview-toolbar">
-    <button className="icon-button" title="Reload preview" onClick={()=>{setReload(v=>v+1);setLogs([])}}>
+    <button className="icon-button" title="Reload preview" aria-label="Reload preview" onClick={()=>{setReload(v=>v+1);setLogs([])}}>
      <RotateCw size={14}/>
     </button>
     <button
      className={'icon-button preview-inspect-btn '+(inspecting?'selected active':'')}
      title={inspecting?'Inspecting element (Esc to cancel)':'Point-and-prompt: click any element to ask Mico'}
+     aria-label={inspecting?'Stop inspecting elements':'Point and prompt: click an element to ask Mico about it'}
+     aria-pressed={inspecting}
      onClick={()=>toggleInspect()}
     >
      <Crosshair size={14}/>
@@ -324,15 +327,17 @@ export default function Preview({files,onLog,revision,pending,onTargetElement,on
     <button
      className={'icon-button preview-console-btn '+(consoleOpen?'selected':'')}
      title={consoleOpen?'Hide preview console':'Show preview console'}
+     aria-label={consoleOpen?'Hide the preview console':`Show the preview console${errorCount>0?`, ${errorCount} error${errorCount===1?'':'s'}`:''}`}
+     aria-pressed={consoleOpen}
      onClick={()=>setConsoleOpen(v=>!v)}
     >
      <Terminal size={14}/>
      {errorCount>0?<span className="preview-badge error">{errorCount}</span>:logs.length>0?<span className="preview-badge">{logs.length}</span>:null}
     </button>
-    <button title="Desktop preview" className={'icon-button '+(!mobile?'selected':'')} onClick={()=>setMobile(false)}>
+    <button title="Desktop preview" aria-label="Desktop preview width" aria-pressed={!mobile} className={'icon-button '+(!mobile?'selected':'')} onClick={()=>setMobile(false)}>
      <Monitor size={15}/>
     </button>
-    <button title="Mobile preview" className={'icon-button '+(mobile?'selected':'')} onClick={()=>setMobile(true)}>
+    <button title="Mobile preview" aria-label="Mobile preview width" aria-pressed={mobile} className={'icon-button '+(mobile?'selected':'')} onClick={()=>setMobile(true)}>
      <Smartphone size={14}/>
     </button>
    </div>
@@ -358,15 +363,15 @@ export default function Preview({files,onLog,revision,pending,onTargetElement,on
        </button>
       </div>
       <div className="preview-console-actions">
-       <button className="icon-button" title="Clear console logs" onClick={()=>setLogs([])}>
+       <button className="icon-button" title="Clear console logs" aria-label="Clear preview console logs" onClick={()=>setLogs([])}>
         <Trash2 size={13}/>
        </button>
-       <button className="icon-button" title="Close console drawer" onClick={()=>setConsoleOpen(false)}>
+       <button className="icon-button" title="Close console drawer" aria-label="Close the preview console" onClick={()=>setConsoleOpen(false)}>
         <ChevronDown size={14}/>
        </button>
       </div>
      </div>
-     <div className="preview-console-body">
+     <div className="preview-console-body" role="log" aria-live="polite" aria-label="Preview console output">
       {filteredLogs.length===0?(
        <div className="preview-console-empty">
         {logFilter==='error'?'No preview errors captured.':'Console is clear. Preview output and errors will appear here.'}

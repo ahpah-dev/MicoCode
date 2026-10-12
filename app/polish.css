@@ -83,11 +83,10 @@ button:active:not(:disabled){transform:translateY(0) scale(.98)}
 .console-heading{background:var(--surface-panel)}
 
 /* Dialogs & menus */
-.modal-backdrop,.overlay,.modal-overlay{background:color-mix(in srgb,var(--surface-canvas) 55%,#000 20%);backdrop-filter:blur(8px) saturate(120%);animation:mico-fade .18s ease-out}
 .modal{border:1px solid var(--stroke-strong);border-radius:var(--r-xl);box-shadow:var(--shadow-pop);animation:mico-pop .26s var(--ease)}
 @keyframes mico-fade{from{opacity:0}to{opacity:1}}
 @keyframes mico-pop{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
-[role="menu"],[role="listbox"],.dropdown,.popover,.menu{border:1px solid var(--stroke-strong);box-shadow:var(--shadow-pop);backdrop-filter:blur(14px);animation:mico-pop .18s var(--ease)}
+[role="listbox"]{border:1px solid var(--stroke-strong);box-shadow:var(--shadow-pop);backdrop-filter:blur(14px);animation:mico-pop .18s var(--ease)}
 input,textarea,select{transition:border-color var(--motion-fast),box-shadow var(--motion-fast),background var(--motion-fast)}
 input:focus,textarea:focus,select:focus{border-color:color-mix(in srgb,var(--mint) 55%,transparent);box-shadow:0 0 0 3px color-mix(in srgb,var(--mint) 14%,transparent);outline:none}
 
@@ -165,4 +164,30 @@ body,.app-shell{background:
   background:linear-gradient(135deg,color-mix(in srgb,var(--mint) 14%,var(--surface-raised)),var(--surface-raised));
   border-color:color-mix(in srgb,var(--mint) 45%,var(--stroke-subtle));
 }
+
+/* ---- Round 3: quick actions as a real keyboard listbox ---- */
+.command-list{gap:2px;padding:6px;margin-top:18px;border:1px solid var(--stroke-subtle);border-radius:var(--r-md);background:var(--surface-panel);
+  /* The palette sits in the top layer and its panel is opaque, so a blur here
+     would cost a backdrop root and change nothing visible. */
+  backdrop-filter:none}
+.command-list button{border-radius:var(--r-sm);color:var(--ink-secondary);gap:10px;padding:12px 11px}
+.command-list button:hover:not(:disabled){background:var(--surface-hover);color:var(--ink-primary)}
+.command-list button.active:not(:disabled){background:var(--surface-selected);color:var(--ink-primary);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--mint) 28%,transparent)}
+.command-list button.active>svg{color:var(--mint)}
+.command-list button>kbd{margin-left:auto;font:inherit;font-size:10px;letter-spacing:.2px;padding:3px 8px;border-radius:999px;border:1px solid var(--stroke-subtle);background:var(--surface-raised);color:var(--ink-tertiary)}
+.command-list button.active>kbd{border-color:color-mix(in srgb,var(--mint) 30%,var(--stroke-subtle));color:var(--ink-secondary)}
+.command-empty{margin:0;padding:24px 12px;text-align:center;font-size:12px;line-height:1.7;color:var(--ink-tertiary)}
+
+/* Help: the shortcut list reads as a reference, not as prose. */
+.help-keys{margin-top:20px}
+.help-keys h3{font-size:15px;letter-spacing:-.3px;margin:8px 0 12px}
+.help-keys ul{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:7px 18px;list-style:none;margin:0;padding:0}
+.help-keys li{display:flex;align-items:baseline;gap:11px;padding:7px 10px;border-radius:var(--r-sm);background:var(--surface-panel);border:1px solid var(--stroke-subtle)}
+.help-keys kbd{flex:none;min-width:74px;text-align:center;font:inherit;font-size:10px;font-weight:650;letter-spacing:.2px;padding:4px 9px;border-radius:7px;border:1px solid var(--stroke-subtle);background:var(--surface-raised);color:var(--ink-secondary)}
+.help-keys li>span{font-size:11.5px;line-height:1.5;color:var(--ink-secondary)}
+
+/* Changed-file rows are buttons so they are reachable by keyboard; they still
+   read as flat rows rather than as chrome. */
+button.git-file-row{width:100%;min-height:0;text-align:left;border:0;border-radius:0;background:transparent;font:inherit;font-size:11px;letter-spacing:inherit}
+button.git-file-row:hover:not(:disabled){background:var(--surface-hover);color:var(--ink-primary)}
 

@@ -274,7 +274,12 @@ input:focus,textarea:focus,select:focus{border-color:color-mix(in srgb,var(--min
 
 /* Modals, settings, connections and review share one premium surface. */
 .modal{border-radius:20px;padding:28px;background:linear-gradient(155deg,var(--surface-raised),var(--surface-panel) 62%);border-color:var(--stroke-strong)}
-.modal::backdrop{background:color-mix(in srgb,var(--surface-canvas) 77%,transparent);backdrop-filter:blur(10px)}
+/* The scrim is painted, never blurred. A backdrop-filter here makes Chromium
+   composite the whole top layer through the filter, which washes out the dialog
+   itself as well as the page behind it, so the dialog's legibility would depend
+   on the graphics stack. A vignetted scrim dims the workspace, keeps the dialog
+   fully opaque, and renders identically everywhere. */
+.modal::backdrop{background:radial-gradient(125% 95% at 50% 42%,color-mix(in srgb,var(--surface-canvas) 58%,transparent),color-mix(in srgb,var(--surface-canvas) 90%,transparent))}
 .modal-heading{position:sticky;top:-28px;z-index:2;padding:22px 0 16px;margin:-28px 0 20px;background:linear-gradient(180deg,var(--surface-raised) 78%,transparent)}
 .modal h2{font-size:25px;letter-spacing:-.9px}
 .appearance-settings{padding-top:4px}

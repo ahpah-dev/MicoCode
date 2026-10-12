@@ -95,6 +95,45 @@ export function clampPanelWidth(value: unknown, min: number, max: number): numbe
   return Math.min(max, Math.max(min, Math.round(n)));
 }
 
+/** Wrap-around movement for a single-column list. A negative index means
+ *  "nothing highlighted yet", so the first press lands on an end of the list.
+ *  Returns -1 when there is nothing to highlight. */
+export function moveSelection(index: number, delta: number, count: number): number {
+  if (count <= 0) return -1;
+  const start = index < 0 || index >= count ? (delta > 0 ? -1 : 0) : index;
+  return (start + delta + count) % count;
+}
+
+export type PaletteKeyResult = {type: 'move'; index: number} | {type: 'run'} | null;
+
+/** Map a key pressed inside the quick-actions search field onto a list action.
+ *  Escape is intentionally absent: the dialog itself already handles it. */
+export function paletteKeyAction(key: string, index: number, count: number): PaletteKeyResult {
+  if (key === 'ArrowDown') return {type: 'move', index: moveSelection(index, 1, count)};
+  if (key === 'ArrowUp') return {type: 'move', index: moveSelection(index, -1, count)};
+  if (key === 'Home') return {type: 'move', index: count ? 0 : -1};
+  if (key === 'End') return {type: 'move', index: count - 1};
+  if (key === 'Enter') return count ? {type: 'run'} : null;
+  return null;
+}
+
+/** The keys the workspace implements, listed in Help so they can be discovered
+ *  rather than guessed. Kept next to the prefs so the guide and the handler
+ *  cannot drift apart silently. */
+export const workspaceShortcuts: {keys: string; label: string}[] = [
+  {keys: 'Ctrl K', label: 'Quick actions'},
+  {keys: 'Ctrl O', label: 'Open a folder'},
+  {keys: 'Ctrl S', label: 'Save the workspace locally'},
+  {keys: 'Ctrl B', label: 'Show or hide the file explorer'},
+  {keys: 'Ctrl J', label: 'Show or hide the console'},
+  {keys: 'Ctrl ⇧ M', label: 'Show or hide the Mico panel'},
+  {keys: 'Ctrl ,', label: 'Appearance and settings'},
+  {keys: '/', label: 'Jump to the message box'},
+  {keys: '↵', label: 'Send a message'},
+  {keys: '⇧ ↵', label: 'Add a line instead of sending'},
+  {keys: 'Esc', label: 'Stop a run that is in progress'},
+];
+
 /** Saved panel sizes survive only when they are usable numbers. */
 export function normalizePanelWidths(value: unknown): {sidebarWidth: number | null; agentWidth: number | null; consoleHeight: number | null} {
   const v = (value ?? {}) as {sidebarWidth?: unknown; agentWidth?: unknown; consoleHeight?: unknown};

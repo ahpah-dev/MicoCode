@@ -10,19 +10,27 @@ if (!token) {
   process.exit(1);
 }
 
-const tag = 'v0.7.8';
-const name = 'MicoCode 0.7.8 — 9Router Cascade Fallback, Live Console & Inspector';
+const tag = 'v0.7.9';
+const name = 'MicoCode 0.7.9 — Calmer Dialogs & Keyboard-First Quick Actions';
 const checksums = fs.readFileSync('release/SHA256SUMS.txt', 'utf8').trim();
 
-const body = `## MicoCode v0.7.8 — 9Router Cascade Fallback, Live Preview Console, Element Inspector & Google AI Studio
+const body = `## MicoCode v0.7.9 — Calmer Dialogs, Keyboard-First Quick Actions & an Announced Workspace
 
-### What's New in v0.7.8
-- **Resilient 9Router & Proxy Cascade Fallback**: 9Router, LiteLLM, CLIProxy, and custom OpenAI-compatible proxies now seamlessly cascade across all configured cloud providers (OpenCode Zen → AIHubMix → Google AI Studio → NVIDIA NIM → OpenRouter) and local Ollama (\`gemma4:gpu\`) when upstream credits or quotas are exhausted or connection drops occur.
-- **Enhanced Reachability Diagnostics & Mixed Content Detection**: Transparent diagnostic reporting that surfaces underlying system error codes (\`ECONNREFUSED\`, network drops) and explicitly alerts if a web browser on HTTPS is blocked from connecting to local HTTP routers.
-- **Recoverable Router Error Recognition**: Router reachability and connection errors now trigger automatic multi-provider failover instead of halting execution.
-- **Point-and-Prompt Visual Element Inspector**: Hover over any element in the live preview to inspect its bounding box, CSS classes, and dimensions, then click to prefill Mico's prompt with full element context.
-- **Live Preview Console & Error HUD**: Real-time console logs, error counter badge, and one-click "Fix with Mico" button for instant diagnosis and repair.
-- **First-Class Provider Integrations**: Google AI Studio (Gemini 2.5 Pro & Flash, Gemma) and AIHubMix multi-provider routing (Claude, GPT-4o, DeepSeek).
+A comfort and clarity pass over the whole workspace. Nothing about how MicoCode
+talks to models changed; this release is about how the app feels to use.
+
+### What's New in v0.7.9
+- **Calmer, fully legible dialogs**: The modal scrim is painted instead of blurred. A \`backdrop-filter\` on \`::backdrop\` makes Chromium composite the entire top layer through the filter, which washed out the dialog itself as well as the page behind it, so how readable a dialog was depended on the graphics stack. The scrim now vignettes the workspace and the dialog surface stays opaque.
+- **Dialogs that start in the right place**: Opening a dialog focuses the first field you can actually type into — never Close, and never a read-only field — and closing it returns focus to the button that opened it.
+- **Keyboard-first quick actions (Ctrl K)**: Arrow keys, Home, and End move a highlight that scrolls into view, Enter runs it, and the rows carry shortcut chips, listbox semantics (\`role="listbox"\`, \`aria-activedescendant\`), and a real empty state. The list grew from 12 to more than 20 actions with search keywords, covering views, panels, settings, project checks, and the guide.
+- **More shortcuts, and a place to find them**: \`Ctrl B\` toggles the explorer, \`Ctrl J\` the console, \`Ctrl ,\` opens settings, and \`Ctrl Shift M\` the Mico panel. \`Ctrl K\` now toggles quick actions instead of silently replacing whatever dialog is open. Help has a new Keyboard section listing all eleven keys.
+- **Announced, not just drawn**: The message stream, workspace console, preview console, and save state are live regions, the agent panel reports \`aria-busy\` while it works, and twenty icon-only controls across the activity rail, Source Control, Preview, and publishing gained accessible names instead of relying on a tooltip.
+- **Smaller fixes**: Changed-file rows in Source Control are real buttons and are reachable by keyboard; Escape closes the preview console drawer after element inspection is cancelled.
+
+### Verification
+- 171 tests pass with no skips (9 new), including checks that fail the build if a shortcut documented in Help stops being handled, if a blur returns to the dialog scrim, if a changed-file row goes back to being a click-only \`div\`, or if a tooltip-only control loses its accessible name.
+- TypeScript check clean; production web build clean; Windows installers packaged fresh from this commit and their SHA-256 digests recorded below.
+- The new dialog scrim, the quick-action listbox, the keyboard reference in Help, and Source Control were each rendered in Electron and inspected, not assumed.
 
 ### Checksums
 \`\`\`
@@ -73,8 +81,8 @@ async function publish() {
 
   // Upload assets
   const filesToUpload = [
-    {path: 'release/MicoCode-Setup-0.7.8-x64.exe', name: 'MicoCode-Setup-0.7.8-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
-    {path: 'release/MicoCode-Portable-0.7.8-x64.exe', name: 'MicoCode-Portable-0.7.8-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Setup-0.7.9-x64.exe', name: 'MicoCode-Setup-0.7.9-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Portable-0.7.9-x64.exe', name: 'MicoCode-Portable-0.7.9-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
     {path: 'release/SHA256SUMS.txt', name: 'SHA256SUMS.txt', contentType: 'text/plain'}
   ];
 
