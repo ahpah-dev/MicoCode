@@ -11,10 +11,10 @@ if (!token) {
 }
 
 const tag = 'v0.8.4';
-const name = 'MicoCode 0.8.4 â€” The Right Router Comes Back';
+const name = 'MicoCode 0.8.4 — The Right Router Comes Back';
 const checksums = fs.readFileSync('release/SHA256SUMS.txt', 'utf8').trim();
 
-const body = `## MicoCode v0.8.4 â€” The Right Router Comes Back
+const body = `## MicoCode v0.8.4 — The Right Router Comes Back
 
 ### MicoCode was restoring the wrong router
 The workspace had saved "Octopus is my router" while the manager's own record of the last
@@ -22,7 +22,7 @@ router used said CLIProxyAPI. On launch only the last-used one was restored, so 
 never started.
 
 Worse, a managed router is meant to be reached through MicoCode's own server. With no
-connection for Octopus, the workspace fell back to dialling its loopback port directly â€” which
+connection for Octopus, the workspace fell back to dialling its loopback port directly — which
 is cross-origin, has no CORS headers, and therefore surfaced as **"Could not reach the router.
 Start it, use its final API URL without redirects, allow this site in CORS, and allow
 local-network access when your browser asks."** A stopped router was being reported as a
@@ -40,8 +40,8 @@ It also comes back on its own: every router you have installed is brought up at 
 including ones installed by an earlier build that never recorded them.
 
 ### Verification
-- 187 tests pass with no skips. A new test builds the exact mismatch â€” workspace selection
-  versus last-used record, both installed â€” and asserts the selection wins, that the last-used
+- 187 tests pass with no skips. A new test builds the exact mismatch — workspace selection
+  versus last-used record, both installed — and asserts the selection wins, that the last-used
   router is used when nothing is selected, and that an uninstalled selection falls back rather
   than failing.
 - TypeScript check clean; production web build clean; packaged app smoke-tested, and the

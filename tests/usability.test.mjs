@@ -142,6 +142,16 @@ test('the smoke gate counts providers from the managed list, not a literal', () 
   assert.ok(main.includes('managedProviders'), 'the list must be the one the manager actually reports');
 });
 
+// Re-encoding damage is invisible in a terminal but ships verbatim: a PowerShell
+// round-trip once turned an em-dash into "â€”" in the published release name.
+test('user-facing text carries no re-encoding damage', () => {
+  const damaged = /[\u00C2\u00C3\u00E2](?![\x00-\x7F])/;
+  const files = ['scripts/publish-release.mjs', 'README.md', 'website/index.html', 'package.json', 'components/micocode/connections.tsx', 'lib/mico/providers.mjs', 'lib/mico/fallback.ts', 'desktop/provider-manager.mjs'];
+  for (const file of files) {
+    assert.ok(!damaged.test(source(file)), file + ' contains text damaged by a re-encoding round-trip');
+  }
+});
+
 test('managed routers expose their dashboard and its sign-in credential', () => {
   const connections = source('components/micocode/connections.tsx');
   for (const id of ['octopus']) {
