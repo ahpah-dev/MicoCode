@@ -237,6 +237,32 @@ export default function Workspace(){
     onDoubleClick:()=>{set(null);notify((kind==='sidebar'?'Explorer':kind==='agent'?'Mico panel':'Console')+' '+(kind==='console'?'height':'width')+' reset to default.')},
     onKeyDown:(e:React.KeyboardEvent<HTMLDivElement>)=>{const up=e.key==='ArrowUp'||e.key==='ArrowRight',left=e.key==='ArrowLeft'||e.key==='ArrowDown';if(!up&&!left)return;e.preventDefault();set(clampPanelWidth((size??def)+(up?12:-12)*outward,min,max))}};
   }
+  function handleTargetElement(ctx:{selector:string;html:string;text:string;tagName:string}){
+   setAgentPanel(true);
+   const promptText=`Update <${ctx.tagName}> (${ctx.selector})${ctx.text?` "${ctx.text}"`:''}: `;
+   setPrompt(promptText);
+   notify(`Targeted <${ctx.tagName}> in Mico prompt`);
+   setTimeout(()=>{
+    promptRef.current?.focus();
+    if(promptRef.current){
+     promptRef.current.selectionStart=promptRef.current.value.length;
+     promptRef.current.selectionEnd=promptRef.current.value.length;
+    }
+   },60);
+  }
+  function handleFixError(errorText:string,entryFile:string){
+   setAgentPanel(true);
+   const promptText=`Fix this preview runtime error in ${entryFile||'project'}:\n\`\`\`\n${errorText}\n\`\`\`\n`;
+   setPrompt(promptText);
+   notify('Preview error context sent to Mico');
+   setTimeout(()=>{
+    promptRef.current?.focus();
+    if(promptRef.current){
+     promptRef.current.selectionStart=promptRef.current.value.length;
+     promptRef.current.selectionEnd=promptRef.current.value.length;
+    }
+   },60);
+  }
  if(!loaded||!p)return <main className="boot"><Logo size={45}/><span>Opening your workspace…</span></main>;
  return <main className="app-shell">
     <header className="topbar"><button className="brand" onClick={()=>setView('welcome')} aria-label="MicoCode home"><Logo size={29}/><span>Mico<span className="brand-light">Code</span></span><span className="beta">BETA</span></button><span className="header-divider"/><button className="project-switch" disabled={busy} onClick={()=>setDialog('projects')}><span className="project-avatar">{p.name[0]}</span><span>{p.name}</span><ChevronDown size={12}/></button><nav className="top-nav"><button className={view==='welcome'?'active':''} onClick={()=>setView('welcome')}>Workspace</button><button onClick={()=>setDialog('connections')}>Models</button><button onClick={()=>setDialog('plugins')}>Plugins</button><a href="/" title="MicoCode website">About <ArrowUpRight size={11}/></a></nav><div className="header-actions"><button className={"header-connect "+(ready?"ready":"")} onClick={()=>setDialog("connections")} title={ready?`Connected: ${providerLabel}`:'Connect an AI model'}><span className={"status-dot "+(ready?"ready":"")}/><span>{ready?providerLabel:"Connect model"}</span><ChevronDown size={12}/></button>{!ready&&<button className="secondary auto-config-btn" disabled={autoScanning} onClick={()=>void autoConfigure(false)} title="Zero-Config: auto-detect local Ollama, 9Router, FreeRide"><Sparkles size={13} className={autoScanning?'spin':''}/><span>{autoScanning?'Detecting…':'Auto-Configure'}</span></button>}<button className="command-trigger" onClick={()=>{setCommandQuery('');setDialog('commands')}}><Search size={13}/><span>Quick actions</span><kbd>Ctrl K</kbd></button><button className="secondary publish-btn" onClick={()=>setDialog('plugins')} title="Publish to GitHub, Vercel, Netlify"><CloudUpload size={14}/><span>Publish</span></button><button className="secondary export" onClick={exportProject}><ArrowDownToLine size={14}/><span>Export</span></button><button className="theme-trigger icon-button" onClick={()=>setDialog('settings')} aria-label="Appearance and settings" title="Change theme"><Palette size={18}/></button><button className="avatar" onClick={()=>setDialog('settings')} title="Workspace settings">M</button></div></header>
@@ -266,7 +292,7 @@ export default function Workspace(){
         {changePaths.length>0&&!p.sourceFolder&&<div className="editor-notice">Review or discard the agent’s proposed changes to continue editing.</div>}
         {changePaths.length>0&&p.sourceFolder&&<div className="folder-edit-notice">Edits are staged. Review and apply to write them to {p.name}.</div>}
        </div>}
-       {(view==='preview'||view==='split')&&<Preview files={effectiveFiles} onLog={log} revision={revision} pending={changePaths.length>0}/>}
+       {(view==='preview'||view==='split')&&<Preview files={effectiveFiles} onLog={log} revision={revision} pending={changePaths.length>0} onTargetElement={handleTargetElement} onFixError={handleFixError}/>}
       </div>}
      </div>
     <div className={'console-panel '+(consoleOpen?'expanded':'')} style={consoleOpen&&consoleHeight?{height:consoleHeight}:undefined}>{consoleOpen&&<div {...resizeHandle('console',consoleHeight)}/>}<div className="console-heading"><button onClick={()=>setConsoleOpen(v=>!v)}><Terminal size={13}/><span>Console</span><ChevronDown size={12} className={consoleOpen?'rotate':''}/></button><span className="console-caption">{consoleOpen?'Workspace commands & preview output':'HTML · CSS · JavaScript'}</span><button className="icon-button" title="Run project checks" onClick={()=>{setConsoleOpen(true);const issues=checkProject(effectiveFiles);log(issues.length?issues.join('\n'):'Passed: JSON syntax and local HTML resource checks. Runtime behavior can be tested in Preview.')}}><CheckCheck size={14}/></button></div>{consoleOpen&&<><div className="console-output">{logs.map((s,i)=><pre key={i} className={s.startsWith('[error]')?'error-text':''}>{s}</pre>)}</div><form onSubmit={runConsole}><span>›</span><input aria-label="Workspace console command" value={consoleInput} onChange={e=>setConsoleInput(e.target.value)} placeholder="Type help for workspace commands…" autoComplete="off" spellCheck={false}/></form></>}</div>

@@ -19,6 +19,11 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.7.7 introduces the **Point-and-Prompt Element Inspector** and **Integrated Live Preview Console & Error HUD**, alongside cleaner and more professional workspace styling:
+- **"Point-and-Prompt" Visual Element Inspector**: Toggle inspect mode in the Preview toolbar to hover over any DOM element in the sandboxed preview. Element bounding boxes, tag names, CSS classes, and dimensions are highlighted in real time. Clicking any element automatically opens the Mico Agent panel, prefills the prompt with target element context (e.g. `Update <button.primary> ("Get Started"): `), and focuses the composer.
+- **Integrated Live Preview Console & Error HUD**: Real-time console error counter badge in the preview toolbar, collapsible log drawer with filter tabs (`All`, `Errors`, `Logs`), and a one-click **"Fix with Mico"** button on runtime errors that prefills Mico with the exact error trace and entry file context for instant diagnosis and repair.
+- **Cleaner, Professional Visual Design**: Refined preview toolbar, streamlined address bar, polished badges, smooth element inspection overlays, and subtle backdrop-blur banners across all themes.
+
 Version 0.7.6 adds first-class AIHubMix multi-provider integration (Claude, GPT-4o, Gemini 2.5, DeepSeek, Qwen) and instant automatic cascade fallback across configured providers in sequence (OpenCode → AIHubMix → Google AI Studio → NVIDIA NIM → OpenRouter → Ollama). When any provider hits rate limits (429), quota exhaustion (402), or server errors, MicoCode seamlessly cascades to the next available route with real-time activity notifications.
 
 Version 0.7.5 adds first-class Google AI Studio API integration (`https://generativelanguage.googleapis.com/v1beta/openai`) with live Gemini 2.5 Pro, Gemini 2.5 Flash, and Gemma model discovery, automatic `models/` prefix normalization, 1M-token context window metadata, rate-limit header forwarding, and redacted key diagnostics.
