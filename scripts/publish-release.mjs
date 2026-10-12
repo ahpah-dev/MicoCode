@@ -10,40 +10,37 @@ if (!token) {
   process.exit(1);
 }
 
-const tag = 'v0.8.4';
-const name = 'MicoCode 0.8.4 — The Right Router Comes Back';
+const tag = 'v0.8.5';
+const name = 'MicoCode 0.8.5 — Octopus Removed';
 const checksums = fs.readFileSync('release/SHA256SUMS.txt', 'utf8').trim();
 
-const body = `## MicoCode v0.8.4 — The Right Router Comes Back
+const body = `## MicoCode v0.8.5 — Octopus Removed
 
-### MicoCode was restoring the wrong router
-The workspace had saved "Octopus is my router" while the manager's own record of the last
-router used said CLIProxyAPI. On launch only the last-used one was restored, so Octopus was
-never started.
+### Octopus is gone
+It was the least-used project of everything considered — 2,702 GitHub stars against
+LiteLLM's 61,082 — and it never ran reliably here. Rather than leave a router in the
+list that answers with errors, it has been removed outright: installer, pinned
+artifact, admin-API client, dashboard entry, card and settings.
 
-Worse, a managed router is meant to be reached through MicoCode's own server. With no
-connection for Octopus, the workspace fell back to dialling its loopback port directly — which
-is cross-origin, has no CORS headers, and therefore surfaced as **"Could not reach the router.
-Start it, use its final API URL without redirects, allow this site in CORS, and allow
-local-network access when your browser asks."** A stopped router was being reported as a
-browser-permissions problem, which sends you looking in entirely the wrong place.
+Its 51 MB install is left behind in \`%APPDATA%\\MicoCode\\providers\\octopus\`. Nothing
+uses it now, so it can be deleted.
 
-MicoCode now restores **the router the workspace actually has selected**, falling back to the
-last-used one only when that selection is not installed.
+### The rest of the list is unchanged
+**9Router, LiteLLM, CLIProxyAPI and FreeRide** still install, start and key themselves,
+and **Ollama** still runs models on your own machine. The accepted-installer test now
+asserts \`octopus\` is *rejected*, so it cannot return by accident.
 
-### A stopped managed router now says so
-Dialling a managed router directly is refused outright, so the message is:
-
-> Your Octopus router is not running. Open Models and click Set up & connect to start it.
-
-It also comes back on its own: every router you have installed is brought up at launch,
-including ones installed by an earlier build that never recorded them.
+### What I evaluated as its replacement
+**OmniRoute** (\`diegosouzapw/OmniRoute\`, MIT, **75,693 stars**, actively maintained)
+installs over npm with the Node runtime MicoCode already bundles, and
+\`omniroute serve --daemon --port N --no-open\` starts headlessly and binds loopback.
+**It is not in this release** because I could not get past its own authentication:
+\`/v1/models\` answers \`Authentication required\` with no key, the same with
+\`REQUIRE_API_KEY=false\`, and \`keys list\` exposes only upstream provider keys — no client
+key. Shipping a router I cannot drive would repeat the failures this release cleans up.
 
 ### Verification
-- 187 tests pass with no skips. A new test builds the exact mismatch — workspace selection
-  versus last-used record, both installed — and asserts the selection wins, that the last-used
-  router is used when nothing is selected, and that an uninstalled selection falls back rather
-  than failing.
+- 180 tests pass with no skips. No Octopus reference remains in any shipping file.
 - TypeScript check clean; production web build clean; packaged app smoke-tested, and the
   installers below were built fresh from this commit.
 
@@ -96,8 +93,8 @@ async function publish() {
 
   // Upload assets
   const filesToUpload = [
-    {path: 'release/MicoCode-Setup-0.8.4-x64.exe', name: 'MicoCode-Setup-0.8.4-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
-    {path: 'release/MicoCode-Portable-0.8.4-x64.exe', name: 'MicoCode-Portable-0.8.4-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Setup-0.8.5-x64.exe', name: 'MicoCode-Setup-0.8.5-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Portable-0.8.5-x64.exe', name: 'MicoCode-Portable-0.8.5-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
     {path: 'release/SHA256SUMS.txt', name: 'SHA256SUMS.txt', contentType: 'text/plain'}
   ];
 

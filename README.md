@@ -19,6 +19,11 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.8.5 removes Octopus and makes the remaining routers the ones the app actually starts:
+- **Octopus is gone.** It was the least-used project in the list by a wide margin and never worked reliably here, so its installer, pinned artifact, admin-API client, dashboard entry and card have all been removed rather than left in place. Its 51 MB install in `%APPDATA%\MicoCode\providers\octopus` is no longer used and can be deleted.
+- **The rest of the list is unchanged and still self-configuring**: 9Router, LiteLLM, CLIProxyAPI and FreeRide install, start and key themselves, and Ollama remains for on-device models.
+- **Restoring still picks the router you have selected**, not merely the last one used, and every router you have installed is brought back at launch.
+
 Version 0.8.4 fixes why a chosen router could still come back as “Could not reach the router”:
 - **MicoCode restored the wrong router.** The workspace saved “Octopus is my router” while the manager’s own record of the last router used said CLIProxyAPI. On start it restored only the last-used one, so Octopus was never started — and because a managed router must be reached through MicoCode’s own server, the workspace fell back to dialling Octopus’s loopback port directly. That is cross-origin, so the browser reported a **CORS** failure instead of a stopped router, which sent you looking in entirely the wrong place. MicoCode now restores the router the workspace actually has selected, falling back to the last-used one only when that selection is not installed.
 - **A stopped managed router now says so.** Dialling it directly is refused outright, so the message is “Your Octopus router is not running. Open Models and click Set up & connect to start it.” instead of a CORS hint about tunnels and browser permissions.

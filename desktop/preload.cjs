@@ -9,7 +9,6 @@ if(process.isMainFrame)contextBridge.exposeInMainWorld('micoDesktop',Object.free
  refreshModels:()=>ipcRenderer.invoke('mico:refresh-models'),
  restoreConnection:(provider,engine)=>ipcRenderer.invoke('mico:restore',provider,engine),
  openDashboard:provider=>ipcRenderer.invoke('mico:dashboard',provider),
- copyDashboardKey:provider=>ipcRenderer.invoke('mico:dashboard-key',provider),
  stopProvider:provider=>ipcRenderer.invoke('mico:stop',provider),
  appearance:theme=>ipcRenderer.invoke('mico:appearance',theme),
  openFolder:()=>ipcRenderer.invoke('mico:open-folder'),

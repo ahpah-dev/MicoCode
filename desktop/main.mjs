@@ -1,4 +1,4 @@
-import {app,BrowserWindow,clipboard,ipcMain,nativeTheme,safeStorage,shell,session,dialog} from 'electron';
+import {app,BrowserWindow,ipcMain,nativeTheme,safeStorage,shell,session,dialog} from 'electron';
 import {readFile,writeFile,mkdir,rename,realpath} from 'node:fs/promises';
 import {randomBytes} from 'node:crypto';
 import path from 'node:path';
@@ -109,18 +109,11 @@ async function start(){
   });
  ipcMain.handle('mico:dashboard',async(event,provider)=>{
   validateSender(event);assertProvider(provider);const connection=manager.connections.get(provider);
-  const title={octopus:'Octopus',cliproxy:'CLIProxyAPI',litellm:'LiteLLM',freeride:'FreeRide',ollama:'Ollama'}[provider]||'9Router';
+  const title={cliproxy:'CLIProxyAPI',litellm:'LiteLLM',freeride:'FreeRide',ollama:'Ollama'}[provider]||'9Router';
   if(!connection?.dashboard)throw new Error('Set up '+title+' before opening its dashboard.');
   const url=new URL(connection.dashboard);const dashboardSession=session.fromPartition('persist:micocode-dashboard-'+provider);
   const cookie=manager.cookies.get(provider)?.split('=');if(cookie?.length===2)await dashboardSession.cookies.set({url:url.origin,name:cookie[0],value:cookie[1],httpOnly:true,sameSite:'lax',path:'/'});
   const win=new BrowserWindow({width:1200,height:800,title:title+' · MicoCode',autoHideMenuBar:true,webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,session:dashboardSession}});dashboards.add(win);win.on('closed',()=>dashboards.delete(win));secureWindow(win,url.origin);await win.loadURL(url.href);
- });
- // Copies the router's own dashboard key in the main process, so the credential
- // never has to travel back into the renderer.
- ipcMain.handle('mico:dashboard-key',async(event,provider)=>{
-  validateSender(event);assertProvider(provider);const key=await manager.dashboardKey(provider);
-  if(!key)throw new Error('This router signs in without a separate credential.');
-  clipboard.writeText(key);return true;
  });
  const errors=[];window.webContents.on('console-message',details=>{if(details.level==='error')errors.push(details.message.slice(0,220))});window.webContents.on('render-process-gone',()=>errors.push('Renderer exited unexpectedly.'));
  await window.loadURL(server.origin+'/app/');

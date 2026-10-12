@@ -5,65 +5,18 @@ import os from 'node:os';
 import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import JSZip from 'jszip';
 import {archivePath,extractVerifiedZip,downloadVerified} from '../desktop/install.mjs';
-import {assertProvider,assertEngine,cliProxyConfig,liteLLMConfig,octopusConfig,octopusChannelPayload,octopusGroupPayload,octopusAccessKeyPayload,managedProviders,ProviderManager} from '../desktop/provider-manager.mjs';
+import {assertProvider,assertEngine,cliProxyConfig,liteLLMConfig,managedProviders,ProviderManager} from '../desktop/provider-manager.mjs';
 import {artifacts,versions} from '../desktop/artifacts.mjs';
 import {isLocalRequest,createLocalServer,managedClientConnection} from '../desktop/server.mjs';
 import {applyManagedConnection,discoverProxy,listProxyModels,managedPresets,proxyPresets} from '../lib/mico/providers.mjs';
 import {actionSchema} from '../lib/mico/action-schema.mjs';
 
-test('provider automation only accepts supported installer IDs',()=>{for(const id of ['9router','cliproxy','litellm','octopus','freeride','ollama'])assert.equal(assertProvider(id),id);for(const id of ['../ollama','custom','powershell','9router;whoami','gptload',null])assert.throws(()=>assertProvider(id))});
-
-test('Octopus ships as a pinned, checksum-verified managed router',()=>{
- assert.ok(managedProviders.includes('octopus'),'Octopus must be a managed provider');
- assert.ok(proxyPresets.some(p=>p.id==='octopus'&&!p.hidden),'Octopus must be offered in the router list');
- const a=artifacts.octopus;
- assert.equal(versions.octopus,a.version,'the artifact and the version table must agree');
- assert.match(a.url,/^https:\/\/github\.com\/bestruirui\/octopus\/releases\/download\/v[\w.-]+\/octopus-windows-amd64\.zip$/);
- assert.ok(a.url.includes('v'+a.version),'the pinned URL must carry the pinned version, never "latest"');
- assert.match(a.sha256,/^[a-f0-9]{64}$/,'the package needs a published SHA-256 digest');
- assert.ok(a.maxBytes>20000000&&a.maxBytes<60000000,'the download cap must fit the real 21 MB zip');
-});
-
-test('the Octopus channel payload registers models, credentials and grants',()=>{
- const payload=octopusChannelPayload({name:'MicoCode free routes',baseUrl:'http://127.0.0.1:19286/managed/local/v1',gatewayKey:'sk-mico-gateway',models:['free-code','oc/second']});
- assert.equal(payload.id,0,'a new channel lets the router assign its id');
- assert.equal(payload.name,'MicoCode free routes');
- assert.equal(payload.dialect,'generic');
- assert.equal(payload.enabled,true);
- assert.equal(payload.base_url,'http://127.0.0.1:19286/managed/local/v1');
- assert.equal(payload.openai_chat_completion_path,'/chat/completions');
- assert.deepEqual(payload.keys,[{name:'mico-gateway',key:'sk-mico-gateway',enabled:true}]);
- assert.deepEqual(payload.models,['free-code','oc/second']);
- // Every model needs a grant naming the same credential, or the router rejects the channel.
- assert.deepEqual(payload.grants,[
-  {model_name:'free-code',key_name:'mico-gateway',protocols:6},
-  {model_name:'oc/second',key_name:'mico-gateway',protocols:6},
- ]);
- assert.deepEqual(payload.custom_header,[]);
-});
-
-test('the Octopus group takes the channel grants as its members',()=>{
- const payload=octopusGroupPayload({name:'mico-free',grants:[{id:7},{id:9}]});
- assert.equal(payload.name,'mico-free');
- assert.equal(payload.mode,'failover','several free routes should fail over rather than round-robin');
- assert.deepEqual(payload.items,[{channel_grant_id:7},{channel_grant_id:9}]);
-});
-
-test('MicoCode chooses the Octopus key and scopes it to its own group',()=>{
- const payload=octopusAccessKeyPayload({name:'MicoCode',key:'sk-octopus-client',groups:['mico-free']});
- assert.deepEqual(payload,{name:'MicoCode',api_key:'sk-octopus-client',enabled:true,supported_models:['mico-free']});
-});
-
-test('Octopus is configured on loopback with its database inside the private folder',()=>{
- const config=octopusConfig(3111,'C:/data/octopus/data.db');
- assert.deepEqual(config,{server:{host:'127.0.0.1',port:'3111'},database:{type:'sqlite',path:'C:/data/octopus/data.db'},log:{level:'info'}});
- assert.equal(typeof octopusConfig(1,'x').server.port,'string','the router reads its port from the config file');
-});
+test('provider automation only accepts supported installer IDs',()=>{for(const id of ['9router','cliproxy','litellm','freeride','ollama'])assert.equal(assertProvider(id),id);for(const id of ['../ollama','custom','powershell','9router;whoami','gptload','octopus',null])assert.throws(()=>assertProvider(id))});
 
 // Only the most recent router used to come back, so a second one the user had set
 // up looked broken after a restart.
-// The workspace saved "Octopus is my router" while the manager's last-provider
-// record said CLIProxyAPI. Restoring only the latter left Octopus down, and the
+// The workspace saved "LiteLLM is my router" while the manager's last-provider
+// record said CLIProxyAPI. Restoring only the latter left LiteLLM down, and the
 // workspace then dialled its loopback port directly — which the browser reports as
 // a CORS failure, not as a stopped router.
 test('restore prefers the router the workspace has selected over the one used last',async()=>{
@@ -72,19 +25,19 @@ test('restore prefers the router the workspace has selected over the one used la
  const chosen=[];
  manager.setup=async(id,engine)=>{chosen.push([id,engine]);return {config:{provider:'proxy',proxyPreset:id,proxyUrl:'http://127.0.0.1:1/v1',model:'m'},key:'k'}};
  try{
-  for(const id of ['cliproxy','octopus'])await mkdir(path.join(dir,'providers',id),{recursive:true});
+  for(const id of ['cliproxy','litellm'])await mkdir(path.join(dir,'providers',id),{recursive:true});
   await writeFile(path.join(dir,'providers','cliproxy','installed.json'),'{"version":"1"}');
-  await writeFile(path.join(dir,'providers','octopus','installed.json'),'{"version":"0.13.10"}');
+  await writeFile(path.join(dir,'providers','litellm','installed.json'),'{"version":"1.104.2"}');
   await writeFile(path.join(dir,'providers','last-provider.json'),JSON.stringify({provider:'cliproxy',engine:'community'}));
-  assert.ok(await manager.restore('octopus','community'),'the selected router is restored');
-  assert.deepEqual(chosen,[['octopus','community']],'the workspace selection wins over the last-used router');
+  assert.ok(await manager.restore('litellm','community'),'the selected router is restored');
+  assert.deepEqual(chosen,[['litellm','community']],'the workspace selection wins over the last-used router');
   chosen.length=0;
   await manager.restore(undefined,'community');
   assert.deepEqual(chosen,[['cliproxy','community']],'with nothing selected it falls back to the last-used router');
   chosen.length=0;
   // A selected router that was never installed falls back instead of failing setup.
-  await rm(path.join(dir,'providers','octopus','installed.json'),{force:true});
-  await manager.restore('octopus','community');
+  await rm(path.join(dir,'providers','litellm','installed.json'),{force:true});
+  await manager.restore('litellm','community');
   assert.deepEqual(chosen,[['cliproxy','community']],'an uninstalled selection falls back to the last-used router');
  }finally{await rm(dir,{recursive:true,force:true})}
 });
@@ -95,45 +48,27 @@ test('every router the user set up is remembered and can be brought back',async(
  try{
   assert.deepEqual(await manager.connectedRouters(),[],'a fresh install remembers nothing');
   await manager.rememberRouter('litellm','community');
-  await manager.rememberRouter('octopus','community');
-  assert.deepEqual(await manager.connectedRouters(),[{provider:'litellm',engine:'community'},{provider:'octopus',engine:'community'}],'both routers are remembered, most recent last');
+  await manager.rememberRouter('freeride','community');
+  assert.deepEqual(await manager.connectedRouters(),[{provider:'litellm',engine:'community'},{provider:'freeride',engine:'community'}],'both routers are remembered, most recent last');
   // Re-remembering replaces the entry instead of duplicating it.
   await manager.rememberRouter('litellm','local');
-  assert.deepEqual(await manager.connectedRouters(),[{provider:'octopus',engine:'community'},{provider:'litellm',engine:'local'}],'a router is stored once, with its latest engine');
+  assert.deepEqual(await manager.connectedRouters(),[{provider:'freeride',engine:'community'},{provider:'litellm',engine:'local'}],'a router is stored once, with its latest engine');
   // Names that are not managed routers are ignored rather than acted on.
-  await writeFile(path.join(dir,'providers','connected.json'),JSON.stringify([{provider:'evil',engine:'community'},{provider:'octopus',engine:'community'}]));
-  assert.deepEqual((await manager.connectedRouters()).map(entry=>entry.provider),['octopus']);
+  await writeFile(path.join(dir,'providers','connected.json'),JSON.stringify([{provider:'evil',engine:'community'},{provider:'freeride',engine:'community'}]));
+  assert.deepEqual((await manager.connectedRouters()).map(entry=>entry.provider),['freeride']);
   // Nothing is started for a router whose package is not installed.
   assert.deepEqual(await manager.restoreOthers(),[]);
   // A router installed by an older build was never recorded, so it is found on
   // disk instead. Missing this is what left a configured router switched off and
   // reporting "Your managed router is stopped" on every request to it.
   await rm(path.join(dir,'providers','connected.json'),{force:true});
-  await mkdir(path.join(dir,'providers','octopus'),{recursive:true});
-  await writeFile(path.join(dir,'providers','octopus','installed.json'),JSON.stringify({version:'0.13.10'}));
+  await mkdir(path.join(dir,'providers','freeride'),{recursive:true});
+  await writeFile(path.join(dir,'providers','freeride','installed.json'),JSON.stringify({version:'0.4.0a24'}));
   await writeFile(path.join(dir,'providers','last-provider.json'),JSON.stringify({provider:'9router',engine:'community'}));
-  assert.deepEqual(await manager.connectedRouters(),[{provider:'octopus',engine:'community'}],'an installed router is remembered even with no record of it');
+  assert.deepEqual(await manager.connectedRouters(),[{provider:'freeride',engine:'community'}],'an installed router is remembered even with no record of it');
  }finally{await rm(dir,{recursive:true,force:true})}
 });
 
-test('the dashboard credential is read from the vault, and only for routers that use one',async()=>{
- const values=new Map([['octopus-admin','MicoCode-dashboard-pw']]);
- const manager=new ProviderManager({dataDir:'unused',runtimeDir:'unused',gatewayBase:'http://127.0.0.1:1/managed/v1',gatewayKey:'gateway',vault:{get:async k=>values.get(k)??null,set:async()=>{}}});
- assert.equal(await manager.dashboardKey('octopus'),'MicoCode-dashboard-pw');
- assert.equal(await manager.dashboardKey('9router'),null,'a router that signs in with a cookie has no credential to copy');
- values.clear();
- assert.equal(await manager.dashboardKey('octopus'),null,'an unconfigured router must not hand out an empty credential');
-});
-
-test('Octopus connections are rewritten and restored like every other managed router',()=>{
- const connection={config:{provider:'proxy',proxyPreset:'octopus',proxyUrl:'http://127.0.0.1:8080/v1',model:'mico-free',freeModels:['mico-free'],routerFreeOnly:true},key:'sk-octopus-client',dashboard:'http://127.0.0.1:8080/'};
- const rewritten=managedClientConnection(connection,'http://127.0.0.1:19286');
- assert.equal(rewritten.config.proxyUrl,'http://127.0.0.1:19286/providers/octopus/v1');
- assert.equal(rewritten.key,'sk-octopus-client');
- assert.throws(()=>managedClientConnection({config:{provider:'proxy',proxyPreset:'evil'}},'http://127.0.0.1:19286'),/Unsupported managed router/);
- const octopus={config:{provider:'proxy',proxyPreset:'octopus',proxyUrl:'http://127.0.0.1:8080/v1',model:'mico-free',freeModels:['mico-free'],routerFreeOnly:true},key:'sk-octopus-client',dashboard:'http://127.0.0.1:8080/'};
- assert.equal(managedClientConnection(octopus,'http://127.0.0.1:19286').config.proxyUrl,'http://127.0.0.1:19286/providers/octopus/v1');
-});
 test('managed engines cannot be changed to paid or arbitrary destinations',()=>{assert.equal(assertEngine('local'),'local');assert.equal(assertEngine('community'),'community');for(const value of ['paid','https://other.example','custom',null])assert.throws(()=>assertEngine(value))});
 test('provider archives cannot escape, create links, or overwrite a destination',async()=>{
  const root=await mkdtemp(path.join(os.tmpdir(),'mico-archive-'));

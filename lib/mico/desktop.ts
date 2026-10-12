@@ -1,5 +1,5 @@
 import type {Config} from './types';
-export type ManagedProvider='9router'|'cliproxy'|'litellm'|'octopus'|'freeride'|'ollama';
+export type ManagedProvider='9router'|'cliproxy'|'litellm'|'freeride'|'ollama';
 export type SetupProgress={provider:ManagedProvider;stage:'download'|'install'|'start'|'configure'|'verify'|'ready'|'warning'|'error'|'cancelled';message:string;percent?:number};
 export type SetupResult={config:Partial<Config>;key:string;dashboard?:string;catalogueWarning?:string};
 export type OpenFolderResult={root:string;name:string;files:Record<string,string>;totalBytes:number};
@@ -50,7 +50,6 @@ export type DesktopAPI={
  refreshModels:()=>Promise<SetupResult>;
  onProgress:(callback:(event:SetupProgress)=>void)=>()=>void;
  openDashboard:(provider:ManagedProvider)=>Promise<void>;
- copyDashboardKey:(provider:ManagedProvider)=>Promise<boolean>;
  stopProvider:(provider:ManagedProvider)=>Promise<void>;
  appearance:(theme:string)=>Promise<void>;
  openFolder:()=>Promise<OpenFolderResult|null>;
@@ -59,4 +58,4 @@ export type DesktopAPI={
  git?:DesktopGitAPI;
 };
 declare global{interface Window{micoDesktop?:DesktopAPI}}
-export function isManagedProvider(id:string):id is ManagedProvider{return ['9router','cliproxy','litellm','octopus','freeride','ollama'].includes(id)}
+export function isManagedProvider(id:string):id is ManagedProvider{return ['9router','cliproxy','litellm','freeride','ollama'].includes(id)}
