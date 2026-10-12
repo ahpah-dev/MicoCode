@@ -13,14 +13,12 @@ export const CASCADE_PRESETS: Array<{id: string; name: string; defaultModel: str
   {id:'aihubmix', name:'AIHubMix', defaultModel:'gpt-4o-mini', preset:'aihubmix'},
   {id:'aistudio', name:'Google AI Studio', defaultModel:'gemini-2.5-flash', preset:'aistudio'},
   {id:'nim', name:'NVIDIA NIM', defaultModel:'meta/llama-3.3-70b-instruct', preset:'nim'},
+  {id:'9router', name:'9Router', defaultModel:'mico-free/free-code', preset:'9router'},
   {id:'openrouter', name:'OpenRouter', defaultModel:'openrouter/free'},
   {id:'ollama', name:'Local Ollama', defaultModel:'qwen3.5:9b'},
 ];
 
 export function getFallbackCandidates(currentConfig: Config, currentKey?: string, storage?: any): FallbackCandidate[] {
-  if (currentConfig.provider === 'proxy' && ['9router', 'litellm', 'cliproxy', 'custom'].includes(currentConfig.proxyPreset)) {
-    return [];
-  }
   const currentKeyNormalized = (currentKey || '').trim();
   const currentSlot = currentConfig.provider === 'proxy' ? currentConfig.proxyPreset : currentConfig.provider;
   const candidates: FallbackCandidate[] = [];
@@ -69,13 +67,17 @@ export function getFallbackCandidates(currentConfig: Config, currentKey?: string
       });
     } else if (item.id === 'ollama') {
       const saved = recallProfile({provider:'ollama', ollamaUrl: currentConfig.ollamaUrl || 'http://127.0.0.1:11434', model: ''}, storage);
-      if (!saved?.model) continue;
-      const url = saved.ollamaUrl || currentConfig.ollamaUrl || 'http://127.0.0.1:11434';
+      const url = saved?.ollamaUrl || currentConfig.ollamaUrl || 'http://127.0.0.1:11434';
+      let model = (typeof saved?.model === 'string' && saved.model.trim()) ? saved.model.trim() : (currentConfig.provider === 'ollama' && currentConfig.model ? currentConfig.model : '');
+      if (!model && (storage?.getItem?.('mico-ollama-model') || (typeof globalThis.window !== 'undefined' && (currentConfig.ollamaUrl || (globalThis.window as any)?.micoDesktop)))) {
+        model = item.defaultModel || 'gemma4:gpu';
+      }
+      if (!model) continue;
       const base: Config = {
         ...currentConfig,
         provider: 'ollama',
         ollamaUrl: url,
-        model: saved.model,
+        model,
       };
       candidates.push({
         id: 'ollama',
@@ -91,10 +93,10 @@ export function getFallbackCandidates(currentConfig: Config, currentKey?: string
 
 export function isRecoverableProviderError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
-  const e = error as {status?: number; name?: string; message?: string; exhausted?: boolean};
+  const e = error as {status?: number; name?: string; message?: string; exhausted?: boolean; cause?: unknown};
   if (e.name === 'AbortError') return false;
   if (e.exhausted) return true;
   if ([401, 402, 403, 404, 429, 500, 502, 503, 504].includes(Number(e.status))) return true;
   const msg = String(e.message || '');
-  return /quota|limit|credit|exhaust|unauthorized|forbidden|rate limit|busy|overloaded|timeout|econnrefused|not responding/i.test(msg);
+  return /quota|limit|credit|exhaust|unauthorized|forbidden|rate limit|busy|overloaded|timeout|econnrefused|not responding|could not be reached|failed to fetch|cors|network|connection refused/i.test(msg);
 }

@@ -19,6 +19,11 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.7.8 enhances router resilience and brings instant multi-provider cascade failover to 9Router and local proxies:
+- **Resilient 9Router & Proxy Cascade Fallback**: 9Router and custom OpenAI-compatible proxy presets now seamlessly cascade to all configured cloud providers (OpenCode, AIHubMix, Google AI Studio, NVIDIA NIM, OpenRouter) and local Ollama (`gemma4:gpu`) when an upstream router model hits quota exhaustion (503/402) or connection drops, preventing unexpected halts.
+- **Transparent Diagnostics & Mixed Content Detection**: Replaced generic CORS masking errors with detailed diagnostic messages that surface underlying system codes (`ECONNREFUSED`, network drops) while explicitly detecting HTTPS-to-HTTP mixed content blocks in web browsers and guiding users to the native desktop app or HTTPS proxies.
+- **Comprehensive Recoverable Error Detection**: Expanded transient recovery rules to recognize router reachability failures, network resets, and connection timeouts as recoverable, automatically triggering instant failover across the provider cascade.
+
 Version 0.7.7 introduces the **Point-and-Prompt Element Inspector** and **Integrated Live Preview Console & Error HUD**, alongside cleaner and more professional workspace styling:
 - **"Point-and-Prompt" Visual Element Inspector**: Toggle inspect mode in the Preview toolbar to hover over any DOM element in the sandboxed preview. Element bounding boxes, tag names, CSS classes, and dimensions are highlighted in real time. Clicking any element automatically opens the Mico Agent panel, prefills the prompt with target element context (e.g. `Update <button.primary> ("Get Started"): `), and focuses the composer.
 - **Integrated Live Preview Console & Error HUD**: Real-time console error counter badge in the preview toolbar, collapsible log drawer with filter tabs (`All`, `Errors`, `Logs`), and a one-click **"Fix with Mico"** button on runtime errors that prefills Mico with the exact error trace and entry file context for instant diagnosis and repair.
