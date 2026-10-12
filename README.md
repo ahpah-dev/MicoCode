@@ -19,6 +19,8 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.7.6 adds first-class AIHubMix multi-provider integration (Claude, GPT-4o, Gemini 2.5, DeepSeek, Qwen) and instant automatic cascade fallback across configured providers in sequence (OpenCode → AIHubMix → Google AI Studio → NVIDIA NIM → OpenRouter → Ollama). When any provider hits rate limits (429), quota exhaustion (402), or server errors, MicoCode seamlessly cascades to the next available route with real-time activity notifications.
+
 Version 0.7.5 adds first-class Google AI Studio API integration (`https://generativelanguage.googleapis.com/v1beta/openai`) with live Gemini 2.5 Pro, Gemini 2.5 Flash, and Gemma model discovery, automatic `models/` prefix normalization, 1M-token context window metadata, rate-limit header forwarding, and redacted key diagnostics.
 
 Version 0.7.4 upgrades Auto-Configure to prioritize local proxy routers (9Router on port 20128 and FreeRide on 11343) ahead of small local models, automatically reusing or generating 9Router API keys and probing exposed models in parallel to select the strongest working coding model. It also adds tolerant action normalization and an expanded repair loop so models using common tool aliases or OpenAI tool_calls complete coding tasks without action-format errors.

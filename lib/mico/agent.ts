@@ -1,5 +1,6 @@
 import {checkProject,exactEdit,isPrivatePath,mergeFiles,qualityReview,validateReply} from './core.mjs';
-import {listProxyModels,normalizeEndpoint,readCredential} from './providers.mjs';
+import {listProxyModels,normalizeEndpoint,proxyPresets,readCredential} from './providers.mjs';
+import {getFallbackCandidates,isRecoverableProviderError} from './fallback.ts';
 import {resilientRequest} from './resilience.mjs';
 import {readModelText} from './response-reader.mjs';
 import {actionSchema} from './action-schema.mjs';
@@ -36,7 +37,7 @@ export function modelContextBudget(contextLength:number|undefined,fallback:numbe
  return Math.min(240000,Math.max(12000,Math.floor(contextLength*1.6)));
 }
 export function stopBrowser() {engine?.interruptGenerate();}
-export async function complete(messages:Chat[],config:Config,key:string,signal:AbortSignal,onToken:(t:string)=>void,onStatus:(t:string)=>void=()=>{},onReasoning:(t:string)=>void=()=>{}) {
+async function executeSingleProvider(messages:Chat[],config:Config,key:string,signal:AbortSignal,onToken:(t:string)=>void,onStatus:(t:string)=>void=()=>{},onReasoning:(t:string)=>void=()=>{}) {
  if(config.provider==='browser') {
    if(!browserReady(config.browserSize)||!engine)throw new Error('Load a browser model in Connections first.');
    const stream=await engine.chat.completions.create({messages,stream:true,temperature:config.temperature,max_tokens:1800,response_format:{type:'json_object',schema:JSON.stringify(actionSchema)}});
@@ -47,26 +48,57 @@ export async function complete(messages:Chat[],config:Config,key:string,signal:A
   const opencode=config.provider==='proxy'&&config.proxyPreset==='opencode';
   const nim=config.provider==='proxy'&&config.proxyPreset==='nim';
   const aistudio=config.provider==='proxy'&&config.proxyPreset==='aistudio';
-  const custom=config.provider==='proxy'&&!horde&&!opencode&&!nim&&!aistudio;
+  const aihubmix=config.provider==='proxy'&&config.proxyPreset==='aihubmix';
+  const custom=config.provider==='proxy'&&!horde&&!opencode&&!nim&&!aistudio&&!aihubmix;
   const managedLocal=config.managed&&config.routerEngine==='local'&&(local||config.freeModels.includes(config.model));
  if(managedLocal)onStatus('Generating with your local model. The first prompt may take longer while it loads; Stop cancels the request.');
  if(opencode&&!key)throw new Error('Add your own OpenCode Zen key in Models before sending a prompt.');
-  const url=local?config.ollamaUrl.replace(/\/$/,'')+'/api/chat':horde?'/api/horde':opencode?'/api/opencode':nim?'/api/nim':aistudio?'/api/aistudio':custom?normalizeEndpoint(config.proxyUrl)+'/chat/completions':'/api/ai';
+ if(aihubmix&&!key&&!readCredential(config))throw new Error('Add your AIHubMix API key in Connections before sending a prompt.');
+  const url=local?config.ollamaUrl.replace(/\/$/,'')+'/api/chat':horde?'/api/horde':opencode?'/api/opencode':nim?'/api/nim':aistudio?'/api/aistudio':aihubmix?'/api/aihubmix':custom?normalizeEndpoint(config.proxyUrl)+'/chat/completions':'/api/ai';
  // The managed local route shares the standard output window. A narrower one
   // truncated any write_file carrying a complete page and reported an output
   // limit instead of an edit.
-   const body=local?{model:config.model,messages,stream:false,think:false,format:actionSchema,options:{temperature:config.temperature,num_predict:4096}}:horde||opencode||nim||aistudio?{action:'complete',model:config.model,messages,temperature:config.temperature}:custom?{model:config.model,messages,temperature:config.temperature,max_tokens:4096,stream:false}:{model:config.model,messages,temperature:config.temperature,freeFallback:config.freeFallback};
+   const body=local?{model:config.model,messages,stream:false,think:false,format:actionSchema,options:{temperature:config.temperature,num_predict:4096}}:horde||opencode||nim||aistudio||aihubmix?{action:'complete',model:config.model,messages,temperature:config.temperature}:custom?{model:config.model,messages,temperature:config.temperature,max_tokens:4096,stream:false}:{model:config.model,messages,temperature:config.temperature,freeFallback:config.freeFallback};
   const effectiveKey=key||(!local&&!horde&&config.provider==='proxy'?readCredential(config):'');
-   const operation=()=>fetch(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json',...(!local&&!horde&&effectiveKey?{Authorization:`Bearer ${effectiveKey}`}:{})},body:JSON.stringify(body),signal:AbortSignal.any([signal,AbortSignal.timeout(managedLocal?620000:nim||aistudio?190000:130000)])});
+   const operation=()=>fetch(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json',...(!local&&!horde&&effectiveKey?{Authorization:`Bearer ${effectiveKey}`}:{})},body:JSON.stringify(body),signal:AbortSignal.any([signal,AbortSignal.timeout(managedLocal?620000:nim||aistudio||aihubmix?190000:130000)])});
   // 9Router quotas are enforced per provider route; exhausting OpenCode must
   // not cool down unrelated providers exposed by the same router.
   const routerModel=config.model.trim(),slash=routerModel.indexOf('/');
   const routerProvider=slash>0?routerModel.slice(0,slash):routerModel;
   const routerScope=custom&&config.proxyPreset==='9router'?':'+routerProvider:'';
   // Other connections keep a shared cooldown so model switching cannot reset provider limits.
-   const response=await resilientRequest(operation,{scope:config.provider+':'+(opencode?'opencode':nim?'nim':aistudio?'aistudio':horde?'horde':custom?normalizeEndpoint(config.proxyUrl)+routerScope:local?config.ollamaUrl:''),signal,enabled:config.resilience,paceMs:local?0:config.provider==='openrouter'?3200:1500,onStatus});
+   const response=await resilientRequest(operation,{scope:config.provider+':'+(opencode?'opencode':nim?'nim':aistudio?'aistudio':aihubmix?'aihubmix':horde?'horde':custom?normalizeEndpoint(config.proxyUrl)+routerScope:local?config.ollamaUrl:''),signal,enabled:config.resilience,paceMs:local?0:config.provider==='openrouter'?3200:1500,onStatus});
   const content=await readModelText(response,{local,signal,onReasoning});
  onToken(content);return content;
+}
+
+export async function complete(messages:Chat[],config:Config,key:string,signal:AbortSignal,onToken:(t:string)=>void,onStatus:(t:string)=>void=()=>{},onReasoning:(t:string)=>void=()=>{}) {
+ try {
+  return await executeSingleProvider(messages,config,key,signal,onToken,onStatus,onReasoning);
+ } catch(error) {
+  if(signal.aborted||config.freeFallback===false||!isRecoverableProviderError(error)) {
+   throw error;
+  }
+  const candidates=getFallbackCandidates(config,key);
+  if(!candidates.length)throw error;
+  const primaryName=config.provider==='proxy'?(proxyPresets.find(p=>p.id===config.proxyPreset)?.name||config.proxyPreset):config.provider;
+  let lastError:unknown=error;
+  for(const candidate of candidates) {
+   if(signal.aborted)throw signal.reason||new DOMException('Stopped','AbortError');
+   try {
+    const errorMsg=(error as Error)?.message?.slice(0,100)||'Rate limit or service error';
+    onStatus(`⚡ ${primaryName} reached a limit (${errorMsg}). Instant fallback to ${candidate.name} (${candidate.config.model})…`);
+    return await executeSingleProvider(messages,candidate.config,candidate.key,signal,onToken,onStatus,onReasoning);
+   } catch(fallbackError) {
+    if(signal.aborted)throw fallbackError;
+    lastError=fallbackError;
+    if(!isRecoverableProviderError(fallbackError)) {
+     throw fallbackError;
+    }
+   }
+  }
+  throw lastError;
+ }
 }
 export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|'plan';config:Config;key:string;signal:AbortSignal;onMessage:(text:string,role:'assistant'|'activity')=>void;onChanges:(c:Changes)=>void;onToken:(t:string)=>void}) {
  const {project,prompt,mode,config,key,signal,onMessage,onChanges,onToken}=args;
