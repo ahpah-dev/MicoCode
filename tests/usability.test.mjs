@@ -144,7 +144,7 @@ test('the smoke gate counts providers from the managed list, not a literal', () 
 
 test('managed routers expose their dashboard and its sign-in credential', () => {
   const connections = source('components/micocode/connections.tsx');
-  for (const id of ['gptload', 'octopus']) {
+  for (const id of ['octopus']) {
     assert.ok(connections.includes(`openDashboard('${id}')`), id + ' needs an Open dashboard button');
     assert.ok(connections.includes(`copyDashboardKey('${id}')`), id + ' needs a way to get its dashboard credential');
   }

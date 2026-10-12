@@ -2,7 +2,7 @@ import {spawn} from 'node:child_process';
 import {mkdir,readFile,writeFile,access,readdir,rm} from 'node:fs/promises';
 import {constants} from 'node:fs';
 import path from 'node:path';
-import {bestCodingModel,freeCatalogue,fullCatalogue,routeSlug} from '../lib/mico/providers.mjs';
+import {bestCodingModel,freeCatalogue,fullCatalogue,managedPresets,routeSlug} from '../lib/mico/providers.mjs';
 import {loadOpenCodeModels} from '../lib/mico/opencode.mjs';
 import {managedRouterCatalogue} from './server.mjs';
 import net from 'node:net';
@@ -11,7 +11,7 @@ import {randomBytes,randomUUID} from 'node:crypto';
 import {artifacts,versions} from './artifacts.mjs';
 import {downloadVerified,extractVerifiedZip} from './install.mjs';
 
-export const managedProviders=['9router','cliproxy','litellm','gptload','octopus','freeride','ollama'];
+export const managedProviders=['9router','cliproxy','litellm','octopus','freeride','ollama'];
 export function assertProvider(id){if(!managedProviders.includes(id))throw new Error('Unsupported managed provider.');return id}
 export function assertEngine(engine){if(!['local','community'].includes(engine))throw new Error('Unsupported free engine.');return engine}
 const exists=async file=>{try{await access(file,constants.F_OK);return true}catch{return false}};
@@ -25,23 +25,9 @@ export function cliProxyConfig(port,key,base,upstreamKey,authDir,routes=['free-c
  const models=routes.map(id=>`        - name: ${JSON.stringify(id)}\n          alias: ${JSON.stringify(id)}\n          input-modalities: [text]`).join('\n');
  return `server:\n  host: 127.0.0.1\n  port: ${port}\naccess:\n  api-keys:\n    - ${JSON.stringify(key)}\nmanagement:\n  allow-remote: false\n  secret-key: ""\n  disable-control-panel: true\noauth:\n  auth-dir: ${JSON.stringify(authDir.replace(/\\/g,'/'))}\napi-keys:\n  openai-compatibility:\n    - name: micocode-community\n      base-url: ${JSON.stringify(base)}\n      keys:\n        - api-key: ${JSON.stringify(upstreamKey)}\n      models:\n${models}\nrequests:\n  passthrough-headers: false\nobservability:\n  logs:\n    request-log: false\n    debug: false\n`;
 }
-/* GPT-Load is configured entirely through its own management API. These three
-   payload helpers are the whole contract, kept pure so they can be checked
-   without starting a router. */
-// Its validator rejects a group whose `priority` is absent (the optional-field
-// wrapper reports null when the key is missing) and whose model entries omit the
-// alias fields, so every field is written out explicitly.
-export function gptLoadGroupPayload({name,baseUrl,gatewayKey,models}){
- return {priority:0,name,channel_id:'openai_compatible',connection_type:'api_key',params:{base_url:baseUrl},models:models.map(id=>({id,alias:'',alias_enabled:false})),credentials:gatewayKey};
-}
-// MicoCode chooses the access key itself, so the router never has to hand one back.
-export function gptLoadAccessKeyPayload({name,key,group}){return {name,key,filters:{groups:[group]}};}
-// GPT-Load only ever returns a masked key, so a later setup can recognise its own.
-export function gptLoadKeyMask(key){return key.length<=10?key:key.slice(0,6)+'****'+key.slice(-4)}
-
-/* Octopus is provisioned through its own admin API, authenticated with the
-   `auth` cookie its login returns. Requests are addressed by group name, so the
-   client-facing model is the group MicoCode creates. */
+/* Octopus is configured entirely through its own management API. These payload
+   helpers are the whole contract, kept pure so they can be checked without
+   starting a router. */
 // Protocol bitmask, matching the project's model.Protocol: chat completions plus responses.
 const OCTOPUS_PROTOCOLS=6;
 export function octopusConfig(port,dataPath){
@@ -239,11 +225,11 @@ export class ProviderManager{
        const freeRideVerified=id==='freeride'&&typeof this.vault?.get==='function'&&await this.vault.get('freeride-setup-verified')==='0.7.1';
       const cached=this.connections.get(id);if(cached&&cached.config.routerEngine===selectedEngine&&hadChild?.exitCode===null){
      this.emit(id,'verify','Checking the running connection…');
-     try{if(['9router','cliproxy','litellm','gptload','octopus'].includes(id)&&engine==='local')await this.verifyLocalEngine(signal);if(id==='9router')await this.syncOpenCodeCatalogue(cached,signal);await this.verify(cached,signal);this.emit(id,'ready','Connected. Your free route is ready.');return cached}
+     try{if(['9router','cliproxy','litellm','octopus'].includes(id)&&engine==='local')await this.verifyLocalEngine(signal);if(id==='9router')await this.syncOpenCodeCatalogue(cached,signal);await this.verify(cached,signal);this.emit(id,'ready','Connected. Your free route is ready.');return cached}
     catch(e){if(signal.aborted)throw e;this.emit(id,'configure','Repairing the private router connection…');await this.stop(id)}
    }
    if(this.children.get(id)?.exitCode===null)await this.stop(id);
-    if(['9router','cliproxy','litellm','gptload','octopus'].includes(id)&&engine==='local'){
+    if(['9router','cliproxy','litellm','octopus'].includes(id)&&engine==='local'){
     this.emit(id,'configure','Preparing the free local engine for your router…');
     const local=await this.setupOllama(signal);await this.verify(local,signal);this.connections.set('ollama',local);
     await writeFile(path.join(this.folder('ollama'),'installed.json'),JSON.stringify({version:artifacts.ollama.version}),{mode:0o600});
@@ -253,7 +239,6 @@ export class ProviderManager{
     if(id==='9router')connection=await this.setupNine(signal,base);
     else if(id==='cliproxy')connection=await this.setupCLI(signal,base);
     else if(id==='litellm')connection=await this.setupLite(signal,base);
-    else if(id==='gptload')connection=await this.setupGptLoad(signal,base);
     else if(id==='octopus')connection=await this.setupOctopus(signal,base);
      else if(id==='freeride')connection=await this.setupFreeRide(signal,{verifyGeneration:credentialsChanged||!freeRideVerified});
     else connection=await this.setupOllama(signal);
@@ -263,7 +248,7 @@ export class ProviderManager{
     connection.config.routerEngine=id==='ollama'?'local':selectedEngine;connection.config.managed=true;
     await writeFile(path.join(this.root,'last-provider.json'),JSON.stringify({provider:id,engine:selectedEngine}),{mode:0o600});
     await this.rememberRouter(id,selectedEngine);
-    this.connections.set(id,connection);this.emit(id,'ready',id==='ollama'?'Local coding model connected. No account or service quota.':id==='freeride'?'FreeRide connected. Automatic provider failover is ready.':'Connected through '+(id==='9router'?'9Router':id==='cliproxy'?'CLIProxyAPI':id==='gptload'?'GPT-Load':id==='octopus'?'Octopus':'LiteLLM')+'. Your free '+selectedEngine+' route is ready.');return connection;
+    this.connections.set(id,connection);this.emit(id,'ready',id==='ollama'?'Local coding model connected. No account or service quota.':id==='freeride'?'FreeRide connected. Automatic provider failover is ready.':'Connected through '+(id==='9router'?'9Router':id==='cliproxy'?'CLIProxyAPI':id==='octopus'?'Octopus':'LiteLLM')+'. Your free '+selectedEngine+' route is ready.');return connection;
   }catch(e){if(this.children.get(id)!==hadChild)await this.stop(id);this.emit(id,signal.aborted?'cancelled':'error',signal.aborted?'Setup cancelled. You can resume with the same button.':e.message);throw e}
   finally{this.active=null}
  }
@@ -272,8 +257,24 @@ export class ProviderManager{
  }
  // Every router the user has set up, so the ones that are not the most recent can
  // be brought back too instead of looking broken after MicoCode restarts.
+ // Routers configured before MicoCode started recording them are found on disk: an
+ // installed package is proof the user set that router up, and leaving it switched
+ // off is exactly what makes its card report a stopped router.
  async connectedRouters(){
-  try{const list=JSON.parse(await readFile(path.join(this.root,'connected.json'),'utf8'));return Array.isArray(list)?list.filter(entry=>entry&&managedProviders.includes(entry.provider)):[]}catch{return []}
+  let recorded=[];
+  try{const list=JSON.parse(await readFile(path.join(this.root,'connected.json'),'utf8'));recorded=Array.isArray(list)?list.filter(entry=>entry&&managedProviders.includes(entry.provider)):[]}catch{}
+  const seen=new Set(recorded.map(entry=>entry.provider));
+  const found=[...recorded];
+  const fallbackEngine=await this.lastEngine();
+  for(const provider of managedPresets){
+   if(seen.has(provider))continue;
+   if(!await exists(path.join(this.folder(provider),'installed.json')))continue;
+   found.push({provider,engine:fallbackEngine});
+  }
+  return found;
+ }
+ async lastEngine(){
+  try{const {engine}=JSON.parse(await readFile(path.join(this.root,'last-provider.json'),'utf8'));return engine==='local'?'local':'community'}catch{return 'community'}
  }
  async rememberRouter(id,engine){
   try{
@@ -462,60 +463,14 @@ export class ProviderManager{
   this.emit(id,'start','Starting LiteLLM on localhost…');this.start(id,path.join(dir,'Scripts','litellm.exe'),['--config',configFile,'--host','127.0.0.1','--port',String(port)],{cwd:dir,env:{PYTHONNOUSERSITE:'1',PYTHONUTF8:'1',PYTHONIOENCODING:'utf-8',LITELLM_TELEMETRY:'False',DO_NOT_TRACK:'1',LITELLM_MODE:'PRODUCTION'}});
   const base='http://127.0.0.1:'+port+'/v1';await this.ready(base+'/models',id,signal,{Authorization:'Bearer '+key});return {config:{provider:'proxy',proxyPreset:id,proxyUrl:base,model:preferred,freeModels:routes.map(r=>r.id),routerFreeOnly:true},key};
  }
-  async setupGptLoad(signal,gatewayBase){
-   const id='gptload',dir=this.versionFolder(id),exe=path.join(dir,'gpt-load.exe');
-   await mkdir(dir,{recursive:true});
-   if(!await exists(exe)){
-    this.emit(id,'download','Downloading the verified GPT-Load '+artifacts.gptload.version+' gateway from its official release…');
-    await downloadVerified(artifacts.gptload,exe,signal,p=>this.emit(id,'download','Downloading the verified GPT-Load gateway…',p));
-   }
-   const adminKey=await this.secret('gptload-admin'),clientKey=await this.secret('gptload-client');
-   const port=await freePort(),api='http://127.0.0.1:'+port,dataDir=path.join(this.folder(id),'data');
-   await mkdir(dataDir,{recursive:true});
-   this.emit(id,'start','Starting GPT-Load on localhost…');
-   this.start(id,exe,[],{cwd:dir,env:{HOST:'127.0.0.1',PORT:String(port),DATA_DIR:dataDir,AUTH_KEY:adminKey,LOG_LEVEL:'warn',LOG_FORMAT:'text'}});
-   await this.ready(api+'/health',id,signal);
-   this.emit(id,'configure','Creating the free-tier channel, group and access key…');
-   const routes=await this.managedRoutes(gatewayBase,signal);
-   const preferred=this.preferredRoute(routes),models=routes.map(r=>r.id);
-   const group=await this.gptLoadGroup(api,adminKey,gptLoadGroupPayload({name:'MicoCode free routes',baseUrl:gatewayBase,gatewayKey:this.gatewayKey,models}),signal);
-   await this.gptLoadAccessKey(api,adminKey,clientKey,group,signal);
-   const base=api+'/v1';
-   await this.ready(base+'/models',id,signal,{Authorization:'Bearer '+clientKey});
-   return {config:{provider:'proxy',proxyPreset:id,proxyUrl:base,model:preferred,freeModels:models,routerFreeOnly:true},key:clientKey,dashboard:api+'/'};
-  }
-  // GPT-Load signs its dashboard in with a key and Octopus with a password, so
+  // Octopus signs its dashboard in with a password rather than a cookie, so
   // MicoCode hands that credential to the clipboard instead of making the user
   // paste it out of a file. Routers that sign in with a cookie return null.
   async dashboardKey(provider){
-   const slot=provider==='gptload'?'gptload-admin':provider==='octopus'?'octopus-admin':null;
+   const slot=provider==='octopus'?'octopus-admin':null;
    if(!slot)return null;
    const key=typeof this.vault?.get==='function'?await this.vault.get(slot):null;
    return typeof key==='string'&&key?key:null;
-  }
-  // Every write to GPT-Load's control plane carries an idempotency key and is
-  // unwrapped from its {code,message,data} envelope.
-  async gptLoadRequest(api,adminKey,route,{method='GET',body,signal}={}){
-   const headers={Authorization:'Bearer '+adminKey};
-   if(method!=='GET'){headers['Idempotency-Key']=randomUUID();headers['Content-Type']='application/json'}
-   const r=await this.fetch(api+route,{method,headers,...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.any([signal,AbortSignal.timeout(30000)])});
-   const envelope=await r.json().catch(()=>({}));
-   if(envelope.code==='CHANNEL_TARGET_CONFLICT')return {conflict:Array.isArray(envelope.data?.groups)?envelope.data.groups:[]};
-   if(!r.ok||envelope.code!==0)throw new Error('GPT-Load setup could not finish ('+(envelope.code||r.status)+'). Retry setup.');
-   return {data:envelope.data};
-  }
-  // A later setup reuses the group it already owns instead of colliding with it.
-  async gptLoadGroup(api,adminKey,payload,signal){
-   const result=await this.gptLoadRequest(api,adminKey,'/api/groups',{method:'POST',body:payload,signal});
-   const group=result.conflict?.length?result.conflict[0]?.id:result.data?.group_id;
-   if(!Number.isInteger(group))throw new Error('GPT-Load did not return a group for the free route. Retry setup.');
-   return group;
-  }
-  async gptLoadAccessKey(api,adminKey,key,group,signal){
-   const listed=await this.gptLoadRequest(api,adminKey,'/api/access-keys',{signal});
-   const mask=gptLoadKeyMask(key);
-   if((listed.data?.items||[]).some(item=>item?.masked_key===mask))return;
-   await this.gptLoadRequest(api,adminKey,'/api/access-keys',{method:'POST',body:gptLoadAccessKeyPayload({name:'MicoCode',key,group}),signal});
   }
   async setupOctopus(signal,gatewayBase){
    const id='octopus',dir=await this.installZip(id,artifacts.octopus,signal),exe=await this.findExecutable(dir,['octopus.exe']);

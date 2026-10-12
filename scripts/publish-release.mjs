@@ -10,46 +10,48 @@ if (!token) {
   process.exit(1);
 }
 
-const tag = 'v0.8.2';
-const name = 'MicoCode 0.8.2 — Never Falls Back to an Outdated Model';
+const tag = 'v0.8.3';
+const name = 'MicoCode 0.8.3 — GPT-Load Removed, Octopus Stays Running';
 const checksums = fs.readFileSync('release/SHA256SUMS.txt', 'utf8').trim();
 
-const body = `## MicoCode v0.8.2 — Never Falls Back to an Outdated Model
+const body = `## MicoCode v0.8.3 — GPT-Load Removed, Octopus Stays Running
 
-### The fallback chain can no longer name a stale model
-When a provider hit its limit, MicoCode switched to the next configured one and
-announced the model it was switching to. Those models were hardcoded — **AIHubMix fell
-back to \`gpt-4o-mini\`**, AI Studio to \`gemini-2.5-flash\`, NVIDIA NIM to a Llama 3.3
-build. Every one of them was a name that ages badly, and the workspace would quietly
-keep using it long after something far better was available.
+### GPT-Load is gone
+It never worked reliably enough to keep, so it has been removed outright rather than
+left in the app: its installer, its pinned artifact, its management-API client, its
+dashboard entry and its card. Octopus remains as the multi-route free gateway.
 
-Now a provider is only used with the model **you** already chose for it. If you never
-chose one, MicoCode asks that provider for its current catalogue and picks the strongest
-model it actually offers at that moment. There is no longer a model name sitting in the
-code to fall back to.
+### A router you set up is no longer left switched off
+Octopus answered every request with *"Your managed router is stopped. Open Models and
+click Set up & connect."* even though it was installed, configured and healthy.
 
-### Superseded models can no longer win
-The auto-picker ranked \`gpt-4.1\` and \`gemini-2.5-pro\` as top-tier, so an older model
-could outrank a current one — and a plain fall-through scored 50, above genuinely small
-models. Families such as GPT-4o, GPT-4.1, GPT-4, GPT-3.5, o1, Claude 3, Gemini
-1.x/2.0/2.5, Llama 2/3, Mixtral, Phi-3 and Qwen 2 now score below every current model.
-They stay selectable when they are genuinely all a provider offers — nothing is taken
-away — but they can never be preferred.
+The cause: MicoCode only started recording which routers you had set up in 0.8.2, so a
+router configured before that was invisible to the restart and stayed down while
+everything routed to it failed. An installed package is now treated as proof that you
+set that router up — **whichever build installed it** — so every router you have
+configured comes back on launch, in the background, without competing with a setup you
+are waiting on.
 
-### Every router you set up comes back
-Only the most recently used router was restarted, so a second one you had configured
-showed as stopped and produced errors until you set it up again. MicoCode now remembers
-every router you set up and brings them all back on launch, in the background, without
-competing with a setup you are waiting on.
+### The model panel reads better
+- "Your routers" no longer describes itself as just 9Router and LiteLLM.
+- The intro paragraph names the router you actually selected instead of saying "this router".
+- The hint about "Use existing" now only appears for 9Router, where it applies.
+- The panel's smallest labels — status chips, model badges, model counts — were set at
+  7–8px and have been lifted to a readable size.
+- Provider tiles respond to the pointer the way the router cards already did.
 
 ### Verification
-- 189 tests pass with no skips. One test asserts a current model always outranks a
-  superseded one while a superseded model still works when it is all that exists;
-  another drives a real fallback where the provider offers both \`gpt-4o-mini\` and
-  \`gpt-5.1\` and asserts the workspace lands on \`gpt-5.1\`; a third covers remembering
-  and restoring more than one router.
-- TypeScript check clean; production web build clean; the packaged app was smoke-tested
-  and the installers below were built fresh from this commit.
+- 186 tests pass with no skips. One asserts a router is brought back from an installed
+  package that has no record of ever being set up — the exact case that left Octopus
+  down — and the accepted-installer test now asserts GPT-Load is *rejected*.
+- No GPT-Load reference remains anywhere in the shipping code.
+- TypeScript check clean; production web build clean; packaged app smoke-tested, and
+  the installers below were built fresh from this commit.
+
+### Note
+GPT-Load's 103 MB download is left behind in
+\`%APPDATA%\\MicoCode\\providers\\gptload\` on machines that installed it. It is no
+longer used and can be deleted to reclaim the space.
 
 ### Checksums
 \`\`\`
@@ -100,8 +102,8 @@ async function publish() {
 
   // Upload assets
   const filesToUpload = [
-    {path: 'release/MicoCode-Setup-0.8.2-x64.exe', name: 'MicoCode-Setup-0.8.2-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
-    {path: 'release/MicoCode-Portable-0.8.2-x64.exe', name: 'MicoCode-Portable-0.8.2-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Setup-0.8.3-x64.exe', name: 'MicoCode-Setup-0.8.3-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Portable-0.8.3-x64.exe', name: 'MicoCode-Portable-0.8.3-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
     {path: 'release/SHA256SUMS.txt', name: 'SHA256SUMS.txt', contentType: 'text/plain'}
   ];
 

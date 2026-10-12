@@ -250,3 +250,16 @@ button.git-file-row:hover:not(:disabled){background:var(--surface-hover);color:v
 .address .dropdown-trigger:hover:not(:disabled){background:transparent;color:var(--ink-primary)}
 .address .dropdown-menu{min-width:200px;width:max-content}
 
+/* Round 5 — the model panel's smallest labels were set at 7-8px, which reads as
+   cramped rather than compact. Every label below gains about a pixel and a little
+   letter-spacing; nothing moves, it just stops squinting. */
+.router-card-footer>span{font-size:9.5px;letter-spacing:.9px;color:var(--tone-75)}
+.model-group{font-size:9px;letter-spacing:1.1px}
+.model-badge{font-size:8px;letter-spacing:.6px;padding:3px 6px}
+.model-count{font-size:10px;color:var(--tone-65)}
+.model-option small{font-size:10px}
+.connection-summary{font-size:11.5px}
+/* The provider tiles now respond to the pointer the way the router cards do. */
+.provider-card{transition:transform .16s,border-color .16s,background .16s}
+.provider-card:hover:not(:disabled){transform:translateY(-1px)}
+

@@ -22,7 +22,6 @@ export const CASCADE_PRESETS: Array<{id: string; name: string; defaultModel: str
   // MicoCode's own managed routes: these aliases always resolve to whatever the
   // router currently offers, so they stay current without naming a model.
   {id:'9router', name:'9Router', defaultModel:'mico-free/free-code', preset:'9router'},
-  {id:'gptload', name:'GPT-Load', defaultModel:'', preset:'gptload'},
   {id:'octopus', name:'Octopus', defaultModel:'', preset:'octopus'},
   {id:'litellm', name:'LiteLLM', defaultModel:'', preset:'litellm'},
   {id:'cliproxy', name:'CLIProxyAPI', defaultModel:'', preset:'cliproxy'},
