@@ -55,14 +55,18 @@ paste the unified key from the Keys page header. **It still serves nothing until
 key of your own** \u2014 that is what FreeLLMAPI is, an aggregator for your own free tiers.
 
 ### Downloads
-This release ships the **portable build** and a **zip** of the same app. The NSIS
-**installer could not be produced** in the build environment: electron-builder compiles a
-throwaway uninstaller-extractor and runs it, and on this machine that stub exits with code
-2 before the real installer is compiled, leaving only a 142 KB header. The failure is
-environmental rather than a code change \u2014 building the previous commit in a clean
-worktree reproduces it identically. The \`portable\` and \`zip\` targets skip that step
-entirely and build cleanly, so those are what is published. The installer returns once the
-packaging host is sorted out.
+Two ways to install, both built from this commit:
+
+- **MicoCode-Setup-0.9.3-x64.exe** \u2014 the installer.
+- **MicoCode-Portable-0.9.3-x64.exe** \u2014 the same app as a single file, no install step.
+
+The installer took a workaround to produce. electron-builder generates the uninstaller by
+compiling a header-only extractor and running it; on this machine that stub aborts with
+exit code 2 before writing anything, which aborts the whole build. That reproduces when
+building the previous commit in a clean worktree, so it is the environment rather than
+this code. The uninstaller is now compiled directly with makensis instead. Worth knowing
+if a future release is ever built on this machine: this NSIS build also refuses a script
+whose only section is named, so the generated uninstaller carries a second empty section.
 
 ### Verification
 - **4 new tests** in \`tests/freellmapi.test.mjs\` cover the npm layout, the opt-out from
@@ -126,10 +130,11 @@ async function publish() {
 
   // Upload assets
   const filesToUpload = [
+    {path: 'release/MicoCode-Setup-0.9.3-x64.exe', name: 'MicoCode-Setup-0.9.3-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
     {path: 'release/MicoCode-Portable-0.9.3-x64.exe', name: 'MicoCode-Portable-0.9.3-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
-    {path: 'release/MicoCode-0.9.3-win.zip', name: 'MicoCode-0.9.3-win.zip', contentType: 'application/zip'},
     {path: 'release/SHA256SUMS.txt', name: 'SHA256SUMS.txt', contentType: 'text/plain'}
   ];
+
 
 
   for (const item of filesToUpload) {
