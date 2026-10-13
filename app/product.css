@@ -25,7 +25,7 @@
 .welcome h1{max-width:720px;font-size:clamp(40px,4.7vw,62px);line-height:1.04;letter-spacing:-3px;margin:14px 0 14px}
 .welcome-description{max-width:510px;font-size:13px;line-height:1.8;color:var(--tone-70)}
 .welcome-first-use{position:absolute;right:18px;top:16px;z-index:5;display:flex;align-items:center;gap:10px;max-width:min(440px,calc(100% - 36px));padding:9px 11px;border:1px solid var(--tone-30);border-radius:9px;background:color-mix(in srgb,var(--tone-10) 94%,transparent);box-shadow:var(--shadow-md);backdrop-filter:blur(12px);text-align:left}
-.welcome-first-use>div{min-width:0;flex:1}
+.welcome-first-use>div{min-width:0;flex:1 1 auto}
 .welcome-first-use strong,.welcome-first-use small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .welcome-first-use strong{font-size:10px;color:var(--tone-85)}
 .welcome-first-use small{font-size:9px;color:var(--tone-55);margin-top:2px}

@@ -125,7 +125,7 @@ body{background:var(--surface-canvas);color:var(--ink-primary);letter-spacing:.0
 .template-grid>button:hover>span svg{transform:translate(2px,-2px);color:var(--mint)}
 .template-grid>button>small{margin-top:5px;font-size:10px;color:var(--ink-tertiary);line-height:1.5}
 .welcome-foot{margin-top:14px;color:var(--ink-tertiary);font-size:9px}
-.welcome-first-use{top:16px;right:20px;border-radius:999px;padding:8px 10px;max-width:min(400px,calc(100% - 40px))}
+.welcome-first-use{top:16px;right:20px;border-radius:18px;padding:11px 13px;max-width:min(340px,calc(100% - 40px));flex-wrap:wrap;row-gap:9px}
 .welcome-first-use .secondary{border-radius:999px}
 
 /* The onboarding is a compact stepper on desktop, not another long card stack. */
@@ -446,8 +446,10 @@ input:focus,textarea:focus,select:focus{border-color:color-mix(in srgb,var(--min
 .welcome-first-use-actions{
   display:flex;
   align-items:center;
+  justify-content:flex-end;
   gap:8px;
-  margin-left:auto;
+  flex:1 1 100%;
+  margin-left:0;
 }
 .welcome-first-use-actions .primary,
 .welcome-first-use-actions .secondary{
