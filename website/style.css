@@ -91,3 +91,7 @@ body{background:
 .js .autosetup-section.in .autosetup-routers span:nth-child(6){animation-delay:1.5s}
 @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
 @media(max-width:600px){.autosetup-section{padding-bottom:60px}.autosetup-routers{gap:8px}.autosetup-routers span{padding:7px 12px;font-size:10px}}
+
+/* The GitHub mark is a filled shape; the shared button icon rule draws outlines. */
+.button .github-mark{fill:currentColor;stroke:none;height:17px;width:17px}
+.github-star:hover{border-color:#448258}
