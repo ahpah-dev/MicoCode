@@ -17,7 +17,7 @@ export function assertProvider(id){if(!managedProviders.includes(id))throw new E
 export function assertEngine(engine){if(!['local','community'].includes(engine))throw new Error('Unsupported free engine.');return engine}
 const exists=async file=>{try{await access(file,constants.F_OK);return true}catch{return false}};
 const pause=(ms,signal)=>new Promise((resolve,reject)=>{if(signal?.aborted)return reject(new Error('Setup cancelled.'));const done=()=>{signal?.removeEventListener('abort',abort);resolve()};const timer=setTimeout(done,ms);const abort=()=>{clearTimeout(timer);reject(new Error('Setup cancelled.'))};signal?.addEventListener('abort',abort,{once:true})});
-async function freePort(){return new Promise((resolve,reject)=>{const s=net.createServer();s.once('error',reject);s.listen(0,'127.0.0.1',()=>{const port=s.address().port;s.close(()=>resolve(port))})})}
+export async function freePort(preferred=0){return new Promise((resolve,reject)=>{const s=net.createServer();s.once('error',error=>{if(preferred&&['EADDRINUSE','EACCES'].includes(error.code))freePort().then(resolve,reject);else reject(error)});s.listen(preferred,'127.0.0.1',()=>{const port=s.address().port;s.close(()=>resolve(port))})})}
 export function liteLLMConfig(port,key,base,upstreamKey,routes=['free-code']){
  const entries=routes.map(id=>`  - model_name: ${JSON.stringify(id)}\n    litellm_params:\n      model: ${JSON.stringify('openai/'+id)}\n      api_base: ${JSON.stringify(base)}\n      api_key: ${JSON.stringify(upstreamKey)}\n      timeout: 600\n      max_retries: 0`).join('\n');
  return `model_list:\n${entries}\ngeneral_settings:\n  master_key: ${JSON.stringify(key)}\nlitellm_settings:\n  drop_params: true\n  num_retries: 0\n  request_timeout: 600\n`;
@@ -84,10 +84,10 @@ export class ProviderManager{
    try{return (await this.fetch('http://127.0.0.1:20128/api/health',{redirect:'error',signal:AbortSignal.timeout(1500)})).ok}catch{return false}
   }
   async statuses(){return Promise.all(managedProviders.map(async provider=>({provider,installed:await exists(path.join(this.folder(provider),'installed.json')),running:!!this.children.get(provider)&&this.children.get(provider).exitCode===null})))}
- async run(exe,args,{cwd,env={},signal,timeout=900000}={}){
+ async run(exe,args,{cwd,env={},signal,timeout=900000,stdin='ignore'}={}){
   if(signal?.aborted)throw new Error('Setup cancelled.');
   // No shell, global installation, user-controlled command, or provider output in the UI.
-  const child=spawn(exe,args,{cwd,env:{...process.env,...env},windowsHide:true,stdio:[options.stdin==='pipe'?'pipe':'ignore','pipe','pipe'],shell:false});
+  const child=spawn(exe,args,{cwd,env:{...process.env,...env},windowsHide:true,stdio:[stdin==='pipe'?'pipe':'ignore','pipe','pipe'],shell:false});
   const finish=()=>{signal?.removeEventListener('abort',cancel);clearTimeout(timer)};
   const cancel=()=>{void this.killChild(child)};signal?.addEventListener('abort',cancel,{once:true});
   const timer=setTimeout(cancel,timeout);let output='';
@@ -210,7 +210,7 @@ export class ProviderManager{
   }
   async setup(id,engine='local',credentials={}){
    assertProvider(id);assertEngine(engine);if(this.active)throw new Error('Another provider setup is already running.');
-   const selectedEngine=id==='freeride'?'community':engine;
+   const selectedEngine=['freeride','freellmapi'].includes(id)?'community':engine;
    const controller=new AbortController();this.active={id,controller};const signal=controller.signal;
    const hadChild=this.children.get(id);
    try{
@@ -220,7 +220,7 @@ export class ProviderManager{
        const freeRideVerified=id==='freeride'&&typeof this.vault?.get==='function'&&await this.vault.get('freeride-setup-verified')==='0.7.1';
       const cached=this.connections.get(id);if(cached&&cached.config.routerEngine===selectedEngine&&hadChild?.exitCode===null){
      this.emit(id,'verify','Checking the running connection…');
-     try{if(['9router','cliproxy','litellm'].includes(id)&&engine==='local')await this.verifyLocalEngine(signal);if(id==='9router')await this.syncOpenCodeCatalogue(cached,signal);await this.verify(cached,signal);this.emit(id,'ready','Connected. Your free route is ready.');return cached}
+     try{if(['9router','cliproxy','litellm'].includes(id)&&engine==='local')await this.verifyLocalEngine(signal);if(id==='9router')await this.syncOpenCodeCatalogue(cached,signal);if(id==='freellmapi')await this.ready(cached.dashboard+'/',id,signal);else await this.verify(cached,signal);this.emit(id,'ready',id==='freellmapi'?'FreeLLMAPI is running. Connect with your unified key to load its ready models.':'Connected. Your free route is ready.');return cached}
     catch(e){if(signal.aborted)throw e;this.emit(id,'configure','Repairing the private router connection…');await this.stop(id)}
    }
    if(this.children.get(id)?.exitCode===null)await this.stop(id);
@@ -250,7 +250,7 @@ export class ProviderManager{
     connection.config.routerEngine=id==='ollama'?'local':selectedEngine;connection.config.managed=true;
     await writeFile(path.join(this.root,'last-provider.json'),JSON.stringify({provider:id,engine:selectedEngine}),{mode:0o600});
     await this.rememberRouter(id,selectedEngine);
-    this.connections.set(id,connection);this.emit(id,'ready',id==='ollama'?'Local coding model connected. No account or service quota.':id==='freeride'?'FreeRide connected. Automatic provider failover is ready.':'Connected through '+(id==='9router'?'9Router':id==='cliproxy'?'CLIProxyAPI':id==='omniroute'?'OmniRoute':'LiteLLM')+'. Your free '+selectedEngine+' route is ready.');return connection;
+    this.connections.set(id,connection);this.emit(id,'ready',id==='freellmapi'?'FreeLLMAPI is running. Open its dashboard and connect with your unified key.':id==='ollama'?'Local coding model connected. No account or service quota.':id==='freeride'?'FreeRide connected. Automatic provider failover is ready.':'Connected through '+(id==='9router'?'9Router':id==='cliproxy'?'CLIProxyAPI':id==='omniroute'?'OmniRoute':'LiteLLM')+'. Your free '+selectedEngine+' route is ready.');return connection;
   }catch(e){if(this.children.get(id)!==hadChild)await this.stop(id);this.emit(id,signal.aborted?'cancelled':'error',signal.aborted?'Setup cancelled. You can resume with the same button.':e.message);throw e}
   finally{this.active=null}
  }
@@ -461,6 +461,7 @@ export class ProviderManager{
   const base='http://127.0.0.1:'+port+'/v1';await this.ready(base+'/models',id,signal,{Authorization:'Bearer '+key});
   return {config:{provider:'proxy',proxyPreset:id,proxyUrl:base,model:preferred,freeModels:routes.map(r=>r.id),routerFreeOnly:true},key};
  }
+ async freeLLMPort(){return freePort(3001)}
  async setupFreeLLMAPI(signal,gatewayBase){
   const id='freellmapi',node=path.join(this.runtime,'node.exe');
   const dir=await this.installZip(id,artifacts[id],signal);
@@ -501,11 +502,11 @@ export class ProviderManager{
     await this.run(node,[npmCLI,'run','build'],{cwd:repo,signal,timeout:1800000,env});
    }finally{clearInterval(heartbeat)}
   }
-  const root='http://127.0.0.1:3001';
+  const port=await this.freeLLMPort(),root='http://127.0.0.1:'+port;
   this.emit(id,'start','Starting FreeLLMAPI on localhost…');
   // Deliberately not NODE_ENV=production: the server then generates its own local
   // encryption key beside the database instead of refusing to start without one.
-  this.start(id,node,[path.join(repo,'server','dist','index.js')],{cwd:path.join(repo,'server'),stdin:'pipe',env:{PORT:'3001',HOST:'127.0.0.1'}});
+  this.start(id,node,[path.join(repo,'server','dist','index.js')],{cwd:path.join(repo,'server'),stdin:'pipe',env:{PORT:String(port),HOST:'127.0.0.1'}});
   await this.ready(root+'/',id,signal);
   this.emit(id,'configure','FreeLLMAPI is running. Open its dashboard, add the provider keys you want, then paste its unified key here.');
   return {config:{provider:'proxy',proxyPreset:id,proxyUrl:root+'/v1',model:'',freeModels:[],routerFreeOnly:false},key:'',dashboard:root};

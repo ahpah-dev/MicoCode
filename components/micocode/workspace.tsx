@@ -20,7 +20,7 @@ import {loadProjects,saveProjects} from '@/lib/mico/storage';
 import {checkProject,diffLines,isPrivatePath,mergeFiles,safePath} from '@/lib/mico/core.mjs';
 import {browserReady,runAgent,stopBrowser} from '@/lib/mico/agent';
 import {discoverLocalNineKey,pickWorkingCodingModel,rankCodingModels} from '@/lib/mico/auto-connect.mjs';
-import {applyManagedConnection,connectionIdentity,credentialSlot,listProxyModels,proxyPresets,readCredential,rememberProfile,selectCatalogueModel,shouldRestoreManagedConnection,writeCredential} from '@/lib/mico/providers.mjs';
+import {applyManagedConnection,managedConnectionCredential,connectionIdentity,credentialSlot,listProxyModels,proxyPresets,readCredential,rememberProfile,selectCatalogueModel,shouldRestoreManagedConnection,writeCredential} from '@/lib/mico/providers.mjs';
 type View='welcome'|'code'|'preview'|'split'|'changes';
 type Dialog='connections'|'projects'|'new'|'file'|'commands'|'help'|'history'|'settings'|'plugins'|null;
 const FileIcon=({path}:{path:string})=>path.endsWith('.json')?<FileJson size={14} className="file-json"/>:path.endsWith('.md')?<FileText size={14} className="file-md"/>:<FileCode2 size={14} className={path.endsWith('.css')?'file-css':path.endsWith('.js')?'file-js':'file-html'}/>;
@@ -163,8 +163,10 @@ export default function Workspace(){
     // Ask for the router this workspace has selected, not just whichever ran last.
     const wanted=saved?.provider==='proxy'&&saved.managed&&saved.proxyPreset&&isManagedProvider(saved.proxyPreset)?saved.proxyPreset:undefined;
     const result=await desktop.restoreConnection(wanted,saved?.routerEngine==='local'?'local':'community');if(!active||!result)return;
-    setConfig(previous=>{const next:Config=applyManagedConnection(previous,result);try{writeCredential(next,result.key);localStorage.setItem('mico-config',JSON.stringify(next));rememberProfile(next)}catch{}return next});
-    setApiKey(result.key);setConnected(result.config.provider||'proxy');notify('Your managed connection is ready.');
+    const restoredKey=managedConnectionCredential(saved||defaultConfig,result,readCredential(saved||defaultConfig));
+    setConfig(previous=>{const next:Config=applyManagedConnection(previous,result);try{writeCredential(next,restoredKey);localStorage.setItem('mico-config',JSON.stringify(next));rememberProfile(next)}catch{}return next});
+    const needsFreeLLMKey=result.config.proxyPreset==='freellmapi'&&(!restoredKey||!saved?.model);
+    setApiKey(restoredKey);setConnected(needsFreeLLMKey?'':result.config.provider||'proxy');notify(needsFreeLLMKey?'FreeLLMAPI is running. Open Models to add its unified key and select a ready model.':'Your managed connection is ready.');
    })().catch(()=>{if(active)notify('Reconnect your managed router in Models.')}).finally(()=>{if(active)setManagedRestoring(false)});
    return()=>{active=false}
   },[loaded,notify]);

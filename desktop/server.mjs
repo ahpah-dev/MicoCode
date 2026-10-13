@@ -58,7 +58,12 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
      try{connection=await recoverFreeRide()}catch(e){return json(e.message||'FreeRide could not reconnect. Run Set up & connect FreeRide.',503)}
     }
    if(!connection)return json('Your managed router is stopped. Open Models and click Set up & connect.',503);
-   if(!connection.key||request.headers.get('authorization')!=='Bearer '+connection.key)return json('Reconnect your managed router to refresh its protected connection.',401);
+   // FreeLLMAPI owns and checks the user's unified key. The relay never stores it
+   // or substitutes a key issued for a different managed provider.
+   const authorization=request.headers.get('authorization')||'';
+   const userKey=id==='freellmapi'?authorization.match(/^Bearer ([^\s]+)$/)?.[1]:null;
+   if(id==='freellmapi'&&(!userKey||userKey.length>2048))return json('Add your FreeLLMAPI unified API key from its dashboard, then connect in Models.',401);
+   if(id!=='freellmapi'&&(!connection.key||authorization!=='Bearer '+connection.key))return json('Reconnect your managed router to refresh its protected connection.',401);
    const expected=action==='models'?'GET':'POST';if(request.method!==expected)return json('Method not allowed.',405);
     let target=new URL(connection.config.proxyUrl);
    if(target.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(target.hostname)||target.username||target.password||target.search||target.hash||target.pathname!=='/v1')return json('Invalid managed router configuration. Reconnect in Models.',503);
@@ -69,12 +74,12 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
       // 9Router owns its provider catalogue and enforces API-key access itself.
       // Its connected provider models are not limited to MicoCode's local engine.
       const allowed=new Set([connection.config.model,...(Array.isArray(connection.config.freeModels)?connection.config.freeModels:[])]);
-      if(id!=='9router'&&!allowed.has(body.model))return json('This managed router supports only its configured free models.');
+      if(!['9router','freellmapi'].includes(id)&&!allowed.has(body.model))return json('This managed router supports only its configured free models.');
      if(!Array.isArray(body.messages)||!body.messages.length||body.messages.length>80||!body.messages.every(m=>m&&['system','user','assistant'].includes(m.role)&&typeof m.content==='string'))return json('Invalid coding messages.');
      body={model:body.model,messages:body.messages,temperature:body.temperature,max_tokens:body.max_tokens,stream:false};
     }
    try{
-     const send=()=>fetchImpl(target.href.replace(/\/$/,'')+'/'+action,{method:expected,redirect:'error',headers:{Authorization:'Bearer '+connection.key,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(action==='models'?20000:610000)])});
+     const send=()=>fetchImpl(target.href.replace(/\/$/,'')+'/'+action,{method:expected,redirect:'error',headers:{Authorization:'Bearer '+(userKey||connection.key),'Content-Type':'application/json',...(id==='freellmapi'?{'X-FreeLLM-Task-Type':'code'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.any([request.signal,AbortSignal.timeout(action==='models'?20000:610000)])});
      let r;
      try{r=await send()}catch(error){
       // ECONNREFUSED proves no generation reached the stopped process. Do not
@@ -85,7 +90,7 @@ export async function createLocalServer({webDir,port=19286,gatewayKey,getOllamaU
       r=await send();
      }
     const headers={'Content-Type':r.headers.get('content-type')||'application/json','Cache-Control':'no-store'};
-    for(const name of ['retry-after','x-ratelimit-remaining','x-ratelimit-reset']){const value=r.headers.get(name);if(value)headers[name]=value}
+    for(const name of ['retry-after','x-ratelimit-remaining','x-ratelimit-reset',...(id==='freellmapi'?['x-routed-via','x-fallback-attempts']:[])]){const value=r.headers.get(name);if(value)headers[name]=value}
     // Do not commit successful headers until the non-streaming router response
     // finishes. A router process can exit after sending headers; forwarding that
     // partial body hides the connection error behind an invalid model reply.

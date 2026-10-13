@@ -19,6 +19,20 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.9.4 completes the FreeLLMAPI connection flow. Set it up from Models,
+add provider keys in its dashboard, then paste its **unified API key** into
+MicoCode and click **Connect & verify**. The key field stays editable for this
+managed provider; reconnecting and restoring preserve the key and chosen model.
+You can also choose **Use existing** to connect your own FreeLLMAPI installation.
+
+The catalogue marks routes that need a provider key or have exhausted their
+quota, and prevents selecting them. Automatic routing uses the connected
+providers; coding requests carry FreeLLMAPI's task hint and report the provider
+that answered. A managed instance uses a private loopback port if 3001 is already
+occupied. FreeLLMAPI still needs your own provider keys and respects their limits.
+The shared installer also now launches npm correctly instead of throwing before
+its child process starts.
+
 Version 0.8.8 tightens how Mico behaves when a step is not working. If it repeated an
 action that returned exactly the same result — re-reading a file, re-running a search, or
 retrying an edit whose text was never in the file — the loop used to run that step again

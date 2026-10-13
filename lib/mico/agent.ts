@@ -61,7 +61,7 @@ async function executeSingleProvider(messages:Chat[],config:Config,key:string,si
   // limit instead of an edit.
    const body=local?{model:config.model,messages,stream:false,think:false,format:actionSchema,options:{temperature:config.temperature,num_predict:4096}}:horde||opencode||nim||aistudio||aihubmix?{action:'complete',model:config.model,messages,temperature:config.temperature}:custom?{model:config.model,messages,temperature:config.temperature,max_tokens:4096,stream:false}:{model:config.model,messages,temperature:config.temperature,freeFallback:config.freeFallback};
   const effectiveKey=key||(!local&&!horde&&config.provider==='proxy'?readCredential(config):'');
-   const operation=()=>fetch(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json',...(!local&&!horde&&effectiveKey?{Authorization:`Bearer ${effectiveKey}`}:{})},body:JSON.stringify(body),signal:AbortSignal.any([signal,AbortSignal.timeout(managedLocal?620000:nim||aistudio||aihubmix?190000:130000)])});
+   const operation=()=>fetch(url,{method:'POST',redirect:'error',headers:{'Content-Type':'application/json',...(custom&&config.proxyPreset==='freellmapi'?{'X-FreeLLM-Task-Type':'code'}:{}),...(!local&&!horde&&effectiveKey?{Authorization:`Bearer ${effectiveKey}`}:{})},body:JSON.stringify(body),signal:AbortSignal.any([signal,AbortSignal.timeout(managedLocal?620000:nim||aistudio||aihubmix?190000:130000)])});
   // 9Router quotas are enforced per provider route; exhausting OpenCode must
   // not cool down unrelated providers exposed by the same router.
   const routerModel=config.model.trim(),slash=routerModel.indexOf('/');
@@ -69,6 +69,7 @@ async function executeSingleProvider(messages:Chat[],config:Config,key:string,si
   const routerScope=custom&&config.proxyPreset==='9router'?':'+routerProvider:'';
   // Other connections keep a shared cooldown so model switching cannot reset provider limits.
    const response=await resilientRequest(operation,{scope:config.provider+':'+(opencode?'opencode':nim?'nim':aistudio?'aistudio':aihubmix?'aihubmix':horde?'horde':custom?normalizeEndpoint(config.proxyUrl)+routerScope:local?config.ollamaUrl:''),signal,enabled:config.resilience,paceMs:local?0:config.provider==='openrouter'?3200:1500,onStatus});
+  if(custom&&config.proxyPreset==='freellmapi'&&response.ok){const route=response.headers.get('x-routed-via');if(route)onStatus('FreeLLMAPI routed this turn through '+route.slice(0,160)+(Number(response.headers.get('x-fallback-attempts'))>0?' after provider failover.':'.'))}
   const content=await readModelText(response,{local,signal,onReasoning});
  onToken(content);return content;
 }
