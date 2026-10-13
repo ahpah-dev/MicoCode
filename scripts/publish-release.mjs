@@ -10,51 +10,68 @@ if (!token) {
   process.exit(1);
 }
 
-const tag = 'v0.9.1';
-const name = 'MicoCode 0.9.1 — FreeLLMAPI Connects, and Errors Say What To Do';
+const tag = 'v0.9.2';
+const name = 'MicoCode 0.9.2 — FreeLLMAPI Runs as a Server, Not an App';
 const checksums = fs.readFileSync('release/SHA256SUMS.txt', 'utf8').trim();
 
-const body = `## MicoCode v0.9.1 — FreeLLMAPI Connects, and Errors Say What To Do
+const body = `## MicoCode v0.9.2 — FreeLLMAPI Runs as a Server, Not an App
 
-### FreeLLMAPI setup failed every single time
-The connection validator required two things a freshly installed FreeLLMAPI cannot have:
-a **key**, and a **non-empty list of free models**. FreeLLMAPI has neither until you add a
-provider key in its own dashboard — that is the whole point of it. So setup downloaded,
-extracted and started it correctly, then threw on the last step and the router was never
-recorded as managed.
+### The desktop app was the wrong way to run it
+0.9.0 and 0.9.1 installed FreeLLMAPI's **Electron desktop app**. It downloads fine and
+extracts fine — but it never runs. It creates its data folder, then dies silently: no
+window, no tray icon, no log, no Windows crash entry, and port 3001 never opens. Two
+releases were built on a binary that will not start.
+
+FreeLLMAPI is a Node monorepo. Run as a **server** it works, and its own
+\`package.json\` fits MicoCode exactly:
 
 \`\`\`
-if(!result.key) throw ... "Managed setup returned an incomplete connection."
-if(!routes.length || !routes.includes(c.model)) throw ...
+"engines": { "node": ">=20.18.0 <25.0.0" }     MicoCode ships Node 24.21.0
+"scripts": { "build:server": ... }
 \`\`\`
 
-A router that is installed and running but has nothing to serve yet is now a **real state**
-rather than an error. It connects, and it says so plainly.
+### What changed
+Setup now downloads the **source** and runs it on MicoCode's bundled Node:
 
-### The unhelpful error
-That failed setup is why the app then reported:
+| | before | now |
+| --- | --- | --- |
+| Download | 148 MB Electron zip | **8 MB source zip** |
+| Install | — | 834 packages, **58s** |
+| Result | dies silently | **boots and serves** |
 
-> *"Could not reach the router. Start it, use its final API URL without redirects, allow this
-> site in CORS, and allow local-network access when your browser asks."*
+### Verified by actually running it
+This is the first FreeLLMAPI work in this project that was watched running rather than
+inferred — a Node process can be launched in the build sandbox, an Electron app cannot:
 
-Three of those four suggestions were irrelevant, and none of them was the actual problem.
-MicoCode now names the router and the step:
+\`\`\`
+Database initialized at ...\\server\\data\\freeapi.db
+Seeded 25 models and fallback config
+A unified API key was generated. Open the dashboard and retrieve it from the Keys page.
+First-run setup code: X8E78RUUFA
+[crypto] No ENCRYPTION_KEY set - generated a local dev key beside the database
+\`\`\`
 
-- **FreeLLMAPI** — *"not answering on 127.0.0.1:3001. Open Models, click Set up & connect on
-  FreeLLMAPI so MicoCode installs and starts it, then open its dashboard, add one provider
-  key (Google, Groq or Cerebras all have free tiers), and paste the unified key into the API
-  key field."*
-- **Any other managed router** — *"Your LiteLLM router is not running. Open Models and click
-  Set up & connect to start it."*
-- **A custom address** — names the preset and the URL, and points at the base URL and the key
-  rather than blaming CORS.
+Three traps were found and handled while verifying:
+
+- **Native module ABI.** \`better-sqlite3\` compiled against the machine's Node instead of
+  MicoCode's and the server died with \`NODE_MODULE_VERSION 147 vs 137\`. Setup now puts
+  MicoCode's runtime first on \`PATH\`, which is what selects the right build.
+- **Build the client too.** \`build:server\` alone leaves the dashboard 404ing — and the
+  dashboard is where provider keys and the unified key come from.
+- **Do not set \`NODE_ENV=production\`.** The server then refuses to start without an
+  \`ENCRYPTION_KEY\`. Without it, it generates its own key beside the database.
+
+### What to do
+Set up FreeLLMAPI from Models, then click **Open FreeLLMAPI dashboard**: add one provider
+key (Google, Groq and Cerebras all have free tiers) and paste the unified key into the API
+key field. **It still serves nothing until you add a key of your own** — that is what
+FreeLLMAPI is, an aggregator for your own free tiers.
 
 ### Verification
-- **190 tests pass with no skips**; TypeScript check clean; production web build clean;
-  packaged app smoke-tested with all seven providers reporting.
-- Still not verified: that FreeLLMAPI serves a request end to end. It cannot be launched in
-  the build sandbox (Electron's singleton lock is blocked there), so this fixes the setup and
-  the message, not a proven round trip.
+- **190 tests pass with no skips**; TypeScript check clean; web build clean; packaged app
+  smoke-tested with all seven providers reporting; installers built fresh from this commit.
+- Not verified: a chat completion through the router. That needs a real provider key, which
+  the build sandbox does not have.
 
 ### Checksums
 \`\`\`
@@ -105,8 +122,8 @@ async function publish() {
 
   // Upload assets
   const filesToUpload = [
-    {path: 'release/MicoCode-Setup-0.9.1-x64.exe', name: 'MicoCode-Setup-0.9.1-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
-    {path: 'release/MicoCode-Portable-0.9.1-x64.exe', name: 'MicoCode-Portable-0.9.1-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Setup-0.9.2-x64.exe', name: 'MicoCode-Setup-0.9.2-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Portable-0.9.2-x64.exe', name: 'MicoCode-Portable-0.9.2-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
     {path: 'release/SHA256SUMS.txt', name: 'SHA256SUMS.txt', contentType: 'text/plain'}
   ];
 

@@ -456,11 +456,28 @@ export class ProviderManager{
   return {config:{provider:'proxy',proxyPreset:id,proxyUrl:base,model:preferred,freeModels:routes.map(r=>r.id),routerFreeOnly:true},key};
  }
  async setupFreeLLMAPI(signal,gatewayBase){
-  const id='freellmapi',dir=await this.installZip(id,artifacts[id],signal);
-  const exe=await this.findExecutable(dir,['FreeLLMAPI.exe']);
+  const id='freellmapi',node=path.join(this.runtime,'node.exe');
+  const dir=await this.installZip(id,artifacts[id],signal);
+  // The source archive unpacks into a single folder inside the destination.
+  const repo=path.join(dir,'freellmapi-'+versions.freellmapi);
+  const npmCLI=path.join(this.root,'runtime','node-'+versions.node,'npm','bin','npm-cli.js');
+  // MicoCode's own runtime must come first on PATH, or npm builds better-sqlite3 for
+  // whichever Node is installed and the server dies on an ABI mismatch.
+  const env={PATH:this.runtime+path.delimiter+process.env.PATH,npm_config_cache:path.join(this.root,'npm-cache'),npm_config_userconfig:path.join(this.root,'npmrc'),npm_config_audit:'false',npm_config_fund:'false'};
+  if(!await exists(path.join(repo,'server','dist','index.js'))){
+   this.emit(id,'install','Installing FreeLLMAPI from source with MicoCode’s bundled Node. This is a one-time build and takes a few minutes…');
+   const heartbeat=setInterval(()=>this.emit(id,'install','Still installing FreeLLMAPI…'),20000);
+   try{
+    await this.run(node,[npmCLI,'install','--no-audit','--no-fund'],{cwd:repo,signal,timeout:1800000,env});
+    this.emit(id,'install','Building FreeLLMAPI, server and dashboard…');
+    await this.run(node,[npmCLI,'run','build'],{cwd:repo,signal,timeout:1800000,env});
+   }finally{clearInterval(heartbeat)}
+  }
   const root='http://127.0.0.1:3001';
   this.emit(id,'start','Starting FreeLLMAPI on localhost…');
-  this.start(id,exe,[],{cwd:dir});
+  // Deliberately not NODE_ENV=production: the server then generates its own local
+  // encryption key beside the database instead of refusing to start without one.
+  this.start(id,node,[path.join(repo,'server','dist','index.js')],{cwd:path.join(repo,'server'),stdin:'pipe',env:{PORT:'3001',HOST:'127.0.0.1'}});
   await this.ready(root+'/',id,signal);
   this.emit(id,'configure','FreeLLMAPI is running. Open its dashboard, add the provider keys you want, then paste its unified key here.');
   return {config:{provider:'proxy',proxyPreset:id,proxyUrl:root+'/v1',model:'',freeModels:[],routerFreeOnly:false},key:'',dashboard:root};
