@@ -105,8 +105,8 @@ async function publish() {
 
   // Upload assets
   const filesToUpload = [
-    {path: 'release/MicoCode-Setup-0.9.0-x64.exe', name: 'MicoCode-Setup-0.9.0-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
-    {path: 'release/MicoCode-Portable-0.9.0-x64.exe', name: 'MicoCode-Portable-0.9.0-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Setup-0.9.1-x64.exe', name: 'MicoCode-Setup-0.9.1-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Portable-0.9.1-x64.exe', name: 'MicoCode-Portable-0.9.1-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
     {path: 'release/SHA256SUMS.txt', name: 'SHA256SUMS.txt', contentType: 'text/plain'}
   ];
 
