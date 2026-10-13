@@ -449,18 +449,14 @@ input:focus,textarea:focus,select:focus{border-color:color-mix(in srgb,var(--min
   gap:8px;
   margin-left:auto;
 }
-.welcome-first-use-actions .primary{
-  min-height:32px;
-  padding:6px 14px;
-  font-size:11px;
-  border-radius:999px;
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-}
+.welcome-first-use-actions .primary,
 .welcome-first-use-actions .secondary{
   min-height:32px;
-  padding:6px 12px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  padding:6px 14px;
   font-size:11px;
   border-radius:999px;
 }
