@@ -1,6 +1,6 @@
 import {spawn} from 'node:child_process';
 import {mkdir,readFile,writeFile,access,readdir,rm} from 'node:fs/promises';
-import {constants} from 'node:fs';
+import fs,{constants} from 'node:fs';
 import path from 'node:path';
 import {bestCodingModel,freeCatalogue,fullCatalogue,managedPresets,routeSlug} from '../lib/mico/providers.mjs';
 import {rankCodingModels} from '../lib/mico/auto-connect.mjs';
@@ -239,7 +239,13 @@ export class ProviderManager{
      else if(id==='freeride')connection=await this.setupFreeRide(signal,{verifyGeneration:credentialsChanged||!freeRideVerified});
     else connection=await this.setupOllama(signal);
    if(id==='9router')await this.syncOpenCodeCatalogue(connection,signal);
-   this.emit(id,'verify','Verifying the model catalogue and free route…');await this.verify(connection,signal);
+   // FreeLLMAPI serves nothing until the user pastes their own provider key and unified
+   // key, so /v1/models is authenticated (401) and empty at this point. Requiring it here
+   // would abort setup and stop the server the user needs in order to add that key. Its
+   // own setup step already proved the dashboard answers, so only its catalogue check is
+   // deferred.
+   if(id==='freellmapi')this.emit(id,'verify','FreeLLMAPI is running. Its model catalogue appears once you add a provider key in its dashboard.');
+   else{this.emit(id,'verify','Verifying the model catalogue and free route…');await this.verify(connection,signal)}
     await writeFile(path.join(this.folder(id),'installed.json'),JSON.stringify({version:id==='9router'?versions.nine:id==='litellm'?versions.litellm:id==='freeride'?versions.freeride:id==='omniroute'?versions.omniroute:id==='freellmapi'?versions.freellmapi:artifacts[id].version}),{mode:0o600});
     connection.config.routerEngine=id==='ollama'?'local':selectedEngine;connection.config.managed=true;
     await writeFile(path.join(this.root,'last-provider.json'),JSON.stringify({provider:id,engine:selectedEngine}),{mode:0o600});
@@ -460,9 +466,31 @@ export class ProviderManager{
   const dir=await this.installZip(id,artifacts[id],signal);
   // The source archive unpacks into a single folder inside the destination.
   const repo=path.join(dir,'freellmapi-'+versions.freellmapi);
-  const npmCLI=path.join(this.root,'runtime','node-'+versions.node,'npm','bin','npm-cli.js');
   // MicoCode's own runtime must come first on PATH, or npm builds better-sqlite3 for
   // whichever Node is installed and the server dies on an ABI mismatch.
+  // 9Router and OmniRoute install with --ignore-scripts into the shared providers\npmrc,
+  // which permanently pins ignore-scripts=true there. npm's precedence is cli, env, then
+  // project, so that inherited setting would silently skip better-sqlite3's install
+  // script and the server would die on a missing bindings file. A project .npmrc wins
+  // over the inherited userconfig (npm reports "ignore-scripts = true ; overridden by
+  // project"), so this provider opts back in without disturbing the others.
+  await writeFile(path.join(repo,'.npmrc'),'registry=https://registry.npmjs.org/\nignore-scripts=false\n',{mode:0o600});
+  const npmDir=path.join(this.root,'runtime','node-'+versions.node);
+  // npm locates itself as node_modules/npm relative to its own bin directory. Extracting
+  // the archive as a bare npm\ folder leaves that path missing, so npm's shim dies with
+  // MODULE_NOT_FOUND and `npm run build` can never reach the workspace build scripts.
+  // Mirror the runtime's real shape so npm can resolve itself.
+  const linkNpm=(from,to)=>{try{return fs.symlinkSync(from,to,'junction')}catch{}try{return fs.cpSync(from,to,{recursive:true,dereference:true})}catch{return false}};
+  if(!await exists(path.join(npmDir,'node_modules','npm','bin','npm-cli.js'))){
+   if(await exists(path.join(npmDir,'npm','bin','npm-cli.js'))){
+    await mkdir(path.join(npmDir,'node_modules'),{recursive:true});
+    linkNpm(path.join(npmDir,'npm'),path.join(npmDir,'node_modules','npm'));
+   }else{
+    await extractVerifiedZip(path.join(this.runtime,'npm-runtime.zip'),path.join(npmDir,'node_modules'),signal);
+    if(!await exists(path.join(npmDir,'node_modules','npm','bin','npm-cli.js')))await extractVerifiedZip(path.join(this.runtime,'npm-runtime.zip'),npmDir,signal);
+   }
+  }
+  const npmCLI=await exists(path.join(npmDir,'node_modules','npm','bin','npm-cli.js'))?path.join(npmDir,'node_modules','npm','bin','npm-cli.js'):path.join(npmDir,'npm','bin','npm-cli.js');
   const env={PATH:this.runtime+path.delimiter+process.env.PATH,npm_config_cache:path.join(this.root,'npm-cache'),npm_config_userconfig:path.join(this.root,'npmrc'),npm_config_audit:'false',npm_config_fund:'false'};
   if(!await exists(path.join(repo,'server','dist','index.js'))){
    this.emit(id,'install','Installing FreeLLMAPI from source with MicoCode’s bundled Node. This is a one-time build and takes a few minutes…');

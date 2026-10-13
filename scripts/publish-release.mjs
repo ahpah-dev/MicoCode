@@ -10,68 +10,72 @@ if (!token) {
   process.exit(1);
 }
 
-const tag = 'v0.9.2';
-const name = 'MicoCode 0.9.2 — FreeLLMAPI Runs as a Server, Not an App';
+const tag = 'v0.9.3';
+const name = 'MicoCode 0.9.3 \u2014 FreeLLMAPI Actually Installs and Starts';
 const checksums = fs.readFileSync('release/SHA256SUMS.txt', 'utf8').trim();
 
-const body = `## MicoCode v0.9.2 — FreeLLMAPI Runs as a Server, Not an App
+const body = `## MicoCode v0.9.3 \u2014 FreeLLMAPI Actually Installs and Starts
 
-### The desktop app was the wrong way to run it
-0.9.0 and 0.9.1 installed FreeLLMAPI's **Electron desktop app**. It downloads fine and
-extracts fine — but it never runs. It creates its data folder, then dies silently: no
-window, no tray icon, no log, no Windows crash entry, and port 3001 never opens. Two
-releases were built on a binary that will not start.
+### 0.9.2 could never finish setting FreeLLMAPI up
+0.9.2 was the first release to run FreeLLMAPI as a **source-built Node server**. That
+decision was right, but two defects in the setup path meant it still never reached a
+running server. Both are fixed here, and both now have tests \u2014 the integration
+previously had **none**, which is why neither was caught.
 
-FreeLLMAPI is a Node monorepo. Run as a **server** it works, and its own
-\`package.json\` fits MicoCode exactly:
+### Defect 1 \u2014 the build could not run, and the database driver was never built
 
-\`\`\`
-"engines": { "node": ">=20.18.0 <25.0.0" }     MicoCode ships Node 24.21.0
-"scripts": { "build:server": ... }
-\`\`\`
+Two independent problems inside the install step:
 
-### What changed
-Setup now downloads the **source** and runs it on MicoCode's bundled Node:
+- **npm could not resolve itself.** MicoCode extracts npm into its private runtime from
+  \`npm-runtime.zip\`, whose archive root is a bare \`npm\` folder. npm locates itself as
+  \`node_modules/npm\` **relative to its own bin directory**, so the shim that spawns
+  workspace scripts looked for a path that did not exist and died with
+  \`MODULE_NOT_FOUND\`. \`npm install\` survived; \`npm run build\` could never run.
+- **\`ignore-scripts=true\` was inherited.** 9Router and OmniRoute install with
+  \`--ignore-scripts\` and permanently write that flag into the shared \`providers\` npmrc.
+  FreeLLMAPI reused the same npmrc, so \`better-sqlite3\`'s install script was skipped and
+  the server died on a missing bindings file. npm's precedence is cli, env, then **project**,
+  so FreeLLMAPI now writes its own \`.npmrc\` opting back in \u2014 without changing how the
+  other providers install.
 
-| | before | now |
-| --- | --- | --- |
-| Download | 148 MB Electron zip | **8 MB source zip** |
-| Install | — | 834 packages, **58s** |
-| Result | dies silently | **boots and serves** |
+### Defect 2 \u2014 setup aborted on a key it was about to ask you for
 
-### Verified by actually running it
-This is the first FreeLLMAPI work in this project that was watched running rather than
-inferred — a Node process can be launched in the build sandbox, an Electron app cannot:
+FreeLLMAPI's \`/v1\` surface is bearer-gated, and it holds no models until you add a
+provider key of your own. Setup returned an empty key, the generic flow then called
+\`verify()\`, and that request to \`/v1/models\` came back **401**. Verification threw, and
+the catch block stopped the very server you needed in order to add that key.
 
-\`\`\`
-Database initialized at ...\\server\\data\\freeapi.db
-Seeded 25 models and fallback config
-A unified API key was generated. Open the dashboard and retrieve it from the Keys page.
-First-run setup code: X8E78RUUFA
-[crypto] No ENCRYPTION_KEY set - generated a local dev key beside the database
-\`\`\`
-
-Three traps were found and handled while verifying:
-
-- **Native module ABI.** \`better-sqlite3\` compiled against the machine's Node instead of
-  MicoCode's and the server died with \`NODE_MODULE_VERSION 147 vs 137\`. Setup now puts
-  MicoCode's runtime first on \`PATH\`, which is what selects the right build.
-- **Build the client too.** \`build:server\` alone leaves the dashboard 404ing — and the
-  dashboard is where provider keys and the unified key come from.
-- **Do not set \`NODE_ENV=production\`.** The server then refuses to start without an
-  \`ENCRYPTION_KEY\`. Without it, it generates its own key beside the database.
+Only FreeLLMAPI's catalogue check is deferred, because its own setup step already proved
+the dashboard answers. It reports what to do next and stays running.
 
 ### What to do
-Set up FreeLLMAPI from Models, then click **Open FreeLLMAPI dashboard**: add one provider
-key (Google, Groq and Cerebras all have free tiers) and paste the unified key into the API
-key field. **It still serves nothing until you add a key of your own** — that is what
-FreeLLMAPI is, an aggregator for your own free tiers.
+Set up FreeLLMAPI from Models. It starts and answers on port 3001. Click **Open FreeLLMAPI
+dashboard**, add one provider key (Google, Groq and Cerebras all have free tiers), then
+paste the unified key from the Keys page header. **It still serves nothing until you add a
+key of your own** \u2014 that is what FreeLLMAPI is, an aggregator for your own free tiers.
+
+### Downloads
+This release ships the **portable build** and a **zip** of the same app. The NSIS
+**installer could not be produced** in the build environment: electron-builder compiles a
+throwaway uninstaller-extractor and runs it, and on this machine that stub exits with code
+2 before the real installer is compiled, leaving only a 142 KB header. The failure is
+environmental rather than a code change \u2014 building the previous commit in a clean
+worktree reproduces it identically. The \`portable\` and \`zip\` targets skip that step
+entirely and build cleanly, so those are what is published. The installer returns once the
+packaging host is sorted out.
 
 ### Verification
-- **190 tests pass with no skips**; TypeScript check clean; web build clean; packaged app
-  smoke-tested with all seven providers reporting; installers built fresh from this commit.
-- Not verified: a chat completion through the router. That needs a real provider key, which
-  the build sandbox does not have.
+- **4 new tests** in \`tests/freellmapi.test.mjs\` cover the npm layout, the opt-out from
+  \`ignore-scripts\`, the cached-build path, and the verify decision. Each was confirmed to
+  **fail against the pre-fix code** and pass after it.
+- \`better-sqlite3\`'s install script and esbuild's binary both use \`prebuild-install\`, so
+  the dedicated \`.npmrc\` covers native modules generally, not just this one package.
+- The suite reports **194 tests, 190 passing**. The 4 failures are pre-existing at the
+  previous commit and reproduce there unchanged: three spawn Electron from a \`%TEMP%\`
+  directory where it cannot resolve its own module, and one hits a 429 in an unrelated
+  fallback path. None of them touch FreeLLMAPI.
+- Not verified end to end: a real install still needs network access, and a chat completion
+  still needs a real provider key. Neither is available in the build sandbox.
 
 ### Checksums
 \`\`\`
@@ -122,10 +126,11 @@ async function publish() {
 
   // Upload assets
   const filesToUpload = [
-    {path: 'release/MicoCode-Setup-0.9.2-x64.exe', name: 'MicoCode-Setup-0.9.2-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
-    {path: 'release/MicoCode-Portable-0.9.2-x64.exe', name: 'MicoCode-Portable-0.9.2-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Portable-0.9.3-x64.exe', name: 'MicoCode-Portable-0.9.3-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-0.9.3-win.zip', name: 'MicoCode-0.9.3-win.zip', contentType: 'application/zip'},
     {path: 'release/SHA256SUMS.txt', name: 'SHA256SUMS.txt', contentType: 'text/plain'}
   ];
+
 
   for (const item of filesToUpload) {
     const existingAsset = release.assets?.find(a => a.name === item.name);
