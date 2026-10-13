@@ -10,59 +10,52 @@ if (!token) {
   process.exit(1);
 }
 
-const tag = 'v0.8.9';
-const name = 'MicoCode 0.8.9 — LiteLLM Sets Itself Up Again';
+const tag = 'v0.9.0';
+const name = 'MicoCode 0.9.0 — FreeLLMAPI, 34 Free Tiers Behind One Endpoint';
 const checksums = fs.readFileSync('release/SHA256SUMS.txt', 'utf8').trim();
 
-const body = `## MicoCode v0.8.9 — LiteLLM Sets Itself Up Again
+const body = `## MicoCode v0.9.0 — FreeLLMAPI, 34 Free Tiers Behind One Endpoint
 
-### The bug: a setup that could never be retried
-LiteLLM, FreeRide and any Python-backed router failed auto setup, and once they had failed
-they could **never succeed** — no matter how many times you clicked. The cause is a single
-unconditional command:
+### New provider: FreeLLMAPI
+[FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) stacks the free tiers of 34
+providers — Google, Groq, Cerebras, Mistral, OpenRouter, NVIDIA and more — behind a single
+OpenAI-compatible endpoint on \`127.0.0.1:3001\`, with automatic failover when one provider
+is rate-limited. MicoCode now installs, starts and opens it for you.
 
-\`\`\`
-uv venv --python 3.12 --managed-python <folder>
-  → exit 2
-  → error: A virtual environment already exists at: <folder>
-  → hint: Use the \`--clear\` flag
-\`\`\`
+Verified before shipping: MIT licensed, 34,443 stars, release **v0.13.10**, and the
+portable build is a straight unpacked Electron app rather than an installer.
 
-Setup created the virtual environment first and installed the package second, but guarded
-both behind a single check for the *installed executable*. So the moment an install was
-interrupted — a cancelled setup, a dropped connection, a closed window — the virtual
-environment existed and the package did not. Every retry afterwards re-ran \`uv venv\`, which
-refused, and died **before installing anything**. The folder on disk was a valid Python
-environment with an entirely empty \`site-packages\`, which is exactly what the failure left
-behind:
+### Read this before you click it
+**FreeLLMAPI serves no models until you give it provider keys.** Unlike OmniRoute, it has no
+keyless providers — it is an aggregator for *your* free-tier accounts. That is a deliberate
+part of this release, not a bug:
 
-\`\`\`
-litellm/1.104.2/Scripts/python.exe     present
-litellm/1.104.2/Scripts/litellm.exe    missing
-litellm/1.104.2/Lib/site-packages      empty
-\`\`\`
+1. Set up FreeLLMAPI from Models — MicoCode downloads it, checks the digest, extracts and
+   starts it.
+2. Click **Open FreeLLMAPI dashboard** and add whichever provider keys you have.
+3. Paste FreeLLMAPI's unified key into the API key field, and its models load into MicoCode.
 
-### The fix
-An existing interpreter is now **reused** instead of recreated, and when the directory has to
-be rebuilt it is cleared rather than refused. Verified against the real \`uv\` binary:
+**MicoCode does not read that unified key for you.** It lives in an encrypted SQLite
+database, and rather than guess at how to decrypt it, this release asks you to paste it
+once. If a later version can read it reliably, that step goes away.
 
-\`\`\`
-uv venv --python 3.12 --managed-python <existing folder>            exit 2   (before)
-uv venv --clear --python 3.12 --managed-python <existing folder>    exit 0   (after)
-\`\`\`
-
-Both Python-backed providers — LiteLLM and FreeRide — shared the shape and are both fixed.
-
-### Verified end to end, not assumed
-The install itself was never broken. Run exactly as MicoCode runs it, LiteLLM installed
-cleanly in **49 seconds** and its executable ran on MicoCode's own private Python — the only
-thing standing between you and a working setup was the venv step refusing to repeat itself.
+### Honest scope
+- The installer (\`FreeLLMAPI-Setup-0.13.10.exe\` with \`/S\`) **installs nothing** — it exits
+  without writing a file or a registry entry, so the portable zip is the path used here.
+- The portable zip is pinned by SHA-256 and downloaded through MicoCode's existing verified
+  download and extraction path, the same one CLIProxyAPI uses.
+- Its own README calls it "for personal experimentation and learning, not production", and
+  free tiers change without notice. Treat it as a bonus route, not your only one.
 
 ### Verification
-- **190 tests pass with no skips.** The new one asserts that both Python providers clear a
-  stale environment and reuse an existing interpreter, so this cannot regress.
-- TypeScript check clean; production web build clean; packaged app smoke-tested; installers
-  built fresh from this commit.
+- **190 tests pass with no skips**, including the existing coverage that every managed
+  router has a proxy route and a display name — FreeLLMAPI had to satisfy both.
+- TypeScript check clean; production web build clean; packaged app smoke-tested with all
+  seven providers reporting; installers built fresh from this commit.
+- What is **not** verified: that the app launches and serves from the extracted folder on a
+  real machine. It cannot be launched in the build sandbox at all (Electron's singleton lock
+  is blocked there, the same restriction that prevents launching MicoCode itself), so this
+  release claims install, extract and start — not a working end-to-end request.
 
 ### Checksums
 \`\`\`
@@ -113,8 +106,8 @@ async function publish() {
 
   // Upload assets
   const filesToUpload = [
-    {path: 'release/MicoCode-Setup-0.8.9-x64.exe', name: 'MicoCode-Setup-0.8.9-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
-    {path: 'release/MicoCode-Portable-0.8.9-x64.exe', name: 'MicoCode-Portable-0.8.9-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Setup-0.9.0-x64.exe', name: 'MicoCode-Setup-0.9.0-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Portable-0.9.0-x64.exe', name: 'MicoCode-Portable-0.9.0-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
     {path: 'release/SHA256SUMS.txt', name: 'SHA256SUMS.txt', contentType: 'text/plain'}
   ];
 

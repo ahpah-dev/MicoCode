@@ -12,7 +12,7 @@ import {randomBytes,randomUUID} from 'node:crypto';
 import {artifacts,versions} from './artifacts.mjs';
 import {downloadVerified,extractVerifiedZip} from './install.mjs';
 
-export const managedProviders=['9router','cliproxy','litellm','omniroute','freeride','ollama'];
+export const managedProviders=['9router','cliproxy','litellm','omniroute','freeride','freellmapi','ollama'];
 export function assertProvider(id){if(!managedProviders.includes(id))throw new Error('Unsupported managed provider.');return id}
 export function assertEngine(engine){if(!['local','community'].includes(engine))throw new Error('Unsupported free engine.');return engine}
 const exists=async file=>{try{await access(file,constants.F_OK);return true}catch{return false}};
@@ -47,7 +47,7 @@ export class ProviderManager{
    this.notify=onProgress;this.vault=vault;this.fetch=fetchImpl;this.diagnostic=onDiagnostic;this.loadOpenCodeModels=loadOpenCodeModelsImpl;this.children=new Map();this.connections=new Map();this.active=null;this.cookies=new Map();this.ollamaUpstream=null;this.ollamaModel=null;this.ollamaModels=null;this.closing=false;
  }
  folder(id){return path.join(this.root,assertProvider(id))}
-  versionFolder(id){return path.join(this.folder(id),id==='9router'?versions.nine:id==='litellm'?versions.litellm:id==='freeride'?versions.freeride:id==='omniroute'?versions.omniroute:artifacts[id].version)}
+  versionFolder(id){return path.join(this.folder(id),id==='9router'?versions.nine:id==='litellm'?versions.litellm:id==='freeride'?versions.freeride:id==='omniroute'?versions.omniroute:id==='freellmapi'?versions.freellmapi:artifacts[id].version)}
   emit(provider,stage,message,percent){this.notify({provider,stage,message,...(Number.isFinite(percent)?{percent}: {})})}
   async secret(name){let key=await this.vault.get(name);if(!key){key='sk-mico-'+randomBytes(24).toString('hex');await this.vault.set(name,key)}return key}
   // Reads, never writes, the local 9Router database so MicoCode can reuse a key
@@ -234,12 +234,13 @@ export class ProviderManager{
     if(id==='9router')connection=await this.setupNine(signal,base);
     else if(id==='cliproxy')connection=await this.setupCLI(signal,base);
     else if(id==='litellm')connection=await this.setupLite(signal,base);
+    else if(id==='freellmapi')connection=await this.setupFreeLLMAPI(signal,base);
     else if(id==='omniroute')connection=await this.setupOmniRoute(signal,base);
      else if(id==='freeride')connection=await this.setupFreeRide(signal,{verifyGeneration:credentialsChanged||!freeRideVerified});
     else connection=await this.setupOllama(signal);
    if(id==='9router')await this.syncOpenCodeCatalogue(connection,signal);
    this.emit(id,'verify','Verifying the model catalogue and free route…');await this.verify(connection,signal);
-    await writeFile(path.join(this.folder(id),'installed.json'),JSON.stringify({version:id==='9router'?versions.nine:id==='litellm'?versions.litellm:id==='freeride'?versions.freeride:id==='omniroute'?versions.omniroute:artifacts[id].version}),{mode:0o600});
+    await writeFile(path.join(this.folder(id),'installed.json'),JSON.stringify({version:id==='9router'?versions.nine:id==='litellm'?versions.litellm:id==='freeride'?versions.freeride:id==='omniroute'?versions.omniroute:id==='freellmapi'?versions.freellmapi:artifacts[id].version}),{mode:0o600});
     connection.config.routerEngine=id==='ollama'?'local':selectedEngine;connection.config.managed=true;
     await writeFile(path.join(this.root,'last-provider.json'),JSON.stringify({provider:id,engine:selectedEngine}),{mode:0o600});
     await this.rememberRouter(id,selectedEngine);
@@ -453,6 +454,16 @@ export class ProviderManager{
   this.emit(id,'start','Starting CLIProxyAPI on localhost…');this.start(id,exe,['--config',configFile],{cwd:dir});
   const base='http://127.0.0.1:'+port+'/v1';await this.ready(base+'/models',id,signal,{Authorization:'Bearer '+key});
   return {config:{provider:'proxy',proxyPreset:id,proxyUrl:base,model:preferred,freeModels:routes.map(r=>r.id),routerFreeOnly:true},key};
+ }
+ async setupFreeLLMAPI(signal,gatewayBase){
+  const id='freellmapi',dir=await this.installZip(id,artifacts[id],signal);
+  const exe=await this.findExecutable(dir,['FreeLLMAPI.exe']);
+  const root='http://127.0.0.1:3001';
+  this.emit(id,'start','Starting FreeLLMAPI on localhost…');
+  this.start(id,exe,[],{cwd:dir});
+  await this.ready(root+'/',id,signal);
+  this.emit(id,'configure','FreeLLMAPI is running. Open its dashboard, add the provider keys you want, then paste its unified key here.');
+  return {config:{provider:'proxy',proxyPreset:id,proxyUrl:root+'/v1',model:'',freeModels:[],routerFreeOnly:false},key:'',dashboard:root};
  }
  async setupLite(signal,gatewayBase){
   const id='litellm',dir=this.versionFolder(id),python=path.join(dir,'Scripts','python.exe');

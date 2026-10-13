@@ -109,7 +109,7 @@ async function start(){
   });
  ipcMain.handle('mico:dashboard',async(event,provider)=>{
   validateSender(event);assertProvider(provider);const connection=manager.connections.get(provider);
-  const title={omniroute:'OmniRoute',cliproxy:'CLIProxyAPI',litellm:'LiteLLM',freeride:'FreeRide',ollama:'Ollama'}[provider]||'9Router';
+  const title={omniroute:'OmniRoute',freellmapi:'FreeLLMAPI',cliproxy:'CLIProxyAPI',litellm:'LiteLLM',freeride:'FreeRide',ollama:'Ollama'}[provider]||'9Router';
   if(!connection?.dashboard)throw new Error('Set up '+title+' before opening its dashboard.');
   const url=new URL(connection.dashboard);const dashboardSession=session.fromPartition('persist:micocode-dashboard-'+provider);
   const cookie=manager.cookies.get(provider)?.split('=');if(cookie?.length===2)await dashboardSession.cookies.set({url:url.origin,name:cookie[0],value:cookie[1],httpOnly:true,sameSite:'lax',path:'/'});
