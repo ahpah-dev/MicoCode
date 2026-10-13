@@ -130,17 +130,21 @@ test('a malformed staged title is repaired through a fresh read and exact patch 
  assert.ok(result.notes.some(text=>text.startsWith('Static review passed.')));
 });
 
+// Each step must do genuinely different work: an identical action returning an
+// identical result is the stuck pattern the repeat guard exists to stop.
 test('default maxSteps runs until task is finished past legacy 12-step limit', async () => {
  const replies = [];
  for (let i = 0; i < 15; i++) {
   if (i === 0) replies.push({message: 'read', actions: [{type: 'read_file', path: 'index.html'}], done: false});
   else if (i === 14) replies.push({message: 'done', actions: [{type: 'edit_file', path: 'index.html', find: 'Hello', replace: 'Complete'}], done: true});
-  else replies.push({message: `step ${i}`, actions: [{type: 'check_project'}], done: false});
+  else replies.push({message: `step ${i}`, actions: [{type: 'read_file', path: 'note' + i + '.txt'}], done: false});
  }
  const previous = globalThis.fetch; let i = 0;
  globalThis.fetch = async () => Response.json({message: {content: JSON.stringify(replies[i++])}});
  try {
-  const project = {id: 'long', name: 'long', files: {'index.html': '<h1>Hello</h1>'}, active: 'index.html', messages: [], checkpoints: [], changes: {}, updated: 0};
+  const files = {'index.html': '<h1>Hello</h1>'};
+  for (let n = 1; n < 14; n++) files['note' + n + '.txt'] = 'note number ' + n;
+  const project = {id: 'long', name: 'long', files, active: 'index.html', messages: [], checkpoints: [], changes: {}, updated: 0};
   const changes = await runAgent({
    project, prompt: 'Do a 15-step task', mode: 'agent',
    config: {...defaultConfig, provider: 'ollama', ollamaUrl: 'http://127.0.0.1:11434', model: 'test', quality: 'focused', resilience: false, maxSteps: 0},
@@ -149,4 +153,41 @@ test('default maxSteps runs until task is finished past legacy 12-step limit', a
   assert.equal(changes['index.html'], '<h1>Complete</h1>');
   assert.equal(i, 15);
  } finally { globalThis.fetch = previous; }
+});
+
+// A model that repeats a step whose result never changes used to burn the whole step
+// limit - up to 100 model calls - producing nothing.
+test('an identical repeated step stops the run instead of looping',async()=>{
+ const previous=globalThis.fetch;let calls=0;const notes=[];
+ globalThis.fetch=async()=>{calls++;return Response.json({message:{content:JSON.stringify({message:'Looking again',done:false,actions:[{type:'read_file',path:'index.html'}]})}})};
+ const project={id:'loop',name:'loop',files:{'index.html':'<h1>Hello</h1>'},active:'index.html',messages:[],checkpoints:[],changes:{},updated:0};
+ try{
+  const changes=await runAgent({project,prompt:'Change the heading',mode:'agent',config:{...defaultConfig,provider:'ollama',ollamaUrl:'http://127.0.0.1:11434',model:'test',quality:'focused',resilience:false,maxSteps:12},key:'',signal:new AbortController().signal,onMessage:(t,kind)=>notes.push({t,kind}),onToken:()=>{},onChanges:()=>{}});
+  assert.deepEqual(changes,{},'a stuck loop stages nothing');
+  assert.equal(calls,3,'corrects once, then stops: '+calls+' model calls, not 12');
+  assert.ok(notes.some(n=>/identical result/.test(n.t)),'the reason is reported to the user');
+ }finally{globalThis.fetch=previous}
+});
+
+// A model that keeps repeating a failed edit must not retry it forever either.
+test('a repeated failing edit stops instead of retrying forever',async()=>{
+ const previous=globalThis.fetch;let calls=0;
+ globalThis.fetch=async()=>{calls++;return Response.json({message:{content:JSON.stringify({message:'Trying',done:false,actions:[{type:'read_file',path:'index.html'},{type:'edit_file',path:'index.html',find:'not in the file',replace:'x'}]})}})};
+ const project={id:'fail',name:'fail',files:{'index.html':'<h1>Hello</h1>'},active:'index.html',messages:[],checkpoints:[],changes:{},updated:0};
+ try{
+  const changes=await runAgent({project,prompt:'Change the heading',mode:'agent',config:{...defaultConfig,provider:'ollama',ollamaUrl:'http://127.0.0.1:11434',model:'test',quality:'focused',resilience:false,maxSteps:20},key:'',signal:new AbortController().signal,onMessage:()=>{},onToken:()=>{},onChanges:()=>{}});
+  assert.deepEqual(changes,{});
+  assert.equal(calls,3,'stops after the identical failure repeats: '+calls+' calls, not 20');
+ }finally{globalThis.fetch=previous}
+});
+
+// Making progress must not be mistaken for being stuck.
+test('different steps are never treated as a stuck loop',async()=>{
+ const result=await simulate([
+  {message:'read',done:false,actions:[{type:'read_file',path:'index.html'}]},
+  {message:'search',done:false,actions:[{type:'search',query:'Hello'}]},
+  {message:'list',done:false,actions:[{type:'list_files'}]},
+  {message:'edit',done:true,actions:[{type:'edit_file',path:'index.html',find:'Hello',replace:'MicoCode'}]},
+ ]);
+ assert.equal(result.changes['index.html'],'<h1>MicoCode</h1>');
 });

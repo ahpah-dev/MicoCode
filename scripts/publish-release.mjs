@@ -10,49 +10,63 @@ if (!token) {
   process.exit(1);
 }
 
-const tag = 'v0.8.7';
-const name = 'MicoCode 0.8.7 — The Best Free Model, Not the First One';
+const tag = 'v0.8.8';
+const name = 'MicoCode 0.8.8 — Mico Knows When to Stop';
 const checksums = fs.readFileSync('release/SHA256SUMS.txt', 'utf8').trim();
 
-const body = `## MicoCode v0.8.7 — The Best Free Model, Not the First One
+const body = `## MicoCode v0.8.8 — Mico Knows When to Stop
 
-### MicoCode was picking its free model from list order
-0.8.6 connected OmniRoute and locked it to free models correctly, but then chose which
-free model to run by taking **whatever the router happened to list first**. On a clean
-install that landed on a small mini model while better routes sat further down the same
-list. It now picks by MicoCode's own ranking, so the strongest free model available wins
-wherever it appears:
+### A stuck agent no longer spins
+If Mico repeated a step that changed nothing, the loop simply ran it again — up to **100
+identical model calls**, producing nothing and looking like the app had frozen. Three
+separate failures shared that shape: re-reading the same file, re-running the same search,
+and retrying an edit whose text was never in the file.
+
+The loop now notices when an action returns a **byte-identical result**, corrects once, and
+then stops with a plain explanation rather than burning the step budget:
 
 \`\`\`
-before   ddgw/gpt-5.4-mini          (first in the list)
-after    agy/gemini-3.8-flash       (ranked best)
+Stopped: the same step returned an identical result three times, so repeating it
+cannot change anything. Your staged changes are kept. Tell Mico what to do
+differently, or pick a stronger model in Models.
 \`\`\`
 
-### Releases are now compared properly
-Ranking treated every model in a tier as equal, so an older release could win on
-alphabetical order — Gemini 3.7 beat Gemini 3.8. Worse, the obvious fix is a trap:
-comparing version numbers across families makes every GPT-5.x outrank every Gemini 3.x,
-because 5.4 is a bigger number than 3.8. Versions are now compared **only inside one
-family**, so:
+Nothing you had staged is discarded, and genuinely different steps are never mistaken for a
+loop — that is asserted by a test of its own.
 
-- \`gemini-3.8-flash\` beats \`gemini-3.7-flash-high\` — same family, newer release
-- \`gpt-5.4-mini\` and \`gemini-3.8-flash\` are not compared numerically at all
-- \`gpt-oss-120b\` is not read as version 120 — a parameter count is not a release
+### Mico knows when a turn is over
+Saying "hi" used to produce *"I'm waiting for your instructions…"* over and over instead of
+a reply and a stop, because the system prompt showed the model a \`"done":false\` example and
+**never said when to set it true**. It now knows that greetings, questions and ordinary
+conversation are finished immediately, and the loop independently ends any turn that took no
+action — a turn that changes nothing cannot be made to change something by repeating it.
 
-### What this does not change
-MicoCode cannot invent free models that a free provider does not serve. A bare OmniRoute
-instance only has its keyless providers live, and those serve small or odd models.
-OmniRoute's own free catalogue does list current flagships — Claude Opus 5, GPT-5.6 Sol,
-Gemini 3.8 Flash — but they come from providers that need an account. **Connect those in
-OmniRoute's dashboard and they appear here automatically**, because the free key is
-restricted to whatever the catalogue currently offers.
+Mico is also told now to say **what it changed** when it finishes, and, when it is stuck, to
+stop and say what is blocking it instead of looping.
+
+### A removed router no longer crashes the workspace
+A config saved against a router that has since been removed — Octopus and GPT-Load were both
+taken out — dereferenced undefined while rendering the Models panel and dropped the whole
+workspace onto its *"A display hiccup was caught and contained"* recovery screen. Anyone
+upgrading with one of them still saved would have hit it. The saved router is now looked up
+without assuming it exists, and a config naming a router that is gone is **repaired back to
+the router picker** instead of being rendered.
+
+### OmniRoute setup says what it is doing
+Setting up OmniRoute announced **"Preparing Ollama…"** — its name was missing from the setup
+screen's router list, so it fell through to the wrong one — and then ran a three-minute npm
+install in silence. A working install looked like a hang. Every managed router now shares one
+display-name table, and a long install reports that it is still working.
 
 ### Verification
-- 183 tests pass with no skips. The new one asserts a list beginning with a small model
-  still resolves to the strongest current one, that the newest release wins inside a
-  family, and that a parameter count is never mistaken for a version.
-- TypeScript check clean; production web build clean; packaged app smoke-tested, and the
-  installers below were built fresh from this commit.
+- **189 tests pass with no skips**, including three new ones: a repeated no-op stops the run,
+  a repeated failing edit stops the run, and a run of *different* steps is never treated as a
+  loop.
+- TypeScript check clean; production web build clean; packaged app smoke-tested; installers
+  built fresh from this commit.
+- Measured, not assumed: the repeated-step guard stops a stuck run in **3 model calls instead
+  of 12**, and the OmniRoute install was run end to end — 1163 packages in 183 seconds,
+  running on MicoCode's own bundled Node.
 
 ### Checksums
 \`\`\`
@@ -103,8 +117,8 @@ async function publish() {
 
   // Upload assets
   const filesToUpload = [
-    {path: 'release/MicoCode-Setup-0.8.7-x64.exe', name: 'MicoCode-Setup-0.8.7-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
-    {path: 'release/MicoCode-Portable-0.8.7-x64.exe', name: 'MicoCode-Portable-0.8.7-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Setup-0.8.8-x64.exe', name: 'MicoCode-Setup-0.8.8-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
+    {path: 'release/MicoCode-Portable-0.8.8-x64.exe', name: 'MicoCode-Portable-0.8.8-x64.exe', contentType: 'application/vnd.microsoft.portable-executable'},
     {path: 'release/SHA256SUMS.txt', name: 'SHA256SUMS.txt', contentType: 'text/plain'}
   ];
 

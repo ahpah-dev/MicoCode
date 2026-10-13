@@ -19,6 +19,12 @@ Five themes, one workspace:
 | ![Graphite](docs/screenshots/theme-graphite.png) | ![Paper](docs/screenshots/theme-paper.png) |
 ## Windows app
 
+Version 0.8.8 tightens how Mico behaves when a step is not working. If it repeated an
+action that returned exactly the same result — re-reading a file, re-running a search, or
+retrying an edit whose text was never in the file — the loop used to run that step again
+and again, up to 100 model calls, producing nothing and looking frozen. It now corrects
+once, then stops and says why, keeping anything you had staged. Mico is also told to say
+what it changed when it finishes, and to stop and name the blocker when it is stuck.
 Version 0.8.7 makes MicoCode pick the **best free model, not the first one listed**, and compares releases properly: Gemini 3.8 Flash now beats 3.7, versions are only compared inside one family so GPT-5.4 never outranks Gemini 3.8 on a bigger number, and a parameter count like gpt-oss-120b is never read as a version.
 
 Version 0.8.6 adds **OmniRoute** — and it is the biggest free-router addition yet:

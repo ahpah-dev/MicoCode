@@ -10,7 +10,7 @@ import {executePublish} from './plugins.ts';
 import type {AgentReply,Changes,Config,Files,Project} from './types';
 type Chat = {role:'system'|'user'|'assistant';content:string;reasoning_content?:string};
 export const systemPrompt = `You are Mico, the coding agent in MicoCode. Help create polished, accessible HTML/CSS/JavaScript websites. This workspace previews browser files only, with no Node, npm, shell, or backend. Use relative files and vanilla JS. Do not claim you ran a command or test you did not run. Never fetch secrets or instruct quota bypasses.
-Respond ONLY with a JSON object: {"message":"a concise progress note or answer","actions":[...],"done":false}.\nSet "done":true the moment the request is answered or nothing needs changing. Greetings, questions and ordinary conversation need no actions and are finished immediately: {"message":"Hi! What would you like to build?","actions":[],"done":true}.\nNever say you are waiting for instructions while leaving "done":false — either take an action this turn or finish with "done":true.
+Respond ONLY with a JSON object: {"message":"a concise progress note or answer","actions":[...],"done":false}.\nSet "done":true the moment the request is answered or nothing needs changing. Greetings, questions and ordinary conversation need no actions and are finished immediately: {"message":"Hi! What would you like to build?","actions":[],"done":true}.\nNever say you are waiting for instructions while leaving "done":false — either take an action this turn or finish with "done":true.\nNever repeat an action that already returned the same result — repeating it cannot change anything. If you are stuck, finish with "done":true and say in one sentence what is blocking you.\nWhen you finish, say in one line what you changed.
 Available actions: {"type":"list_files"}, {"type":"read_file","path":"index.html"}, {"type":"read_file","path":"index.html","startLine":1,"endLine":80}, {"type":"search","query":"text"}, {"type":"edit_file","path":"index.html","find":"exact unique text that was read","replace":"replacement text"}, {"type":"write_file","path":"styles.css","content":"complete file contents"}, {"type":"delete_file","path":"file.txt"}, {"type":"check_project"}, {"type":"review_quality"}, {"type":"publish","target":"github"|"vercel"|"netlify"|"custom","repo":"repo-name","message":"commit message"}, {"type":"git","command":"status"|"commit"|"push"|"pull"|"init"|"log"|"branch"|"diff","message":"commit message"}.
 Read before changing. Use edit_file for existing content. Never delete and recreate a file to modify it. Preserve everything outside the requested change. For example, after reading <title>Old</title>, change its text with {"type":"edit_file","path":"index.html","find":"<title>Old</title>","replace":"<title>New</title>"}. Replacement text is literal file content: never include JSON punctuation in it. Match once and include surrounding text. Large files can be read by line ranges; do not rewrite a partially read file. Write complete files, never placeholders or ellipses. Use at most one action per reply. check_project checks JSON and local HTML resources. review_quality checks basic HTML accessibility and mobile metadata. Use publish when asked to deploy or push to GitHub/Vercel/Netlify. Use git for native Git operations (status, commit, push, pull, log, init) in local folders. Changes are staged for review. Check work before setting done:true. Be concise.`;
 const polishPrompt='\nPOLISHED MODE: Make focused, maintainable changes. Preserve working features and match the existing design. For new interfaces use cohesive spacing, readable type, responsive layouts, semantic HTML, accessible labels, visible keyboard focus, and useful loading, error and empty states where relevant. Wire up every control you add. Avoid placeholder links and fake data claims. Run check_project and review_quality before finishing; report any runtime checks still needed.';
@@ -135,6 +135,10 @@ export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|
  let observation='';let invalid=0;let polishPass=false;const fullyRead=new Set<string>();const fragments=new Map<string,string[]>();
  const conversation:Chat[]=[{role:'system',content:instruction}];
  const stepLimit = config.maxSteps && config.maxSteps > 0 ? config.maxSteps : 100;
+ // A step that returns the identical result cannot make progress, so the next
+ // attempt returns the same thing again. Track it and stop instead of spending
+ // the remaining steps on a loop.
+ let repeats=0,lastSignature='';
  for(let step=0;step<stepLimit;step++) {
    if(signal.aborted)throw new DOMException('Stopped','AbortError');
    const files=mergeFiles(project.files,changes) as Files;
@@ -240,6 +244,17 @@ export async function runAgent(args:{project:Project;prompt:string;mode:'agent'|
    // same sentence until the step limit. A model that answers and forgets to set
    // "done" — which every chatty reply does — finishes here instead.
    if(!reply.done&&!failed&&!results.length){onToken('');return changes}
+   // Identical actions with an identical result cannot progress by repeating.
+   const signature=JSON.stringify(reply.actions)+"\u0000"+observation;
+   repeats=signature===lastSignature?repeats+1:0;lastSignature=signature;
+   if(!reply.done&&repeats>=2){
+    onMessage('Stopped: the same step returned an identical result three times, so repeating it cannot change anything. '+(Object.keys(changes).length?'Your staged changes are kept.':'Nothing was staged yet.')+' Tell Mico what to do differently, or pick a stronger model in Models.','assistant');
+    onToken('');return changes
+   }
+   if(!reply.done&&repeats===1){
+    observation+="\nYou just repeated an action that returned exactly the same result as before. Repeating it will not help. Take a different action, or finish with \"done\":true and one sentence saying what is blocking you.";
+    continue
+   }
    if(reply.done&&!failed){
     if(mode==='agent'&&Object.keys(changes).length){const merged=mergeFiles(project.files,changes) as Files;const issues=[...checkProject(merged),...(config.quality==='polished'?qualityReview(merged):[])];
      const introduced=issues.filter(issue=>!initialIssues.has(issue));
