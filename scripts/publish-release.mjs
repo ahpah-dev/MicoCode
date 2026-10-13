@@ -10,52 +10,51 @@ if (!token) {
   process.exit(1);
 }
 
-const tag = 'v0.9.0';
-const name = 'MicoCode 0.9.0 — FreeLLMAPI, 34 Free Tiers Behind One Endpoint';
+const tag = 'v0.9.1';
+const name = 'MicoCode 0.9.1 — FreeLLMAPI Connects, and Errors Say What To Do';
 const checksums = fs.readFileSync('release/SHA256SUMS.txt', 'utf8').trim();
 
-const body = `## MicoCode v0.9.0 — FreeLLMAPI, 34 Free Tiers Behind One Endpoint
+const body = `## MicoCode v0.9.1 — FreeLLMAPI Connects, and Errors Say What To Do
 
-### New provider: FreeLLMAPI
-[FreeLLMAPI](https://github.com/tashfeenahmed/freellmapi) stacks the free tiers of 34
-providers — Google, Groq, Cerebras, Mistral, OpenRouter, NVIDIA and more — behind a single
-OpenAI-compatible endpoint on \`127.0.0.1:3001\`, with automatic failover when one provider
-is rate-limited. MicoCode now installs, starts and opens it for you.
+### FreeLLMAPI setup failed every single time
+The connection validator required two things a freshly installed FreeLLMAPI cannot have:
+a **key**, and a **non-empty list of free models**. FreeLLMAPI has neither until you add a
+provider key in its own dashboard — that is the whole point of it. So setup downloaded,
+extracted and started it correctly, then threw on the last step and the router was never
+recorded as managed.
 
-Verified before shipping: MIT licensed, 34,443 stars, release **v0.13.10**, and the
-portable build is a straight unpacked Electron app rather than an installer.
+\`\`\`
+if(!result.key) throw ... "Managed setup returned an incomplete connection."
+if(!routes.length || !routes.includes(c.model)) throw ...
+\`\`\`
 
-### Read this before you click it
-**FreeLLMAPI serves no models until you give it provider keys.** Unlike OmniRoute, it has no
-keyless providers — it is an aggregator for *your* free-tier accounts. That is a deliberate
-part of this release, not a bug:
+A router that is installed and running but has nothing to serve yet is now a **real state**
+rather than an error. It connects, and it says so plainly.
 
-1. Set up FreeLLMAPI from Models — MicoCode downloads it, checks the digest, extracts and
-   starts it.
-2. Click **Open FreeLLMAPI dashboard** and add whichever provider keys you have.
-3. Paste FreeLLMAPI's unified key into the API key field, and its models load into MicoCode.
+### The unhelpful error
+That failed setup is why the app then reported:
 
-**MicoCode does not read that unified key for you.** It lives in an encrypted SQLite
-database, and rather than guess at how to decrypt it, this release asks you to paste it
-once. If a later version can read it reliably, that step goes away.
+> *"Could not reach the router. Start it, use its final API URL without redirects, allow this
+> site in CORS, and allow local-network access when your browser asks."*
 
-### Honest scope
-- The installer (\`FreeLLMAPI-Setup-0.13.10.exe\` with \`/S\`) **installs nothing** — it exits
-  without writing a file or a registry entry, so the portable zip is the path used here.
-- The portable zip is pinned by SHA-256 and downloaded through MicoCode's existing verified
-  download and extraction path, the same one CLIProxyAPI uses.
-- Its own README calls it "for personal experimentation and learning, not production", and
-  free tiers change without notice. Treat it as a bonus route, not your only one.
+Three of those four suggestions were irrelevant, and none of them was the actual problem.
+MicoCode now names the router and the step:
+
+- **FreeLLMAPI** — *"not answering on 127.0.0.1:3001. Open Models, click Set up & connect on
+  FreeLLMAPI so MicoCode installs and starts it, then open its dashboard, add one provider
+  key (Google, Groq or Cerebras all have free tiers), and paste the unified key into the API
+  key field."*
+- **Any other managed router** — *"Your LiteLLM router is not running. Open Models and click
+  Set up & connect to start it."*
+- **A custom address** — names the preset and the URL, and points at the base URL and the key
+  rather than blaming CORS.
 
 ### Verification
-- **190 tests pass with no skips**, including the existing coverage that every managed
-  router has a proxy route and a display name — FreeLLMAPI had to satisfy both.
-- TypeScript check clean; production web build clean; packaged app smoke-tested with all
-  seven providers reporting; installers built fresh from this commit.
-- What is **not** verified: that the app launches and serves from the extracted folder on a
-  real machine. It cannot be launched in the build sandbox at all (Electron's singleton lock
-  is blocked there, the same restriction that prevents launching MicoCode itself), so this
-  release claims install, extract and start — not a working end-to-end request.
+- **190 tests pass with no skips**; TypeScript check clean; production web build clean;
+  packaged app smoke-tested with all seven providers reporting.
+- Still not verified: that FreeLLMAPI serves a request end to end. It cannot be launched in
+  the build sandbox (Electron's singleton lock is blocked there), so this fixes the setup and
+  the message, not a proven round trip.
 
 ### Checksums
 \`\`\`
