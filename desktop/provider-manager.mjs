@@ -174,7 +174,10 @@ export class ProviderManager{
      if(await exists(dir))await rm(dir,{recursive:true,force:true});await mkdir(dir,{recursive:true});
      const uv=await this.ensureUv(id,signal),uvEnv={UV_CACHE_DIR:path.join(this.root,'uv-cache'),UV_PYTHON_INSTALL_DIR:path.join(this.root,'python'),UV_NO_PROGRESS:'1',UV_NO_CONFIG:'1',PYTHONNOUSERSITE:'1',PATH:this.runtime+path.delimiter+process.env.PATH};
      this.emit(id,'install','Installing the private FreeRide failover gateway…');
-     await this.run(uv,['venv','--python',versions.python,'--managed-python',dir],{signal,env:uvEnv});
+     // uv refuses to create a virtual environment where one already exists, so an install
+     // interrupted after this step could never be retried. Reuse an existing interpreter,
+     // and clear a partial or stale directory rather than refusing to work.
+     await (await exists(python)?undefined:this.run(uv,['venv','--clear','--python',versions.python,'--managed-python',dir],{signal,env:uvEnv}));
       const wheel=path.join(this.root,'downloads','freeride_gateway-'+versions.freeride+'-py3-none-any.whl');
      await rm(wheel,{force:true});
      await downloadVerified(artifacts.freeride,wheel,signal,p=>this.emit(id,'download','Downloading verified FreeRide '+versions.freeride+'…',p));
@@ -458,7 +461,10 @@ export class ProviderManager{
    if(!await exists(path.join(uvDir,'uv.exe'))){this.emit(id,'download','Downloading the verified private Python installer…');await downloadVerified(artifacts.uv,zip,signal,p=>this.emit(id,'download','Downloading uv from Astral’s official release…',p));await extractVerifiedZip(zip,uvDir,signal);await rm(zip,{force:true})}
    const uv=await this.findExecutable(uvDir,['uv.exe']);const env={UV_CACHE_DIR:path.join(this.root,'uv-cache'),UV_PYTHON_INSTALL_DIR:path.join(this.root,'python'),UV_NO_PROGRESS:'1',PYTHONNOUSERSITE:'1'};
    this.emit(id,'install','Installing private Python '+versions.python+' and LiteLLM '+versions.litellm+'…');
-   await this.run(uv,['venv','--python',versions.python,'--managed-python',dir],{signal,env});
+   // uv refuses to create a virtual environment where one already exists, so an install
+   // interrupted after this step could never be retried. Reuse an existing interpreter,
+   // and clear a partial or stale directory rather than refusing to work.
+   await (await exists(python)?undefined:this.run(uv,['venv','--clear','--python',versions.python,'--managed-python',dir],{signal,env}));
    await this.run(uv,['pip','install','--python',python,'litellm[proxy]=='+versions.litellm],{signal,env});
   }
   const port=await freePort(),key=await this.secret('litellm-client'),configFile=path.join(this.folder(id),'config.yaml');

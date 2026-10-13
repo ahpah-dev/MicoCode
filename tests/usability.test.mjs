@@ -244,3 +244,18 @@ test('the dropdown surface is the model menu surface, shared and opaque', () => 
   assert.ok(polish.includes(':root[data-ui-text="large"] .dropdown-trigger'), 'text size must reach the dropdown');
   assert.ok(polish.includes(':root[data-ui-density="compact"] .dropdown-trigger'), 'density must reach the dropdown');
 });
+
+// uv exits 2 with "A virtual environment already exists" when the target directory
+// already holds one. setupLite ran uv venv unconditionally, so any install interrupted
+// between creating the venv and installing the package could never be retried: every
+// later attempt died before installing anything.
+test('a python provider install can be retried after it is interrupted', () => {
+  const manager = source('desktop/provider-manager.mjs');
+  const venvCalls = manager.match(/this\.run\(uv,\['venv'[^\]]*\]/g) || [];
+  assert.ok(venvCalls.length >= 2, 'both python providers create a virtual environment');
+  for (const call of venvCalls) {
+    assert.ok(call.includes("'--clear'"), 'recreating must clear a stale environment: ' + call);
+  }
+  assert.equal((manager.match(/await exists\(python\)\?undefined/g) || []).length, venvCalls.length,
+    'an existing interpreter must be reused instead of recreated');
+});
